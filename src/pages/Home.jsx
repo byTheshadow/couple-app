@@ -11,9 +11,8 @@ import LetterModal from '../components/LetterModal'
 import LetterArrival from '../components/LetterArrival'
 import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
-import { fmtTime, greeting, useLetterArrivals, useLetters, usePokeHistory, usePokes, useStatus } from '../lib/hooks'
 
-// 状态编辑页的路由；如果你的 App.jsx 里不是 /status，只改这一行
+// 状态编辑页的路由如果你的 App.jsx 里不是 /status，只改这一行
 const EDIT_ROUTE = '/status'
 
 const KIND_ICON = { note: 'mail', doodle: 'pen', capsule: 'clock', burn: 'flame' }
