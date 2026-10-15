@@ -101,6 +101,49 @@ export function usePokeHistory(myId, limit = 20) {
   return { pokes, loading, reload }
 }
 
+/** 纪念日列表（共享数据，双方都能加/改/删），实时更新 */
+export function useAnniversaries() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    const { data } = await supabase
+      .from('anniversaries').select('*')
+      .order('date', { ascending: true })
+    setItems(data || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    reload()
+    const ch = supabase
+      .channel('anniversaries')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'anniversaries' },
+        () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [reload])
+
+  return { items, loading, reload }
+}
+
+/** 收到一封新信时回调（实时，仅 INSERT）——用于触发"飞入"动画 */
+export function useLetterArrivals(myId, onArrive) {
+  const cb = useRef(onArrive)
+  cb.current = onArrive
+  useEffect(() => {
+    if (!myId) return
+    const ch = supabase
+      .channel(`letter-arrivals-${myId}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'letters', filter: `receiver_id=eq.${myId}` },
+        (p) => cb.current?.(p.new))
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId])
+}
+
 export function fmtTime(iso) {
   const d = new Date(iso)
   const now = new Date()

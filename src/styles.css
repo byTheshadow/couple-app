@@ -192,6 +192,15 @@ textarea.field { resize: none; line-height: 1.5; }
 .av-wrap { position: relative; width: 96px; height: 96px; flex-shrink: 0; margin: 10px 6px 10px 8px; transition: transform .5s cubic-bezier(.2,.8,.2,1); }
 .av-edit { position: absolute; right: -2px; bottom: -2px; z-index: 4; width: 30px; height: 30px; border-radius: 50%; background: var(--btn); color: var(--btnInk); border: 2px solid var(--bg); display: grid; place-items: center; }
 .av-edit[disabled] { opacity: .5; }
+
+/* 名片背景主题：套在「我的卡」(.hero) 和 TA 工牌正面 (.face.front) 上，双方都看得到 */
+[data-cardbg='peach'] { --cardTint: rgba(255,170,120,.4); }
+[data-cardbg='mint'] { --cardTint: rgba(120,230,180,.36); }
+[data-cardbg='lavender'] { --cardTint: rgba(180,150,255,.38); }
+[data-cardbg='sky'] { --cardTint: rgba(120,190,255,.38); }
+[data-cardbg='rose'] { --cardTint: rgba(255,130,165,.38); }
+.hero[data-cardbg]:not([data-cardbg='none']) { background: var(--cardTint); }
+.face.front[data-cardbg]:not([data-cardbg='none']) { background-image: linear-gradient(160deg, var(--cardTint), transparent 72%), var(--pass); }
 .av-ring { position: absolute; inset: -4px; border-radius: 50%; border: 1px solid var(--ink2); opacity: 0; animation: ring 4.2s cubic-bezier(.2,.6,.3,1) infinite; }
 .av-ring.r2 { animation-delay: 1.4s; } .av-ring.r3 { animation-delay: 2.8s; }
 @keyframes ring { 0% { transform: scale(.9); opacity: .55; } 100% { transform: scale(1.75); opacity: 0; } }
@@ -303,6 +312,13 @@ textarea.field { resize: none; line-height: 1.5; }
 .gesture-log { border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .gesture-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
 .gesture-row .ellipsis { flex: 1; }
+
+/* 纪念日 */
+.anniv-list { display: flex; flex-direction: column; gap: 8px; }
+.anniv-card { border-radius: 18px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; border: 1px solid var(--gb); text-align: left; }
+.anniv-title { font-size: 14.5px; font-weight: 500; flex: 1; min-width: 0; }
+.anniv-sub { font-size: 12.5px; color: var(--ink2); font-family: var(--mono); white-space: nowrap; }
+.anniv-form { border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 @keyframes beat { 30% { transform: scale(1.5); } 60% { transform: scale(.9); } }
 
 /* =====================================================================
@@ -364,3 +380,32 @@ textarea.field { resize: none; line-height: 1.5; }
 .lock-badge::after { content: ''; position: absolute; inset: -6px; border-radius: 30px; border: 1px solid var(--ink2); opacity: 0; animation: ring 3.6s cubic-bezier(.2,.6,.3,1) infinite; }
 .login-card:focus-within { border-color: var(--ink2); }
 .btn[disabled].rv.in { opacity: .45; }
+
+
+/* =====================================================================
+   9. 真刮刮乐 + 新信飞入动画 + 状态更新通知横幅
+   ===================================================================== */
+.whisper { position: relative; }
+.w-cv { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 12px; touch-action: none; cursor: pointer; transition: opacity .6s ease; }
+.w-cv.gone { opacity: 0; pointer-events: none; }
+
+.letter-fly-wrap { position: fixed; inset: 0; z-index: 85; pointer-events: none; display: grid; place-items: center; }
+.letter-fly { transform: translate(60vw, -60vh) scale(.4) rotate(-18deg); opacity: 0; transition: transform 1.1s cubic-bezier(.2,.9,.25,1.1), opacity .4s ease; }
+.letter-fly.land { transform: translate(0,0) scale(1) rotate(0deg); opacity: 1; }
+.letter-fly-tag { margin-top: 14px; text-align: center; }
+.letter-fly.away { transform: translate(0,40px) scale(.85); opacity: 0; transition: transform .5s ease, opacity .5s ease; }
+
+.notif { border-radius: 20px; padding: 10px 12px 10px 10px; display: flex; align-items: center; gap: 12px; animation: notifDrop .6s cubic-bezier(.2,1.2,.3,1); }
+@keyframes notifDrop { from { opacity: 0; transform: translateY(-14px) scale(.97); } }
+.bellc { width: 38px; height: 38px; border-radius: 50%; background: var(--btn); color: var(--btnInk); display: grid; place-items: center; flex-shrink: 0; }
+.notif-close { margin-left: auto; background: none; border: none; color: var(--ink2); display: grid; place-items: center; padding: 4px; }
+
+
+/* =====================================================================
+   10. 心情表情 + 在听歌小组件
+   ===================================================================== */
+.mood-badge { margin-left: 6px; font-size: 15px; line-height: 1; vertical-align: -1px; }
+.mood-pick { font-size: 17px; line-height: 1; padding: 8px 13px; }
+.nowplaying { margin-top: 10px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; font-size: 12.5px; color: var(--ink2); }
+.np-play { width: 26px; height: 26px; border-radius: 50%; background: var(--btn); color: var(--btnInk); display: grid; place-items: center; flex-shrink: 0; border: none; padding: 0; }
+.np-title { max-width: 160px; }

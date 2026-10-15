@@ -3,9 +3,10 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useStatus } from '../lib/hooks'
 import { useScrollFx } from '../lib/scrollfx'
-import { DECORATIONS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
+import { CARD_BGS, DECORATIONS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
 import Whisper from '../components/Whisper'
 import TabBar from '../components/TabBar'
+import { CARD_BGS, DECORATIONS, MOODS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
 
 const REVEAL_TYPES = [
   { id: 'scratch', label: '刮刮乐', desc: 'TA 刮开涂层才能看到' },
@@ -42,8 +43,10 @@ export default function StatusEditor() {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
+  const [musicBusy, setMusicBusy] = useState(false)
   const [toast, setToast] = useState('')
   const fileRef = useRef(null)
+  const musicFileRef = useRef(null)
 
   useScrollFx()
 
@@ -55,8 +58,13 @@ export default function StatusEditor() {
     setForm({
       icon_id: row?.icon_id || 'coffee',
       status_text: row?.status_text || '',
-      decoration_id: row?.decoration_id || 'none',
-      avatar_url: row?.avatar_url || '',
+            decoration_id: row?.decoration_id || 'none',
+      card_bg: row?.card_bg || 'none',
+           avatar_url: row?.avatar_url || '',
+      mood: row?.mood || '',
+      music_title: row?.music_title || '',
+      music_url: row?.music_url || '',
+      music_source: row?.music_source || 'link',
       secret_text: row?.secret_text || '',
       reveal_type: row?.reveal_type || 'scratch',
       pin: row?.reveal_config?.pin || '',
@@ -90,9 +98,33 @@ export default function StatusEditor() {
     setAvatarBusy(false)
     if (error) return say('上传失败，再试一次')
     const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-    set('avatar_url', `${data.publicUrl}?t=${Date.now()}`)
+       set('avatar_url', `${data.publicUrl}?t=${Date.now()}`)
     say('头像已更换，记得点保存')
   }
+
+  const pickMusic = () => musicFileRef.current?.click()
+  const onMusicFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !me) return
+    if (!file.type.startsWith('audio/')) return say('只能上传音频文件')
+    if (file.size > 15 * 1024 * 1024) return say('文件要小于 15MB')
+    setMusicBusy(true)
+    const ext = file.name.split('.').pop() || 'mp3'
+    const path = `${me.id}/track.${ext}`
+    const { error } = await supabase.storage.from('music').upload(path, file, { upsert: true, cacheControl: '3600' })
+    setMusicBusy(false)
+    if (error) return say('上传失败，再试一次')
+    const { data } = supabase.storage.from('music').getPublicUrl(path)
+    setForm((f) => ({
+      ...f,
+      music_url: `${data.publicUrl}?t=${Date.now()}`,
+      music_source: 'upload',
+      music_title: f.music_title || file.name.replace(/\.[^.]+$/, ''),
+    }))
+    say('歌曲已上传，记得点保存')
+  }
+
   const now = new Date()
   const shortDate = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
 
@@ -103,9 +135,13 @@ export default function StatusEditor() {
     const cfg = form.reveal_type === 'password' ? { pin: form.pin }
       : form.reveal_type === 'timelock' ? { unlockAt: new Date(form.unlockAt).toISOString() } : {}
     const [a, b] = await Promise.all([
-           supabase.from('status').upsert({
+      supabase.from('status').upsert({
         user_id: me.id, icon_id: form.icon_id, status_text: form.status_text.trim(),
-        decoration_id: form.decoration_id, avatar_url: form.avatar_url || null,
+        decoration_id: form.decoration_id, card_bg: form.card_bg, avatar_url: form.avatar_url || null,
+        mood: form.mood || null,
+        music_title: form.music_title.trim() || null,
+        music_url: form.music_url.trim() || null,
+        music_source: form.music_url.trim() ? form.music_source : null,
         secret_text: form.secret_text.trim(),
         reveal_type: form.reveal_type, reveal_config: cfg,
       }),
@@ -133,7 +169,7 @@ export default function StatusEditor() {
         </div>
 
         {/* 实时预览：和首页"我的卡"是同一套样式，选装饰立刻看到效果 */}
-        <section className="hero glass rv" data-depth>
+                <section className="hero glass rv" data-depth data-cardbg={form.card_bg}>
           <div className="who">预览</div>
           <div className="hero-top">
                         <div className="av-wrap" data-deco={form.decoration_id}>
@@ -184,6 +220,43 @@ export default function StatusEditor() {
               <button key={d.id} className={`pill${form.decoration_id === d.id ? ' on' : ''}`} onClick={() => set('decoration_id', d.id)}>{d.label}</button>
             ))}
           </div>
+                    <div className="label" style={{ marginTop: 4 }}>名片背景（TA 也会看到）</div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {CARD_BGS.map((c) => (
+              <button key={c.id} className={`pill${form.card_bg === c.id ? ' on' : ''}`} onClick={() => set('card_bg', c.id)}>{c.label}</button>
+            ))}
+          </div>
+
+          <div className="label" style={{ marginTop: 4 }}>心情</div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {MOODS.map((em) => (
+              <button key={em} type="button" className={`pill mood-pick${form.mood === em ? ' on' : ''}`}
+                onClick={() => set('mood', form.mood === em ? '' : em)}>{em}</button>
+            ))}
+          </div>
+
+          <div className="label" style={{ marginTop: 4 }}>在听（TA 也能看到，可以一起听）</div>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className={`pill${form.music_source === 'upload' ? ' on' : ''}`} onClick={() => set('music_source', 'upload')}>上传 MP3</button>
+            <button type="button" className={`pill${form.music_source === 'link' ? ' on' : ''}`} onClick={() => set('music_source', 'link')}>外链地址</button>
+          </div>
+          {form.music_source === 'upload' ? (
+            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <button type="button" className="btn" style={{ height: 38, fontSize: 13 }} onClick={pickMusic} disabled={musicBusy}>
+                {musicBusy ? '上传中…' : '选择文件'}
+              </button>
+              <input ref={musicFileRef} type="file" accept="audio/*" hidden onChange={onMusicFile} />
+              {form.music_url && <span className="h-sub ellipsis">已选好一首歌</span>}
+            </div>
+          ) : (
+            <input className="field glass" value={form.music_url} onChange={(e) => set('music_url', e.target.value)} placeholder="粘贴歌曲外链地址（mp3 直链）" />
+          )}
+          <input className="field glass" maxLength={40} value={form.music_title} onChange={(e) => set('music_title', e.target.value)} placeholder="歌名（可选）" />
+          {form.music_url && (
+            <button type="button" className="mini tap" style={{ alignSelf: 'flex-start' }} onClick={() => { set('music_url', ''); set('music_title', '') }}>
+              清除正在听的歌
+            </button>
+          )}
         </section>
 
         <section className="col rv" style={{ gap: 10 }}>

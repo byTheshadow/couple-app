@@ -12,7 +12,13 @@ const PATHS = {
   arrow: <path d="M5 12h14M13 6l6 6-6 6" />,
   sliders: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>,
   out: <path d="M10 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4M15 8l4 4-4 4M19 12H9" />,
-  wave: <path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 12V5a1.5 1.5 0 0 1 3 0v7M14 12V6.5a1.5 1.5 0 0 1 3 0V13M17 9.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-2c-2.5 0-4-1-5.5-3L4 14.5a1.4 1.4 0 0 1 2-2L8 14" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  x: <path d="M6 6l12 12M18 6L6 18" />,
+  bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></>,
+    play: <path d="M8 5.5v13l11-6.5z" />,
+  pause: <><rect x="7" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></>,
+  note: <><circle cx="7" cy="18" r="2.6" /><circle cx="17" cy="16" r="2.6" /><path d="M9.6 18V5.5L19.6 4v12" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
 }
 
 export function Svg({ name, size = 22, stroke = 1.6 }) {
@@ -67,3 +73,17 @@ export const DECORATIONS = [
   { id: 'pixel', label: '像素框' },
   { id: 'polaroid', label: '拍立得' },
 ]
+
+// 名片背景色板：id 要和 styles.css 里的 [data-cardbg='xxx'] 对上。
+// 对双方都可见——同一个值同时应用在「我的卡」和 TA 看到的「TA 此刻」工牌上。
+export const CARD_BGS = [
+  { id: 'none', label: '默认' },
+  { id: 'peach', label: '蜜桃' },
+  { id: 'mint', label: '薄荷' },
+  { id: 'lavender', label: '薰衣草' },
+  { id: 'sky', label: '天空' },
+  { id: 'rose', label: '玫瑰' },
+]
+
+// 心情表情，直接存 emoji 字符，不用 id 对照
+export const MOODS = ['😊', '🥰', '😴', '😭', '😤', '🥳', '😶', '🤒']

@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { fmtTime, greeting, useLetters, usePokeHistory, usePokes, useStatus } from '../lib/hooks'
+import { fmtTime, greeting, useLetterArrivals, useLetters, usePokeHistory, usePokes, useStatus } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
 import { StatusIcon, Svg } from '../components/Icon'
 import Whisper from '../components/Whisper'
 import LetterModal from '../components/LetterModal'
+import LetterArrival from '../components/LetterArrival'
+import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
+import { fmtTime, greeting, useLetterArrivals, useLetters, usePokeHistory, usePokes, useStatus } from '../lib/hooks'
 
 // 状态编辑页的路由；如果你的 App.jsx 里不是 /status，只改这一行
 const EDIT_ROUTE = '/status'
@@ -43,6 +46,33 @@ function barcode(seed = '') {
   return out
 }
 
+
+function NowPlaying({ row }) {
+  const audioRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
+  if (!row?.music_url) return null
+  const toggle = () => {
+    const el = audioRef.current
+    if (!el) return
+    if (playing) el.pause()
+    else el.play().catch(() => {})
+  }
+  return (
+    <div className="nowplaying glass">
+      <button type="button" className="np-play tap" onClick={toggle} aria-label={playing ? '暂停' : '播放'}>
+        <Svg name={playing ? 'pause' : 'play'} size={14} />
+      </button>
+      <Svg name="note" size={15} />
+      <span className="ellipsis np-title">{row.music_title || '一首歌'}</span>
+      <audio
+        ref={audioRef} src={row.music_url} preload="none"
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+      />
+    </div>
+  )
+}
+
+
 function Envelope({ l }) {
   const locked = isLocked(l)
   const fresh = l.status === 'sent' && !locked
@@ -73,6 +103,9 @@ export default function Home() {
   const [flip, setFlip] = useState(false)
   const [deckIdx, setDeckIdx] = useState(0)
   const [now, setNow] = useState(() => new Date())
+  const [arrivedLetter, setArrivedLetter] = useState(null)
+  const [notif, setNotif] = useState(null)
+  const statusSeenRef = useRef(null)
   const p3d = useRef(null)
   const deckRef = useRef(null)
 
@@ -85,6 +118,25 @@ export default function Home() {
     try { navigator.vibrate?.(row?.kind === 'pat' ? [20, 20, 20, 20] : [40, 50, 40, 50, 80]) } catch { /* iOS 不支持 */ }
     say(`TA ${row?.label || g.label}`)
   })
+
+  useLetterArrivals(me?.id, (row) => setArrivedLetter(row))
+
+  // TA 更新状态时弹一条横幅；用 ref 记住首次看到的时间，避免刚进页面就误报
+  useEffect(() => {
+    const seenAt = partnerStatus.row?.updated_at
+    if (!seenAt) return
+    if (statusSeenRef.current === null) { statusSeenRef.current = seenAt; return }
+    if (seenAt !== statusSeenRef.current) {
+      statusSeenRef.current = seenAt
+      setNotif(`${partner?.display_name || 'TA'} 刚刚更新了状态`)
+    }
+  }, [partnerStatus.row?.updated_at, partner?.display_name])
+
+  useEffect(() => {
+    if (!notif) return
+    const t = setTimeout(() => setNotif(null), 6000)
+    return () => clearTimeout(t)
+  }, [notif])
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 20000)
@@ -171,7 +223,8 @@ export default function Home() {
         <div className="aurora" />
       </div>
 
-      {toast && <div className="toast glass">{toast}</div>}
+           {toast && <div className="toast glass">{toast}</div>}
+      <LetterArrival letter={arrivedLetter} onDone={() => setArrivedLetter(null)} />
 
       {/* 滚动后淡入的迷你条：一眼看到 TA 此刻的状态 */}
       <div className="minibar glass" data-sp aria-hidden="true">
@@ -184,7 +237,17 @@ export default function Home() {
         ) : <span>{greeting()}</span>}
       </div>
 
-      <div className="page">
+            <div className="page">
+        {notif && (
+          <div className="notif glass">
+            <div className="bellc"><Svg name="bell" size={18} /></div>
+            <span className="ellipsis">{notif}</span>
+            <button className="notif-close tap" onClick={() => setNotif(null)} aria-label="关闭通知">
+              <Svg name="x" size={16} stroke={2} />
+            </button>
+          </div>
+        )}
+
         {/* 头部 */}
         <div className="top hdr" data-sp>
           <div className="col" style={{ gap: 6 }}>
@@ -202,7 +265,7 @@ export default function Home() {
         </div>
 
         {/* ===== 我的卡：毛玻璃 + 圆形头像 + 装饰，可编辑 ===== */}
-        <section className="hero glass rv" data-depth>
+                <section className="hero glass rv" data-depth data-cardbg={m?.card_bg || 'none'}>
           <div className="who">我</div>
           <div className="hero-top">
             <div className="av-wrap" data-deco={m?.decoration_id || 'none'}>
@@ -217,15 +280,16 @@ export default function Home() {
               </div>
             </div>
             <div className="hero-info">
-              <div className="handle"><b>{me?.display_name || ''}</b><span className="u" /></div>
+              <div className="handle"><b>{me?.display_name || ''}</b>{m?.mood && <span className="mood-badge">{m.mood}</span>}<span className="u" /></div>
               <div className="on-tag"><span className="live" />在线，这张卡只有你能编辑</div>
               <div className="mychip">
                 <StatusIcon id={m?.icon_id} />
                 <span className="ellipsis">{m?.status_text || '还没设置状态'}</span>
               </div>
-              <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
+                           <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
             </div>
           </div>
+          <NowPlaying row={m} />
           {m?.secret_text && (
             <div className="about">
               <div className="row muted" style={{ gap: 6, fontSize: 12 }}><Svg name="lock" size={13} stroke={1.8} /><span>我的悄悄话，你自己看到的是明文</span></div>
@@ -250,14 +314,14 @@ export default function Home() {
                   <div className="pass">
                     <div className="p3d" ref={p3d} style={{ '--fl': flip ? '180deg' : '0deg' }}
                       onPointerMove={tilt} onPointerLeave={untilt} onPointerCancel={untilt} onClick={() => setFlip((f) => !f)}>
-                      <div className="face front">
+                      <div className="face front" data-cardbg={s?.card_bg || 'none'}>
                         <div className="band"><span>TA</span><i className="hole" /><span className="mono">{slotNo}</span></div>
                         <div className="pbody">
                                                    <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                             {!s?.avatar_url && initial(partner.display_name)}
                           </div>
                           <div className="pf">
-                            <div className="fld"><small>姓名</small><div className="nm ellipsis">{partner.display_name}</div></div>
+                            <div className="fld"><small>姓名</small><div className="nm ellipsis">{partner.display_name}{s?.mood && <span className="mood-badge">{s.mood}</span>}</div></div>
                             <div className="fld"><small>此刻</small>
                               <div className="nowchip"><StatusIcon id={s?.icon_id} /><b>{s?.status_text || '还没设置状态'}</b></div>
                             </div>
@@ -283,6 +347,8 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+                           <NowPlaying row={s} />
 
               <div className="whisper-card glass" data-depth>
                 <div className="row muted" style={{ gap: 6, fontSize: 12 }}><Svg name="lock" size={13} stroke={1.8} /><span>TA 的悄悄话</span></div>
@@ -325,7 +391,9 @@ export default function Home() {
               )}
             </div>
           )}
-        </section>
+               </section>
+
+        <Anniversaries />
 
         {/* 收到的信：横向信封牌组 */}
         <section className="col rv" style={{ gap: 4 }}>
