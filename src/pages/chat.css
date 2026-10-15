@@ -1,0 +1,123 @@
+/* 聊天页。独立文件，由 Chat.jsx 自己引入。
+   颜色沿用 styles.css 里的主题变量（--glass / --gb / --chip / --btn / --av1~3 …），
+   只补几个聊天专用的变量：我的气泡 / TA 的气泡 / 悬浮玻璃条的不透明度。 */
+
+:root[data-theme='light'] {
+  --meBg: rgba(14,14,16,.88); --meInk: #f6f6f8; --taBg: rgba(255,255,255,.66); --bar: rgba(255,255,255,.74);
+}
+:root[data-theme='dark'] {
+  --meBg: rgba(245,245,247,.9); --meInk: #101012; --taBg: rgba(255,255,255,.1); --bar: rgba(26,26,32,.6);
+}
+
+/* ===== 骨架：顶栏 / 消息列表 / 回复条 / 输入栏 / 底部导航 都叠在同一个容器里 =====
+   容器高度 = 键盘之上看得见的那一块（--vvh，由 Chat.jsx 写入） */
+.ch-root { position: fixed; z-index: 1; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh);
+  max-width: 430px; margin: 0 auto; overflow: hidden; }
+
+/* 悬浮在消息上面的几条玻璃：不透明度高一点，底下的消息滑过时仍然能看清上面的字 */
+.ch-root .glass { background: var(--bar); }
+
+.ch-head { position: absolute; z-index: 5; top: calc(env(safe-area-inset-top) + 10px); left: 12px; right: 12px; display: flex; align-items: center; gap: 12px;
+  padding: 9px 10px 9px 12px; border-radius: 24px; }
+.ch-av { position: relative; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 17px; font-weight: 600; color: var(--avInk);
+  background: radial-gradient(circle at 32% 26%, var(--av1), var(--av2) 48%, var(--av3) 100%);
+  box-shadow: inset 0 -4px 8px rgba(0,0,0,.14), inset 0 3px 6px rgba(255,255,255,.35); }
+.ch-av .dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: var(--ink); border: 2.5px solid var(--bg); transition: background .3s; }
+.ch-av .dot.off { background: var(--ink2); }
+.ch-hd-t { flex: 1; min-width: 0; }
+.ch-hd-name { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.ch-hd-sub { font-size: 12px; color: var(--ink2); margin-top: 1px; }
+.ch-theme { width: 38px; height: 38px; border: 1px solid var(--gb); background: var(--chip); color: var(--ink); }
+
+.ch-list { position: absolute; inset: 0; overflow-y: auto; padding: calc(var(--headH, 76px) + 6px) 14px calc(var(--botH, 150px) + 8px);
+  display: flex; flex-direction: column; gap: 3px; scrollbar-width: none; overscroll-behavior: contain; }
+.ch-list::-webkit-scrollbar { display: none; }
+
+.ch-date, .ch-sys { align-self: center; font-size: 11.5px; color: var(--ink2); padding: 4px 12px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); margin: 10px 0 6px; text-align: center; }
+.ch-sys { margin: 8px 0; }
+.ch-sys.flash { animation: chFlash 1.1s; }
+.ch-setup { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 20px; line-height: 1.55; }
+.ch-more { align-self: center; border: none; background: var(--chip); color: var(--ink2); font-size: 12px; padding: 6px 14px; border-radius: 999px; margin-bottom: 6px; }
+.ch-empty { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--ink2); font-size: 13px; padding: 40px 0; }
+
+.ch-row { display: flex; align-items: flex-end; gap: 7px; max-width: 100%; }
+.ch-row.first { margin-top: 9px; }
+.ch-row.me { justify-content: flex-end; }
+.ch-row.new { animation: chIn .42s cubic-bezier(.2,1.15,.3,1); }
+.ch-row.me.new { transform-origin: 100% 100%; }
+.ch-row.ta.new { transform-origin: 0 100%; }
+@keyframes chIn { from { opacity: 0; transform: translateY(14px) scale(.94); } }
+.ch-side { width: 32px; flex-shrink: 0; align-self: flex-start; }
+.ch-mini { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--avInk);
+  background: radial-gradient(circle at 32% 26%, var(--av1), var(--av2) 48%, var(--av3) 100%); }
+
+.ch-bub { position: relative; max-width: 74%; padding: 9px 14px; border-radius: 20px; font-size: 15.5px; line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: pan-y;
+  transition: transform .2s cubic-bezier(.3,1.4,.4,1), opacity .25s; }
+.ch-bub.pressed { transform: scale(.96); }
+.ch-bub.sending { opacity: .6; }
+.ch-row.ta .ch-bub { background: var(--taBg); border: 1px solid var(--gb); color: var(--ink);
+  backdrop-filter: blur(18px) saturate(170%); -webkit-backdrop-filter: blur(18px) saturate(170%); box-shadow: 0 6px 22px rgba(20,22,30,.06); }
+.ch-row.me .ch-bub { background: var(--meBg); color: var(--meInk); border: 1px solid transparent; box-shadow: 0 8px 22px rgba(0,0,0,.14); }
+/* 气泡的"小尾巴"：每组最后一条把靠近说话人的那个下角收小 */
+.ch-row.ta.last .ch-bub { border-bottom-left-radius: 6px; }
+.ch-row.me.last .ch-bub { border-bottom-right-radius: 6px; }
+.ch-row.flash .ch-bub { animation: chFlash 1.1s; }
+.ch-row.failed .ch-bub { box-shadow: 0 0 0 1.5px #e5484d; }
+@keyframes chFlash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 25% { box-shadow: 0 0 0 4px var(--ink2); } }
+
+/* 引用卡片：嵌在气泡里面 */
+.ch-q { position: relative; display: block; width: calc(100% + 8px); margin: -3px -4px 7px; padding: 6px 10px 7px 15px; border: none; border-radius: 12px; text-align: left; color: inherit;
+  background: rgba(128,128,128,.2); background: color-mix(in srgb, currentColor 13%, transparent); font-size: 12.5px; line-height: 1.4; cursor: pointer; font-family: inherit; }
+.ch-q::before { content: ''; position: absolute; left: 6px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: currentColor; opacity: .7; }
+.ch-q b { display: block; font-size: 11.5px; font-weight: 600; opacity: .7; margin-bottom: 1px; }
+.ch-q span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: .9; }
+.ch-q.gone span { font-style: italic; opacity: .55; }
+
+/* 气泡旁边的时间 / 已读状态（每组最后一条才显示） */
+.ch-meta { flex-shrink: 0; align-self: flex-end; font-family: var(--mono); font-size: 10px; line-height: 1.4; color: var(--ink2); white-space: nowrap; padding-bottom: 2px; }
+.ch-row.me .ch-meta { text-align: right; }
+.ch-meta .rd { display: block; font-family: var(--font); font-size: 10.5px; font-weight: 600; }
+.ch-meta .rd.unread { font-weight: 500; opacity: .75; }
+.ch-meta .rd.bad { color: #e5484d; opacity: 1; }
+.ch-meta .rd.bad button { border: none; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; }
+.ch-meta .rd.flipped { animation: chRead .5s cubic-bezier(.2,1.4,.4,1); }
+@keyframes chRead { from { opacity: 0; transform: translateY(4px) scale(.9); } }
+
+/* 回到底部 / 新消息提示 */
+.ch-fab { position: absolute; right: 14px; bottom: calc(var(--botH, 150px) + 10px); z-index: 4; display: none; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 11px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--ink); }
+.ch-fab.on { display: flex; animation: chIn .3s ease-out; }
+
+/* 回复条 + 输入栏 + 给底部导航留的位置 */
+.ch-bottom { position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
+.ch-replying { flex-shrink: 0; display: flex; align-items: center; gap: 10px; margin: 6px 12px 0; padding: 8px 8px 8px 12px; border-radius: 18px; animation: chIn .28s ease-out; }
+.ch-replying .bar { width: 3px; align-self: stretch; border-radius: 2px; background: var(--ink); }
+.ch-replying .tx { flex: 1; min-width: 0; font-size: 12.5px; }
+.ch-replying .tx b { display: block; font-size: 11.5px; color: var(--ink2); font-weight: 600; }
+.ch-replying .tx span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-replying button { width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--chip); color: var(--ink); display: grid; place-items: center; flex-shrink: 0; }
+
+.ch-compose { flex-shrink: 0; margin: 8px 12px 0; display: flex; align-items: flex-end; padding: 5px 5px 5px 16px; border-radius: 26px; min-height: 48px; }
+.ch-compose textarea { flex: 1; min-width: 0; border: none; outline: none; resize: none; background: none; font-family: inherit; color: var(--ink); font-size: 16px; line-height: 22px; max-height: 110px; padding: 8px 0; }
+.ch-compose textarea::placeholder { color: var(--ink2); }
+.ch-send { width: 38px; height: 38px; margin-left: 6px; border-radius: 50%; border: none; background: var(--btn); color: var(--btnInk); display: grid; place-items: center; flex-shrink: 0; transition: opacity .25s, scale .18s; }
+.ch-send[disabled] { opacity: .22; scale: .92; }
+
+/* 底部导航占的高度：平时留出导航的位置；输入时导航滑走，输入栏落下来贴住键盘 */
+.ch-navspace { flex-shrink: 0; height: calc(env(safe-area-inset-bottom) + 18px + 64px + 10px); transition: height .45s cubic-bezier(.3,.9,.3,1); }
+.ch-root.typing .ch-navspace { height: 10px; }
+.ch-root .tabbar { transition: transform .45s cubic-bezier(.3,.9,.3,1), opacity .3s; }
+
+/* 长按菜单（放在容器里，坐标相对容器；盖在导航上面） */
+.ch-scrim { position: absolute; inset: 0; z-index: 35; background: rgba(0,0,0,.2); animation: chFade .2s both; }
+@keyframes chFade { from { opacity: 0; } }
+.ch-menu { position: absolute; z-index: 40; width: 156px; padding: 6px; border-radius: 20px; display: flex; flex-direction: column; transform-origin: var(--ox, 50%) var(--oy, 100%); animation: chPop .26s cubic-bezier(.2,1.25,.3,1); }
+@keyframes chPop { from { opacity: 0; transform: scale(.82); } }
+.ch-menu button { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px; border: none; background: none; border-radius: 14px; font-family: inherit; font-size: 15px; text-align: left; color: var(--ink); }
+.ch-menu button:active { background: var(--chip); }
+.ch-menu button.danger { color: #e5484d; }
+.ch-menu hr { border: none; height: 1px; background: var(--line); margin: 3px 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-root *, .ch-root *::before, .ch-root *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

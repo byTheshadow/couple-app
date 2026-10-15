@@ -1,0 +1,73 @@
+/* 写信：全屏信纸 + 寄出动画。独立文件，由 LetterComposer.jsx 自己引入。
+   颜色全部用 styles.css 里已有的主题变量（--paper / --win2 / --bd / --env1~3 …），亮暗主题自动适配。 */
+
+.lc-root { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  padding: calc(env(safe-area-inset-top) + 10px) 10px calc(env(safe-area-inset-bottom) + 10px);
+  background: rgba(0,0,0,.42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  animation: lcFade .35s ease both; }
+@keyframes lcFade { from { opacity: 0; } }
+
+.lc-win { width: min(430px, 100%); height: min(100%, 780px); display: flex; flex-direction: column;
+  background: var(--win2); overflow: hidden; animation: lcRise .55s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes lcRise { from { opacity: 0; transform: translateY(40px) scale(.96); } }
+.lc-win.away { animation: lcAway .5s cubic-bezier(.5,0,.7,.4) forwards; pointer-events: none; }
+@keyframes lcAway { to { opacity: 0; transform: translateY(70px) scale(.5); } }
+
+.lc-x { width: 22px; height: 22px; padding: 0; border: 1.3px solid currentColor; border-radius: 4px; background: none; color: inherit; display: grid; place-items: center; }
+.lc-x[disabled] { opacity: .4; }
+
+/* 信的种类：三个文件夹标签 */
+.lc-kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 12px 0; }
+.lc-kind { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px 8px; font-size: 13px; font-weight: 500;
+  border: 1.5px solid var(--bd); border-radius: 10px; background: var(--chip); color: var(--ink); }
+.lc-kind.on { background: var(--btn); color: var(--btnInk); }
+.lc-kind[disabled] { opacity: .6; }
+.lc-desc { padding: 9px 14px 0; font-size: 12.5px; line-height: 1.55; color: var(--ink2); min-height: 40px; }
+
+.lc-when { display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 0; }
+.lc-dt { width: 100%; padding: 10px 12px; font-size: 15px; font-family: var(--mono); color: var(--ink);
+  border: 1.5px solid var(--bd); border-radius: 10px; background: var(--chip); outline: none; }
+
+/* 信纸本体：横线是背景，随文字一起滚动（background-attachment: local） */
+.lc-paper { position: relative; flex: 1; min-height: 0; margin: 12px; padding: 14px 18px 10px; display: flex; flex-direction: column;
+  background: var(--paper); color: var(--paperInk); border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22), inset 0 0 0 1px var(--paperLine); }
+.lc-eye { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; opacity: .55; }
+.lc-title { width: 100%; padding: 10px 0 6px; border: none; outline: none; background: none; color: inherit;
+  font-family: var(--serif); font-size: 22px; font-weight: 600; letter-spacing: .02em; }
+.lc-body { flex: 1; min-height: 0; width: 100%; padding: 0; border: none; outline: none; resize: none; color: inherit;
+  font-family: var(--serif); font-size: 16px; line-height: 32px; overscroll-behavior: contain;
+  background: repeating-linear-gradient(transparent 0 31px, var(--paperLine) 31px 32px); background-attachment: local; }
+.lc-title::placeholder, .lc-body::placeholder { color: var(--paperInk); opacity: .32; }
+.lc-sign { padding-top: 6px; text-align: right; font-family: var(--serif); opacity: .75; }
+
+.lc-err { padding: 0 14px 8px; font-size: 12.5px; color: #e5484d; }
+.lc-send { height: 38px; padding: 0 22px; font-size: 14px; }
+.lc-send[disabled] { opacity: .45; }
+
+/* 寄出：信封出现 → 信纸滑进去 → 封口翻下来 → 盖章 → 飞走 */
+.lc-env { position: absolute; left: 50%; top: 50%; width: 250px; height: 168px; margin: -84px 0 0 -125px;
+  filter: drop-shadow(0 14px 22px rgba(0,0,0,.35)); pointer-events: none;
+  animation: lcEnvIn .4s .2s backwards, lcEnvGo .8s 1.55s cubic-bezier(.5,0,.8,.3) forwards; }
+.lc-env > * { position: absolute; }
+.lc-env .back { inset: 0; border-radius: 12px; background: var(--env2); z-index: 1; }
+.lc-env .pp { left: 12px; right: 12px; top: 12px; bottom: 8px; z-index: 2; border-radius: 6px; background: var(--paper);
+  padding: 14px; display: flex; flex-direction: column; gap: 9px; animation: lcPaperIn .5s .35s backwards cubic-bezier(.3,1.1,.4,1); }
+.lc-env .pp i { height: 3px; border-radius: 2px; background: var(--paperLine); }
+.lc-env .pp i:nth-child(2) { width: 70%; }
+.lc-env .pp i:nth-child(3) { width: 45%; }
+.lc-env .front { inset: 0; z-index: 3; border-radius: 12px; background: var(--env1); clip-path: polygon(0 0, 50% 54%, 100% 0, 100% 100%, 0 100%); }
+.lc-env .flap { left: 0; top: 0; width: 100%; height: 56%; z-index: 4; border-radius: 12px 12px 0 0; background: var(--env3);
+  clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: top; animation: lcFlap .5s .8s backwards cubic-bezier(.4,.1,.2,1); }
+.lc-env .seal { left: 50%; top: 56%; width: 40px; height: 40px; margin: -20px 0 0 -20px; z-index: 5; border-radius: 50%;
+  background: var(--ink); color: var(--bg); display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  animation: lcSeal .3s 1.2s backwards cubic-bezier(.3,1.6,.4,1); }
+@keyframes lcEnvIn { from { opacity: 0; transform: translateY(30px) scale(.8); } }
+@keyframes lcPaperIn { from { transform: translateY(-62px); } }
+@keyframes lcFlap { 0% { transform: rotateX(180deg); z-index: 1; } 49% { z-index: 1; } 50% { z-index: 4; } 100% { transform: rotateX(0); z-index: 4; } }
+@keyframes lcSeal { from { opacity: 0; transform: scale(.3); } }
+@keyframes lcEnvGo { to { transform: translateY(-70vh) scale(.6) rotate(-6deg); opacity: 0; } }
+
+/* 信箱标题栏里的「写信」小按钮（Home.jsx 用） */
+.tb-btn { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid currentColor; border-radius: 6px;
+  background: none; color: inherit; font-size: 12px; font-weight: 500; }

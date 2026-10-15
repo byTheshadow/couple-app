@@ -9,6 +9,7 @@ import { StatusIcon, Svg } from '../components/Icon'
 import Whisper from '../components/Whisper'
 import { NowPlaying } from '../components/Music'
 import LetterModal from '../components/LetterModal'
+import LetterComposer from '../components/LetterComposer'
 import LetterArrival from '../components/LetterArrival'
 import Album from '../components/Album'
 import Anniversaries from '../components/Anniversaries'
@@ -97,7 +98,8 @@ export default function Home() {
   const { items: activityLog } = useActivityLog(me?.id, LOG_MAX)
   const { stats } = useLetterStats(me?.id, partner?.id)
   const [tab, setTab] = useState(0)
-  const [openLetter, setOpenLetter] = useState(null)
+    const [openLetter, setOpenLetter] = useState(null)
+  const [composeOpen, setComposeOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [counts, setCounts] = useState({})
   const [gestureKind, setGestureKind] = useState('poke')
@@ -441,7 +443,9 @@ export default function Home() {
         {tab === 1 && (
           <section className="panel in">
             <div className="win">
-              <header className="tb"><Svg name="mail" size={14} /><b>收件箱.mail</b><span className="grow" /><span className="mono">{letters.length} 封</span></header>
+              <header className="tb"><Svg name="mail" size={14} /><b>收件箱.mail</b><span className="grow" />
+                <button type="button" className="tb-btn tap" onClick={() => (partner ? setComposeOpen(true) : say('还没有另一半的账号'))}><Svg name="pen" size={12} stroke={2} />写信</button>
+                <span className="mono">{letters.length} 封</span></header>
               {stats && (
                 <div className="cells">
                   <span className="muted">已读 {stats.read} · 未读 {stats.unread}</span>
@@ -564,6 +568,7 @@ export default function Home() {
 
       <TabBar />
       {openLetter && <LetterModal letter={openLetter} onClose={() => setOpenLetter(null)} onChanged={reload} />}
+      {composeOpen && <LetterComposer onClose={() => setComposeOpen(false)} onSent={() => say('信已寄出，TA 会收到一个信封')} />}
       {resetOpen && (
         <div className="overlay" onClick={() => !resetBusy && setResetOpen(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">

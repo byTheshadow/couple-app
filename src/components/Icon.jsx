@@ -27,6 +27,13 @@ const PATHS = {
   phones: <><path d="M4 15v-3a8 8 0 0 1 16 0v3" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></>,
   smile: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5v.5M15 9.5v.5" /></>,
   eye: <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
+  // 聊天页用的图标
+  chat: <path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6l-4 4v-4H7a2 2 0 0 1-2-2z" />,
+  up: <path d="M12 19V5M6 11l6-6 6 6" />,
+  down: <path d="M12 5v14M6 13l6 6 6-6" />,
+  reply: <path d="M9 14L4 9l5-5M4 9h9a7 7 0 0 1 7 7v1" />,
+  copy: <><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></>,
+  undo: <path d="M8 5L4 9l4 4M4 9h9a6 6 0 0 1 0 12H9" />,
   // 以下三个是「戳一戳」新增动作用的图标：抱一抱 / 亲一口 / 揍一拳
   hug: <><path d="M4 15c0-5 3.5-9 8-9s8 4 8 9" /><path d="M7 15a5 5 0 0 1 10 0" /></>,
   kiss: <path d="M4 12c2-3 4-3 5 0 .7-2 2-2 3 0 1-2 2.3-2 3 0 1.3-2 3-2 5 0" />,
