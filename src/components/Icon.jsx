@@ -15,10 +15,9 @@ const PATHS = {
   plus: <path d="M12 5v14M5 12h14" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
   bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></>,
-    play: <path d="M8 5.5v13l11-6.5z" />,
+  play: <path d="M8 5.5v13l11-6.5z" />,
   pause: <><rect x="7" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></>,
   note: <><circle cx="7" cy="18" r="2.6" /><circle cx="17" cy="16" r="2.6" /><path d="M9.6 18V5.5L19.6 4v12" /></>,
-  plus: <path d="M12 5v14M5 12h14" />,
   camera: <><path d="M4 8.5a2 2 0 0 1 2-2h1.6l1-1.6a1.5 1.5 0 0 1 1.3-.7h4.2a1.5 1.5 0 0 1 1.3.7l1 1.6H18a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></>,
   check: <path d="M5 13l4.5 4.5L19 8" />,
   wave: <path d="M3 15c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />,
@@ -28,6 +27,10 @@ const PATHS = {
   phones: <><path d="M4 15v-3a8 8 0 0 1 16 0v3" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></>,
   smile: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5v.5M15 9.5v.5" /></>,
   eye: <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
+  // 以下三个是「戳一戳」新增动作用的图标：抱一抱 / 亲一口 / 揍一拳
+  hug: <><path d="M4 15c0-5 3.5-9 8-9s8 4 8 9" /><path d="M7 15a5 5 0 0 1 10 0" /></>,
+  kiss: <path d="M4 12c2-3 4-3 5 0 .7-2 2-2 3 0 1-2 2.3-2 3 0 1.3-2 3-2 5 0" />,
+  fist: <><rect x="6" y="9" width="12" height="9" rx="3" /><path d="M9 9V6a1.5 1.5 0 0 1 3 0v1M12 9V5.5a1.5 1.5 0 0 1 3 0V9M15 9.5V7a1.5 1.5 0 0 1 3 0v2.5" /></>,
 }
 
 export function Svg({ name, size = 22, stroke = 1.6 }) {
@@ -110,6 +113,11 @@ export const CARD_BGS = [
   { id: 'lavender', label: '薰衣草' },
   { id: 'sky', label: '天空' },
   { id: 'rose', label: '玫瑰' },
+  { id: 'sunset', label: '日落' },
+  { id: 'ocean', label: '深海' },
+  { id: 'forest', label: '森林' },
+  { id: 'gold', label: '香槟金' },
+  { id: 'noir', label: '暗夜' },
 ]
 
 // 心情表情，直接存 emoji 字符，不用 id 对照

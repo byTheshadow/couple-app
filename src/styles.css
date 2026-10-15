@@ -195,14 +195,20 @@ textarea.field { resize: none; line-height: 1.5; }
 .av-edit { position: absolute; right: -2px; bottom: -2px; z-index: 4; width: 30px; height: 30px; border-radius: 50%; background: var(--btn); color: var(--btnInk); border: 2px solid var(--bg); display: grid; place-items: center; }
 .av-edit[disabled] { opacity: .5; }
 
-/* 名片背景主题：套在「我的卡」(.hero) 和 TA 工牌正面 (.face.front) 上，双方都看得到 */
-[data-cardbg='peach'] { --cardTint: rgba(255,170,120,.4); }
-[data-cardbg='mint'] { --cardTint: rgba(120,230,180,.36); }
-[data-cardbg='lavender'] { --cardTint: rgba(180,150,255,.38); }
-[data-cardbg='sky'] { --cardTint: rgba(120,190,255,.38); }
-[data-cardbg='rose'] { --cardTint: rgba(255,130,165,.38); }
-.hero[data-cardbg]:not([data-cardbg='none']) { background: var(--cardTint); }
-.face.front[data-cardbg]:not([data-cardbg='none']) { background-image: linear-gradient(160deg, var(--cardTint), transparent 72%), var(--pass); }
+/* 名片背景主题：套在「我的卡」(.hero) 和 TA 工牌正面 (.face.front) 上，双方都看得到
+   每个主题是两个色标做斜向渐变，比纯色调更有层次；新增主题只要加一行 [data-cardbg] + 两个颜色 */
+[data-cardbg='peach']    { --cardTint: rgba(255,170,120,.42); --cardTint2: rgba(255,120,150,.26); }
+[data-cardbg='mint']     { --cardTint: rgba(120,230,180,.4);  --cardTint2: rgba(90,200,230,.24); }
+[data-cardbg='lavender'] { --cardTint: rgba(180,150,255,.42); --cardTint2: rgba(140,110,255,.24); }
+[data-cardbg='sky']      { --cardTint: rgba(120,190,255,.42); --cardTint2: rgba(130,220,255,.22); }
+[data-cardbg='rose']     { --cardTint: rgba(255,130,165,.42); --cardTint2: rgba(255,170,120,.22); }
+[data-cardbg='sunset']   { --cardTint: rgba(255,150,90,.46);  --cardTint2: rgba(255,90,130,.28); }
+[data-cardbg='ocean']    { --cardTint: rgba(60,160,220,.46);  --cardTint2: rgba(40,80,170,.3); }
+[data-cardbg='forest']   { --cardTint: rgba(110,190,130,.4);  --cardTint2: rgba(60,130,90,.26); }
+[data-cardbg='gold']     { --cardTint: rgba(255,210,120,.46); --cardTint2: rgba(230,160,70,.28); }
+[data-cardbg='noir']     { --cardTint: rgba(90,94,112,.5);    --cardTint2: rgba(18,18,24,.42); }
+.hero[data-cardbg]:not([data-cardbg='none']) { background: linear-gradient(135deg, var(--cardTint), var(--cardTint2)); }
+.face.front[data-cardbg]:not([data-cardbg='none']) { background-image: linear-gradient(135deg, var(--cardTint), var(--cardTint2) 85%), var(--pass); }
 .av-ring { position: absolute; inset: -4px; border-radius: 50%; border: 1px solid var(--ink2); opacity: 0; animation: ring 4.2s cubic-bezier(.2,.6,.3,1) infinite; }
 .av-ring.r2 { animation-delay: 1.4s; } .av-ring.r3 { animation-delay: 2.8s; }
 @keyframes ring { 0% { transform: scale(.9); opacity: .55; } 100% { transform: scale(1.75); opacity: 0; } }
@@ -279,11 +285,16 @@ textarea.field { resize: none; line-height: 1.5; }
 .band .mono { font-size: 12px; font-weight: 400; letter-spacing: 0; }
 .hole { position: absolute; left: 50%; top: 7px; width: 50px; height: 12px; margin-left: -25px; border-radius: 7px; background: var(--bg); box-shadow: inset 0 2px 4px rgba(0,0,0,.5); }
 .pbody { position: relative; display: flex; gap: 16px; padding: 18px 16px 12px; }
-.pic { width: 92px; height: 116px; border-radius: 12px; flex-shrink: 0; display: grid; place-items: center; font-size: 46px; font-weight: 600; background: rgba(127,131,142,.14); border: 1px solid var(--passLine); box-shadow: inset 0 0 0 4px rgba(255,255,255,.3); }
+/* 外面这层只负责占位置、挂装饰（猫耳/光环/轨道…跟首页头像复用同一套 [data-deco] 规则） */
+.pic-wrap { position: relative; width: 92px; height: 116px; flex-shrink: 0; }
+.pic { width: 100%; height: 100%; border-radius: 12px; display: grid; place-items: center; font-size: 46px; font-weight: 600; background: rgba(127,131,142,.14); border: 1px solid var(--passLine); box-shadow: inset 0 0 0 4px rgba(255,255,255,.3); }
 .pf { display: flex; flex-direction: column; gap: 9px; min-width: 0; flex: 1; }
 .fld { min-width: 0; }
 .fld small { display: block; font-size: 11.5px; opacity: .5; margin-bottom: 2px; }
-.fld .nm { font-size: 24px; font-weight: 650; letter-spacing: -.01em; max-width: 6.5em; }
+/* 名字 + 心情表情：名字自己截断省略号，表情放在外面不会被一起截掉 */
+.nm-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.fld .nm { font-size: 24px; font-weight: 650; letter-spacing: -.01em; max-width: 6.5em; flex: 0 1 auto; min-width: 0; }
+.nm-row .mood-badge { flex-shrink: 0; }
 .nowchip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 5px 11px 5px 8px; border-radius: 10px; background: var(--btn); color: var(--btnInk); font-size: 14px; }
 .nowchip svg { width: 18px; height: 18px; flex-shrink: 0; }
 .nowchip b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -543,5 +554,5 @@ textarea.field { resize: none; line-height: 1.5; }
 .act-time { font-size: 10.5px; font-family: var(--mono); opacity: .6; }
 
 /* 戳一戳 / 拍一拍：动作选择 + 自定义留言 + 大圆钮发送 */
-.gesture-pick { display: flex; gap: 8px; }
+.gesture-pick { display: flex; gap: 8px; flex-wrap: wrap; }
 .poke-circle svg { position: relative; z-index: 1; }

@@ -83,10 +83,13 @@ export default function Album() {
     setDeletingId(photo.id)
     const path = storagePathFromUrl(photo.url)
     if (path) await supabase.storage.from('album').remove([path])
-    const { error } = await supabase.from('photos').delete().eq('id', photo.id)
+    // 加 .select() 才能知道真的删没删：如果数据库权限（RLS）不允许删，
+    // Supabase 不会报错，只会什么都没删掉，不加这个判断的话界面会"假装删除成功"
+    const { data, error } = await supabase.from('photos').delete().eq('id', photo.id).select()
     setDeletingId(null)
     if (openPhoto?.id === photo.id) setOpenPhoto(null)
     if (error) return say('删除失败，再试一次')
+    if (!data || data.length === 0) return say('没有删除权限，去 Supabase 加一条 photos 的删除策略')
     say('照片已删除')
   }
 

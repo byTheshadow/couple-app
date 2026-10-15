@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { useStatus } from '../lib/hooks'
 import { useScrollFx } from '../lib/scrollfx'
 import Whisper from '../components/Whisper'
+import { MusicModal, NowPlaying } from '../components/Music'
 import TabBar from '../components/TabBar'
 import { CARD_BGS, DECORATIONS, MOODS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
 
@@ -42,7 +43,8 @@ export default function StatusEditor() {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
-  const [musicBusy, setMusicBusy] = useState(false)
+    const [musicBusy, setMusicBusy] = useState(false)
+  const [musicOpen, setMusicOpen] = useState(false)
   const [toast, setToast] = useState('')
   const fileRef = useRef(null)
   const musicFileRef = useRef(null)
@@ -52,8 +54,10 @@ export default function StatusEditor() {
   const say = useCallback((t) => { setToast(t); setTimeout(() => setToast(''), 2600) }, [])
 
   useEffect(() => { if (me) setName(me.display_name) }, [me])
+    const inited = useRef(false)
   useEffect(() => {
-    if (loading) return
+    if (loading || inited.current) return
+    inited.current = true
     setForm({
       icon_id: row?.icon_id || 'coffee',
       status_text: row?.status_text || '',
@@ -234,26 +238,15 @@ export default function StatusEditor() {
             ))}
           </div>
 
-          <div className="label" style={{ marginTop: 4 }}>在听（TA 也能看到，可以一起听）</div>
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className={`pill${form.music_source === 'upload' ? ' on' : ''}`} onClick={() => set('music_source', 'upload')}>上传 MP3</button>
-            <button type="button" className={`pill${form.music_source === 'link' ? ' on' : ''}`} onClick={() => set('music_source', 'link')}>外链地址</button>
-          </div>
-          {form.music_source === 'upload' ? (
-            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-              <button type="button" className="btn" style={{ height: 38, fontSize: 13 }} onClick={pickMusic} disabled={musicBusy}>
-                {musicBusy ? '上传中…' : '选择文件'}
-              </button>
-              <input ref={musicFileRef} type="file" accept="audio/*" hidden onChange={onMusicFile} />
-              {form.music_url && <span className="h-sub ellipsis">已选好一首歌</span>}
-            </div>
+                    <div className="label" style={{ marginTop: 4 }}>在听（TA 也能看到，可以一起听）</div>
+          {form.music_url ? (
+            <>
+              <NowPlaying row={form} label="我在听" />
+              <button type="button" className="mini tap" style={{ alignSelf: 'flex-start' }} onClick={() => setMusicOpen(true)}>换一首 / 清除</button>
+            </>
           ) : (
-            <input className="field glass" value={form.music_url} onChange={(e) => set('music_url', e.target.value)} placeholder="粘贴歌曲外链地址（mp3 直链）" />
-          )}
-          <input className="field glass" maxLength={40} value={form.music_title} onChange={(e) => set('music_title', e.target.value)} placeholder="歌名（可选）" />
-          {form.music_url && (
-            <button type="button" className="mini tap" style={{ alignSelf: 'flex-start' }} onClick={() => { set('music_url', ''); set('music_title', '') }}>
-              清除正在听的歌
+            <button type="button" className="mini tap" style={{ alignSelf: 'flex-start' }} onClick={() => setMusicOpen(true)}>
+              <Svg name="plus" size={14} stroke={2} />添加在听的歌
             </button>
           )}
         </section>
@@ -284,7 +277,14 @@ export default function StatusEditor() {
 
         <button className="btn rv" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存'}</button>
       </div>
-      <TabBar />
+        <TabBar />
+      {musicOpen && (
+        <MusicModal
+          userId={me.id} initial={form} say={say}
+          onClose={() => setMusicOpen(false)}
+          onSaved={(p) => setForm((f) => ({ ...f, ...p, music_title: p.music_title || '', music_url: p.music_url || '', music_source: p.music_source || 'link' }))}
+        />
+      )}
     </div>
   )
 }

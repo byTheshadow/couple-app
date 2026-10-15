@@ -1,0 +1,40 @@
+/* 「在听」黑胶卡片 + 添加歌曲弹窗。独立成一个文件，由 Music.jsx 自己引入，不动 styles.css。
+   颜色全部走 styles.css 里已有的主题变量（--btn / --btnInk / --line …），亮暗主题自动适配。 */
+
+.w-music { position: relative; display: flex; align-items: center; gap: 12px; margin: 4px 0 0 10px;
+  padding: 16px 14px 16px 98px; min-height: 108px; border-radius: 22px;
+  background: var(--btn); color: var(--btnInk); box-shadow: var(--shadow); }
+
+/* 黑胶：半个压在卡片左边外面；暂停时停住，播放时转 */
+.mu-disc { position: absolute; left: -10px; top: 50%; margin-top: -54px; width: 108px; height: 108px; border-radius: 50%;
+  box-shadow: 0 12px 26px rgba(0,0,0,.4);
+  background: repeating-radial-gradient(circle, #c3c6cd 0 2px, #f1f2f5 2px 4px, #a9adb6 4px 6px);
+  animation: spin 7s linear infinite; animation-play-state: paused; }
+.mu-disc::before { content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 20deg, transparent, rgba(255,255,255,.6) 10%, transparent 25%, transparent 50%, rgba(255,255,255,.45) 60%, transparent 75%); }
+.mu-disc::after { content: ''; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
+  background: #141416; box-shadow: 0 0 0 4px #e9ebef; }
+.w-music.play .mu-disc { animation-play-state: running; }
+.w-music.bad .mu-disc { filter: grayscale(1); opacity: .6; }
+
+.mu-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mu-pill { align-self: flex-start; border: 1px solid currentColor; border-radius: 999px; padding: 1px 9px; font-size: 12px; opacity: .85; margin-bottom: 6px; }
+.mu-info b { font-size: 17px; font-weight: 650; }
+.mu-info small { font-size: 12px; opacity: .6; margin-top: 2px; }
+
+/* 进度条本身只有 3px，::before 把可点的范围撑高一点，手指好点 */
+.mu-prog { position: relative; height: 3px; border-radius: 2px; background: rgba(128,128,128,.4); margin-top: 10px; cursor: pointer; }
+.mu-prog::before { content: ''; position: absolute; left: 0; right: 0; top: -9px; bottom: -9px; }
+.mu-prog i { display: block; height: 100%; width: var(--p, 0%); background: currentColor; border-radius: 2px; transition: width .25s linear; }
+.mu-t { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; opacity: .6; margin-top: 4px; }
+.mu-btn { width: 42px; height: 42px; border-radius: 50%; border: 1.5px solid currentColor; background: none; color: inherit; display: grid; place-items: center; flex-shrink: 0; padding: 0; }
+
+/* 添加歌曲弹窗 */
+.mu-sheet { max-height: 90dvh; overflow-y: auto; }
+.mu-sheet-hd { display: flex; flex-direction: column; gap: 4px; }
+.mu-sheet .w-music { margin-top: 2px; }
+.mu-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 14px; border-radius: 18px;
+  border: 1.5px dashed var(--ink2); background: var(--chip); color: var(--ink); font-size: 14px; text-align: center; }
+.mu-drop small { font-size: 12px; color: var(--ink2); }
+.mu-drop.has { border-style: solid; border-color: var(--ink); }
+.mu-drop[disabled] { opacity: .6; }

@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -8,6 +7,7 @@ import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
 import { StatusIcon, Svg } from '../components/Icon'
 import Whisper from '../components/Whisper'
+import { NowPlaying } from '../components/Music'
 import LetterModal from '../components/LetterModal'
 import LetterArrival from '../components/LetterArrival'
 import Album from '../components/Album'
@@ -24,14 +24,17 @@ const isLocked = (l) => l.kind === 'capsule' && l.unlock_at && Date.parse(l.unlo
 const daysLeft = (l) => Math.ceil((Date.parse(l.unlock_at) - Date.now()) / 86400000)
 const initial = (name) => (name || '?').trim().slice(0, 1).toUpperCase()
 
-// 肢体互动手势：以后要加新的互动（比如"亲一下"），在这里加一条就行
+// 肢体互动手势：以后要加新的预设互动，在这里加一条就行；想要完全自定义的动作走下面的「自定义」分支
 const GESTURES = {
-  poke: { verb: '戳一戳', label: '戳了你一下', icon: 'heart', sub: '想要抱抱', doneWord: '戳', successMsg: '戳到啦，TA 应该感觉到了', vibrate: [30, 40, 30] },
-  pat: { verb: '拍一拍', label: '轻轻拍了拍你', icon: 'wave', sub: '摸摸头', doneWord: '拍', successMsg: '拍到啦，TA 应该感觉到了', vibrate: [20, 20, 20, 20] },
+  poke: { verb: '戳一戳', icon: 'heart', sub: '想要抱抱', doneWord: '戳', vibrate: [30, 40, 30] },
+  pat: { verb: '拍一拍', icon: 'wave', sub: '摸摸头', doneWord: '拍', vibrate: [20, 20, 20, 20] },
+  hug: { verb: '抱一抱', icon: 'hug', sub: '抱紧一点', doneWord: '抱', vibrate: [50, 30, 50, 30, 80] },
+  kiss: { verb: '亲一口', icon: 'kiss', sub: '么么哒', doneWord: '亲', vibrate: [25, 25, 25] },
+  bonk: { verb: '揍一拳', icon: 'fist', sub: '哼，不理你', doneWord: '揍', vibrate: [60, 20, 60] },
 }
 
-// 更新日志里每种动作对应的图标
-const ACTIVITY_ICON = { poke: 'heart', pat: 'wave', letter_sent: 'mail', letter_received: 'mail' }
+// 更新日志里每种动作对应的图标；自定义动作统一用 heart
+const ACTIVITY_ICON = { poke: 'heart', pat: 'wave', hug: 'hug', kiss: 'kiss', bonk: 'fist', custom: 'heart', letter_sent: 'mail', letter_received: 'mail' }
 const LOG_PAGE = 10
 const LOG_MAX = 20
 
@@ -53,39 +56,16 @@ function barcode(seed = '') {
 }
 
 // 更新日志里一行要显示的文字：按方向（我做的 / TA 做的）换说法，并带上自定义留言
+// verb 优先读数据库里存的那一条（自定义动作靠这个字段还原动词），老数据没有这个字段时退回预设表
 function activityText(p, myId) {
   if (p.kind === 'letter_sent') return '你寄出了一封信'
   if (p.kind === 'letter_received') return '收到一封信'
-  const g = GESTURES[p.kind] || GESTURES.poke
+  const verb = p.verb || GESTURES[p.kind]?.doneWord || '戳'
   const mine = p.sender_id === myId
-  const base = mine ? `你${g.verb}了 TA` : `TA ${g.verb}了你`
+  const base = mine ? `你${verb}了 TA` : `TA ${verb}了你`
   return p.message ? `${base}："${p.message}"` : base
 }
 
-function NowPlaying({ row }) {
-  const audioRef = useRef(null)
-  const [playing, setPlaying] = useState(false)
-  if (!row?.music_url) return null
-  const toggle = () => {
-    const el = audioRef.current
-    if (!el) return
-    if (playing) el.pause()
-    else el.play().catch(() => {})
-  }
-  return (
-    <div className="nowplaying glass">
-      <button type="button" className="np-play tap" onClick={toggle} aria-label={playing ? '暂停' : '播放'}>
-        <Svg name={playing ? 'pause' : 'play'} size={14} />
-      </button>
-      <Svg name="note" size={15} />
-      <span className="ellipsis np-title">{row.music_title || '一首歌'}</span>
-      <audio
-        ref={audioRef} src={row.music_url} preload="none"
-        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
-      />
-    </div>
-  )
-}
 
 function Envelope({ l }) {
   const locked = isLocked(l)
@@ -119,9 +99,10 @@ export default function Home() {
   const [tab, setTab] = useState(0)
   const [openLetter, setOpenLetter] = useState(null)
   const [toast, setToast] = useState('')
-  const [counts, setCounts] = useState({ poke: 0, pat: 0 })
+  const [counts, setCounts] = useState({})
   const [gestureKind, setGestureKind] = useState('poke')
   const [gestureMsg, setGestureMsg] = useState('')
+  const [customVerb, setCustomVerb] = useState('')
   const [hit, setHit] = useState(null)
   const [logExpanded, setLogExpanded] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
@@ -142,9 +123,9 @@ export default function Home() {
   const say = useCallback((t) => { setToast(t); setTimeout(() => setToast(''), 2600) }, [])
 
   usePokes(me?.id, (row) => {
-    const g = GESTURES[row?.kind] || GESTURES.poke
+    const verb = row?.verb || GESTURES[row?.kind]?.doneWord || '戳'
     try { navigator.vibrate?.(row?.kind === 'pat' ? [20, 20, 20, 20] : [40, 50, 40, 50, 80]) } catch { /* iOS 不支持 */ }
-    say(row?.message ? `TA ${g.verb}了你："${row.message}"` : `TA ${row?.label || g.label}`)
+    say(row?.message ? `TA ${verb}了你："${row.message}"` : `TA ${verb}了你`)
   })
 
   useLetterArrivals(me?.id, (row) => setArrivedLetter(row))
@@ -171,17 +152,24 @@ export default function Home() {
     return () => clearInterval(t)
   }, [])
 
+  // 自定义动作时没有预设条目，现场拼一个一样形状的对象出来用
+  const isCustom = gestureKind === 'custom'
+  const activeGesture = isCustom
+    ? { verb: customVerb.trim() ? `${customVerb.trim()}一下` : '自定义动作', icon: 'heart', sub: '专属于你们的小动作', doneWord: customVerb.trim() || '互动', vibrate: [30, 30, 30] }
+    : GESTURES[gestureKind]
+
   const sendGesture = async () => {
     if (!partner) return say('还没有另一半的账号')
-    const g = GESTURES[gestureKind]
+    const verb = isCustom ? customVerb.trim().slice(0, 8) : GESTURES[gestureKind].doneWord
+    if (isCustom && !verb) return say('先给这个动作起个名字')
     const msg = gestureMsg.trim().slice(0, 40)
     const { error } = await supabase.from('pokes').insert({
-      sender_id: me.id, receiver_id: partner.id, label: g.label, kind: gestureKind, message: msg || null,
+      sender_id: me.id, receiver_id: partner.id, label: `${verb}了你一下`, kind: gestureKind, verb, message: msg || null,
     })
-    if (error) return say(`没${g.doneWord}到，再试一次`)
-    try { navigator.vibrate?.(g.vibrate) } catch { /* ignore */ }
-    setCounts((c) => ({ ...c, [gestureKind]: c[gestureKind] + 1 }))
-    say(msg ? `已送达给 TA："${msg}"` : g.successMsg)
+    if (error) return say(`没${verb}到，再试一次`)
+    try { navigator.vibrate?.(activeGesture.vibrate) } catch { /* ignore */ }
+    setCounts((c) => ({ ...c, [gestureKind]: (c[gestureKind] || 0) + 1 }))
+    say(msg ? `已送达给 TA："${msg}"` : `${verb}到啦，TA 应该感觉到了`)
     setGestureMsg('')
     setHit(gestureKind); setTimeout(() => setHit(null), 650)
   }
@@ -192,10 +180,16 @@ export default function Home() {
   }
 
   const confirmReset = async () => {
-    if (!resetPwd || !session?.user?.email) return
+    const pwd = resetPwd.trim()
+    if (!pwd || !session?.user?.email) return
     setResetBusy(true); setResetErr('')
-    const { error: authErr } = await supabase.auth.signInWithPassword({ email: session.user.email, password: resetPwd })
-    if (authErr) { setResetErr('密码不对，再试一次'); setResetBusy(false); return }
+    const { error: authErr } = await supabase.auth.signInWithPassword({ email: session.user.email, password: pwd })
+    if (authErr) {
+      // 之前这里不管什么错误都显示"密码不对"，导致限流/网络问题也被误判成密码错；
+      // 现在把 Supabase 返回的真实原因显示出来，方便排查
+      setResetErr(authErr.status === 400 ? '密码不对，再试一次' : `验证失败：${authErr.message}`)
+      setResetBusy(false); return
+    }
     const { error } = await supabase.rpc('reset_all_data')
     if (error) { setResetErr(`重置失败：${error.message}`); setResetBusy(false); return }
     setResetOpen(false); setResetPwd(''); setResetBusy(false)
@@ -341,7 +335,7 @@ export default function Home() {
                 <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
               </div>
             </div>
-            <NowPlaying row={m} />
+            <NowPlaying row={m} label="我在听" />
             {m?.secret_text && (
               <div className="about">
                 <div className="row muted" style={{ gap: 6, fontSize: 12 }}><Svg name="lock" size={13} stroke={1.8} /><span>我的悄悄话，你自己看到的是明文</span></div>
@@ -384,11 +378,26 @@ export default function Home() {
                         <div className="face front" data-cardbg={s?.card_bg || 'none'}>
                           <div className="band"><span>TA</span><i className="hole" /><span className="mono">{slotNo}</span></div>
                           <div className="pbody">
-                            <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
-                              {!s?.avatar_url && initial(partner.display_name)}
+                            {/* 头像装饰和首页「我的卡」共用同一套 [data-deco] 样式，TA 换了装饰这里会同步显示 */}
+                            <div className="pic-wrap" data-deco={s?.decoration_id || 'none'}>
+                              <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
+                              <span className="d d-polaroid" data-cap={shortDate} />
+                              <span className="d d-ears"><i /><i /></span>
+                              <span className="d d-halo" />
+                              <span className="d d-orbit" />
+                              <span className="d d-pixel" />
+                              <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                                {!s?.avatar_url && initial(partner.display_name)}
+                              </div>
                             </div>
                             <div className="pf">
-                              <div className="fld"><small>姓名</small><div className="nm ellipsis">{partner.display_name}{s?.mood && <span className="mood-badge">{s.mood}</span>}</div></div>
+                              <div className="fld">
+                                <small>姓名</small>
+                                <div className="nm-row">
+                                  <span className="nm ellipsis">{partner.display_name}</span>
+                                  {s?.mood && <span className="mood-badge">{s.mood}</span>}
+                                </div>
+                              </div>
                               <div className="fld"><small>此刻</small>
                                 <div className="nowchip"><StatusIcon id={s?.icon_id} /><b>{s?.status_text || '还没设置状态'}</b></div>
                               </div>
@@ -415,12 +424,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="win">
-                  <header className="tb"><Svg name="doc" size={14} /><b>此刻.txt</b><span className="grow" /><span className="mono">live</span></header>
-                  <div className="kv"><span className="k"><Svg name="eye" size={14} />状态</span><span className="v hl">{s?.status_text || '还没设置状态'}</span></div>
-                  {s?.mood && <div className="kv"><span className="k"><Svg name="smile" size={14} />心情</span><span className="v" style={{ fontSize: 18 }}>{s.mood}</span></div>}
-                </div>
-
+                {/* 此刻.txt 已经去掉了：状态文字 + 心情已经在上面工牌里了，没必要重复一遍 */}
                 <NowPlaying row={s} />
 
                 <div className="win">
@@ -492,22 +496,31 @@ export default function Home() {
                       <Svg name={g.icon} size={14} />{g.verb}
                     </button>
                   ))}
+                  <button type="button" className={`pill${isCustom ? ' on' : ''}`} onClick={() => setGestureKind('custom')}>
+                    <Svg name="plus" size={14} />自定义
+                  </button>
                 </div>
+                {isCustom && (
+                  <input
+                    className="field" maxLength={8} placeholder="给这个动作起个名字，比如「揉」「捏脸」"
+                    value={customVerb} onChange={(e) => setCustomVerb(e.target.value)}
+                  />
+                )}
                 <input
                   className="field" maxLength={40} placeholder="想对 TA 说句话（可选）"
                   value={gestureMsg} onChange={(e) => setGestureMsg(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') sendGesture() }}
                 />
                 <div className="poke-circle-wrap">
-                  <button type="button" className={`poke-circle tap${hit === gestureKind ? ' fire' : ''}`} onClick={sendGesture} aria-label={GESTURES[gestureKind].verb}>
-                    <Svg name={GESTURES[gestureKind].icon} size={28} />
+                  <button type="button" className={`poke-circle tap${hit === gestureKind ? ' fire' : ''}`} onClick={sendGesture} aria-label={activeGesture.verb}>
+                    <Svg name={activeGesture.icon} size={28} />
                     <i className="rp" /><i className="rp two" />
                   </button>
                   <div className="col" style={{ gap: 4 }}>
                     <b style={{ fontSize: 15 }}>
-                      {counts[gestureKind] > 0 ? `已${GESTURES[gestureKind].doneWord} TA ${counts[gestureKind]} 次` : `${GESTURES[gestureKind].verb} TA`}
+                      {counts[gestureKind] > 0 ? `已${activeGesture.doneWord} TA ${counts[gestureKind]} 次` : `${activeGesture.verb} TA`}
                     </b>
-                    <span className="h-sub">{GESTURES[gestureKind].sub}</span>
+                    <span className="h-sub">{activeGesture.sub}</span>
                   </div>
                 </div>
               </div>
