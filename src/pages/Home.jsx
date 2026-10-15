@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { fmtTime, greeting, useLetterArrivals, useLetters, usePokeHistory, usePokes, useStatus } from '../lib/hooks'
+import { fmtTime, greeting, useActivityLog, useLetterArrivals, useLetterStats, useLetters, usePokes, useStatus } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
 import { StatusIcon, Svg } from '../components/Icon'
 import Whisper from '../components/Whisper'
 import LetterModal from '../components/LetterModal'
 import LetterArrival from '../components/LetterArrival'
+import Album from '../components/Album'
 import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
 
@@ -27,6 +28,11 @@ const GESTURES = {
   poke: { verb: '戳一戳', label: '戳了你一下', icon: 'heart', sub: '想要抱抱', doneWord: '戳', successMsg: '戳到啦，TA 应该感觉到了', vibrate: [30, 40, 30] },
   pat: { verb: '拍一拍', label: '轻轻拍了拍你', icon: 'wave', sub: '摸摸头', doneWord: '拍', successMsg: '拍到啦，TA 应该感觉到了', vibrate: [20, 20, 20, 20] },
 }
+
+// 更新日志里每种动作对应的图标
+const ACTIVITY_ICON = { poke: 'heart', pat: 'wave', letter_sent: 'mail', letter_received: 'mail' }
+const LOG_PAGE = 10
+const LOG_MAX = 20
 
 function letterMeta(l) {
   if (isLocked(l)) return `${KIND_LABEL.capsule} · ${daysLeft(l)} 天后开启`
@@ -88,17 +94,23 @@ function Envelope({ l }) {
 }
 
 export default function Home() {
-  const { me, partner, signOut } = useAuth()
+  const { me, partner, signOut, session } = useAuth()
   const { theme, toggle } = useTheme()
   const partnerStatus = useStatus(partner?.id)
   const myStatus = useStatus(me?.id)
   const { letters, reload } = useLetters(me?.id)
-  const { pokes: gestureHistory } = usePokeHistory(me?.id)
+  const { items: activityLog } = useActivityLog(me?.id, LOG_MAX)
+  const { stats } = useLetterStats(me?.id, partner?.id)
   const [openLetter, setOpenLetter] = useState(null)
   const [toast, setToast] = useState('')
   const [counts, setCounts] = useState({ poke: 0, pat: 0 })
   const [hit, setHit] = useState(null)
   const [showLog, setShowLog] = useState(false)
+  const [logExpanded, setLogExpanded] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetPwd, setResetPwd] = useState('')
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetErr, setResetErr] = useState('')
   const [flip, setFlip] = useState(false)
   const [deckIdx, setDeckIdx] = useState(0)
   const [now, setNow] = useState(() => new Date())
@@ -156,6 +168,18 @@ export default function Home() {
   const tapLetter = (l) => {
     if (isLocked(l)) return say(`还没到时间，${new Date(l.unlock_at).toLocaleDateString()} 才能打开`)
     setOpenLetter(l)
+  }
+
+  const confirmReset = async () => {
+    if (!resetPwd || !session?.user?.email) return
+    setResetBusy(true); setResetErr('')
+    const { error: authErr } = await supabase.auth.signInWithPassword({ email: session.user.email, password: resetPwd })
+    if (authErr) { setResetErr('密码不对，再试一次'); setResetBusy(false); return }
+    const { error } = await supabase.rpc('reset_all_data')
+    if (error) { setResetErr(`重置失败：${error.message}`); setResetBusy(false); return }
+    setResetOpen(false); setResetPwd(''); setResetBusy(false)
+    say('已全部重置')
+    setTimeout(() => window.location.reload(), 900)
   }
 
   // 工牌：指针移动时 3D 倾斜，离开时回正
@@ -370,29 +394,39 @@ export default function Home() {
             ))}
           </div>
 
-          <button className="mini tap" onClick={() => setShowLog((v) => !v)}>
+                    <button className="mini tap" onClick={() => setShowLog((v) => !v)}>
             <Svg name="clock" size={14} stroke={1.8} />
-            {showLog ? '收起记录' : 'TA 什么时候戳过我'}
+            {showLog ? '收起更新日志' : '查看更新日志'}
           </button>
 
           {showLog && (
             <div className="glass gesture-log">
-              {gestureHistory.length === 0 ? (
-                <div className="h-sub">还没有记录，TA 戳你一下就会出现在这里</div>
+              {activityLog.length === 0 ? (
+                <div className="h-sub">还没有记录，戳一戳、拍一拍或寄信之后会出现在这里</div>
               ) : (
-                gestureHistory.map((p) => (
+                activityLog.slice(0, logExpanded ? LOG_MAX : LOG_PAGE).map((p) => (
                   <div key={p.id} className="gesture-row">
-                    <Svg name={p.kind === 'pat' ? 'wave' : 'heart'} size={16} />
+                    <Svg name={ACTIVITY_ICON[p.kind] || 'heart'} size={16} />
                     <span className="ellipsis">{p.label}</span>
                     <span className="mono muted">{fmtTime(p.created_at)}</span>
                   </div>
                 ))
               )}
+              {activityLog.length > LOG_PAGE && (
+                <button className="mini tap" style={{ alignSelf: 'center' }} onClick={() => setLogExpanded((v) => !v)}>
+                  {logExpanded ? '收起' : `查看更多（还有 ${Math.min(activityLog.length, LOG_MAX) - LOG_PAGE} 条）`}
+                </button>
+              )}
+              <button className="mini tap" style={{ alignSelf: 'center', color: '#e5484d' }} onClick={() => setResetOpen(true)}>
+                <Svg name="flame" size={13} stroke={1.8} />全部重置
+              </button>
             </div>
           )}
                </section>
 
-        <Anniversaries />
+                <Anniversaries />
+
+        <Album />
 
         {/* 收到的信：横向信封牌组 */}
         <section className="col rv" style={{ gap: 4 }}>
@@ -400,6 +434,15 @@ export default function Home() {
             <b>收到的信</b>
             <span className="badge">{unread > 0 ? `${unread} 封未读` : '全部已读'}</span>
           </div>
+          {stats && (
+            <div className="glass" style={{ borderRadius: 18, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, marginBottom: 4 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <span className="muted">已读 {stats.read} · 未读 {stats.unread}</span>
+                <span className="muted">你寄 {stats.mine} 封 · TA 寄 {stats.partner} 封</span>
+              </div>
+              {stats.latestAt && <span className="muted">最近一封信：{fmtTime(stats.latestAt)}</span>}
+            </div>
+          )}
                    {letters.length === 0 ? (
             <div className="glass mb-empty rv" data-depth>
               <svg className="mb-empty-env" width="112" height="78" viewBox="0 0 112 78" fill="none" aria-hidden="true">
@@ -431,8 +474,31 @@ export default function Home() {
         </section>
       </div>
 
-      <TabBar />
+            <TabBar />
       {openLetter && <LetterModal letter={openLetter} onClose={() => setOpenLetter(null)} onChanged={reload} />}
+      {resetOpen && (
+        <div className="overlay" onClick={() => !resetBusy && setResetOpen(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 18, fontWeight: 650 }}>全部重置</div>
+            <div className="h-sub">这会清空所有信件、纪念日、更新日志，并把状态卡恢复成默认样式。此操作无法撤销。</div>
+            <input
+              type="password"
+              value={resetPwd}
+              onChange={(e) => setResetPwd(e.target.value)}
+              placeholder="输入你的登录密码确认"
+              autoFocus
+              style={{ width: '100%', height: 44, borderRadius: 12, border: '1px solid var(--line)', background: 'var(--chip)', padding: '0 14px', fontSize: 15, color: 'var(--ink)' }}
+            />
+            {resetErr && <div className="h-sub" style={{ color: '#e5484d' }}>{resetErr}</div>}
+            <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn ghost" onClick={() => setResetOpen(false)} disabled={resetBusy}>取消</button>
+              <button className="btn" onClick={confirmReset} disabled={resetBusy || !resetPwd}>
+                {resetBusy ? '重置中…' : '确认重置'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

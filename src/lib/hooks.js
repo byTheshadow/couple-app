@@ -71,18 +71,22 @@ export function usePokes(myId, onPoke) {
   }, [myId])
 }
 
-/** 我收到的戳一戳 / 拍一拍记录，实时更新，供"记录"面板用 */
-export function usePokeHistory(myId, limit = 20) {
-  const [pokes, setPokes] = useState([])
+/** 操作记录：戳一戳 / 拍一拍（TA 对我做的）+ 寄信（我发的）+ 收信（我收的），实时更新，供"更新日志"面板用 */
+export function useActivityLog(myId, limit = 20) {
+  const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+
+  const relevant = useCallback((p) => (
+    p.kind === 'letter_sent' ? p.sender_id === myId : p.receiver_id === myId
+  ), [myId])
 
   const reload = useCallback(async () => {
     if (!myId) return
     const { data } = await supabase
       .from('pokes').select('*')
-      .eq('receiver_id', myId)
+      .or(`and(receiver_id.eq.${myId},kind.neq.letter_sent),and(sender_id.eq.${myId},kind.eq.letter_sent)`)
       .order('created_at', { ascending: false }).limit(limit)
-    setPokes(data || [])
+    setItems(data || [])
     setLoading(false)
   }, [myId, limit])
 
@@ -90,15 +94,15 @@ export function usePokeHistory(myId, limit = 20) {
     if (!myId) { setLoading(false); return }
     reload()
     const ch = supabase
-      .channel(`poke-history-${myId}`)
+      .channel(`activity-log-${myId}`)
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'pokes', filter: `receiver_id=eq.${myId}` },
-        (p) => setPokes((list) => [p.new, ...list].slice(0, limit)))
+        { event: 'INSERT', schema: 'public', table: 'pokes' },
+        (p) => { if (relevant(p.new)) setItems((list) => [p.new, ...list].slice(0, limit)) })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [myId, reload, limit])
+  }, [myId, reload, limit, relevant])
 
-  return { pokes, loading, reload }
+  return { items, loading, reload }
 }
 
 /** 纪念日列表（共享数据，双方都能加/改/删），实时更新 */
@@ -161,4 +165,99 @@ export function greeting() {
   if (h < 14) return '中午好'
   if (h < 18) return '下午好'
   return '晚上好'
+}
+
+/** 信箱统计：已读/未读、谁寄得多、最近一封信时间 */
+export function useLetterStats(myId, partnerId) {
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!myId) return
+    const [unreadQ, readQ, mineQ, partnerQ, latestQ] = await Promise.all([
+      supabase.from('letters').select('id', { count: 'exact', head: true }).eq('receiver_id', myId).eq('status', 'sent'),
+      supabase.from('letters').select('id', { count: 'exact', head: true }).eq('receiver_id', myId).eq('status', 'read'),
+      supabase.from('letters').select('id', { count: 'exact', head: true }).eq('sender_id', myId),
+      partnerId
+        ? supabase.from('letters').select('id', { count: 'exact', head: true }).eq('sender_id', partnerId)
+        : Promise.resolve({ count: 0 }),
+      supabase.from('letters').select('created_at').order('created_at', { ascending: false }).limit(1),
+    ])
+    setStats({
+      unread: unreadQ.count || 0,
+      read: readQ.count || 0,
+      mine: mineQ.count || 0,
+      partner: partnerQ.count || 0,
+      latestAt: latestQ.data?.[0]?.created_at || null,
+    })
+    setLoading(false)
+  }, [myId, partnerId])
+
+  useEffect(() => {
+    if (!myId) { setLoading(false); return }
+    reload()
+    const ch = supabase
+      .channel(`letter-stats-${myId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'letters' }, () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, reload])
+
+  return { stats, loading, reload }
+}
+
+/** 相册照片，实时更新 */
+export function usePhotos(limit = 30) {
+  const [photos, setPhotos] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    const { data } = await supabase
+      .from('photos').select('*')
+      .order('created_at', { ascending: false }).limit(limit)
+    setPhotos(data || [])
+    setLoading(false)
+  }, [limit])
+
+  useEffect(() => {
+    reload()
+    const ch = supabase
+      .channel('photos')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' },
+        (p) => setPhotos((list) => [p.new, ...list].slice(0, limit)))
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [reload, limit])
+
+  return { photos, loading, reload }
+}
+
+/** 某张照片下的评论，实时更新 */
+export function usePhotoComments(photoId) {
+  const [comments, setComments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!photoId) return
+    const { data } = await supabase
+      .from('photo_comments').select('*')
+      .eq('photo_id', photoId)
+      .order('created_at', { ascending: true })
+    setComments(data || [])
+    setLoading(false)
+  }, [photoId])
+
+  useEffect(() => {
+    if (!photoId) { setLoading(false); return }
+    reload()
+    const ch = supabase
+      .channel(`photo-comments-${photoId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'photo_comments', filter: `photo_id=eq.${photoId}` },
+        () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [photoId, reload])
+
+  return { comments, loading, reload }
 }

@@ -318,6 +318,11 @@ textarea.field { resize: none; line-height: 1.5; }
 .anniv-card { border-radius: 18px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; border: 1px solid var(--gb); text-align: left; }
 .anniv-title { font-size: 14.5px; font-weight: 500; flex: 1; min-width: 0; }
 .anniv-sub { font-size: 12.5px; color: var(--ink2); font-family: var(--mono); white-space: nowrap; }
+
+/* 相册 */
+.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ph { margin: 0; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--chip); border: 1px solid var(--line); }
+.ph .art { width: 100%; height: 100%; background-size: cover; background-position: center; }
 .anniv-form { border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 @keyframes beat { 30% { transform: scale(1.5); } 60% { transform: scale(.9); } }
 

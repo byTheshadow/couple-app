@@ -38,6 +38,15 @@ export const STATUS_ICONS = [
   { id: 'code', label: '敲代码' },
   { id: 'bolt', label: '充电' },
   { id: 'music', label: '听歌' },
+  { id: 'work', label: '工作中' },
+  { id: 'sport', label: '运动中' },
+  { id: 'blank', label: '放空中' },
+  { id: 'rest', label: '休息' },
+  { id: 'drama', label: '看剧' },
+  { id: 'outside', label: '出门' },
+  { id: 'fish', label: '摸鱼' },
+  { id: 'busy', label: '忙碌' },
+  { id: 'draw', label: '画画' },
 ]
 
 export function StatusIcon({ id, size = 30 }) {
@@ -50,7 +59,16 @@ export function StatusIcon({ id, size = 30 }) {
     case 'heart': return <svg {...common}><path d={'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z'} /></svg>
     case 'code': return <svg {...common}><path d={'M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 6l-3 12'} /></svg>
     case 'bolt': return <svg {...common}><path d={'M13 3L5 13h6l-1 8 8-10h-6z'} /></svg>
-    case 'music': return <svg {...common}><path d={'M9 18V6l10-2v12'} /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></svg>
+       case 'music': return <svg {...common}><path d={'M9 18V6l10-2v12'} /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></svg>
+    case 'work': return <svg {...common}><rect x="4" y="8" width="16" height="11" rx="2" /><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /><path d="M4 13h16" /></svg>
+    case 'sport': return <svg {...common}><rect x="2" y="10" width="3" height="4" rx="1" /><rect x="19" y="10" width="3" height="4" rx="1" /><rect x="6" y="9" width="2.4" height="6" rx="1" /><rect x="15.6" y="9" width="2.4" height="6" rx="1" /><path d="M8.4 12h7.2" /></svg>
+    case 'blank': return <svg {...common}><path d="M7 17a4 4 0 0 1 .3-8 5 5 0 0 1 9.6 1.2A3.5 3.5 0 0 1 16.5 17z" /></svg>
+    case 'rest': return <svg {...common}><rect x="3" y="15" width="18" height="4" rx="1.5" /><path d="M3 15v-3a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3" /><path d="M21 15v-2a2 2 0 0 0-2-2h-4" /></svg>
+    case 'drama': return <svg {...common}><rect x="3" y="5" width="18" height="12" rx="2" /><path d="M8 20h8" /><path d="M12 17v3" /></svg>
+    case 'outside': return <svg {...common}><path d="M10 17l5-5-5-5" /><path d="M4 12h11" /><path d="M19 4v16" /></svg>
+    case 'fish': return <svg {...common}><path d="M3 12c3-4 9-6 13-3 2 1.5 2 4.5 0 6-4 3-10 1-13-3z" /><path d="M16 9l4-2v10l-4-2" /></svg>
+    case 'busy': return <svg {...common}><path d="M6 3h12M6 21h12M7 3c0 6 5 6.5 5 9s-5 3-5 9M17 3c0 6-5 6.5-5 9s5 3 5 9" /></svg>
+    case 'draw': return <svg {...common}><path d="M4 20c0-3 1-5 3-5s3 2 3 5" /><path d="M10 15L19 6a2 2 0 0 0-3-3L7 12" /><path d="M7 12l3 3" /></svg>
     case 'coffee':
     default:
       return (
@@ -86,4 +104,4 @@ export const CARD_BGS = [
 ]
 
 // 心情表情，直接存 emoji 字符，不用 id 对照
-export const MOODS = ['😊', '🥰', '😴', '😭', '😤', '🥳', '😶', '🤒']
+export const MOODS = ['😊', '🥰', '😴', '😭', '😤', '🥳', '😶', '🤒', '😂', '😍', '🤔', '😅', '🙃', '😡', '🥹', '🤗', '😬', '🥲']
