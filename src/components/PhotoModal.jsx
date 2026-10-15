@@ -1,18 +1,41 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { fmtTime, usePhotoComments } from '../lib/hooks'
 import { Svg } from './Icon'
 
-export default function PhotoModal({ photo, onClose }) {
+export default function PhotoModal({ photo, onClose, onDelete }) {
   const { me, partner } = useAuth()
   const { comments } = usePhotoComments(photo.id)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [delBusy, setDelBusy] = useState(false)
+  const delTimer = useRef(null)
+  const mine = photo.uploader_id === me?.id
 
   const nameOf = (uid) => (uid === me?.id ? me?.display_name || '我' : partner?.display_name || 'TA')
+
+  const tapDelete = () => {
+    if (!confirmDel) {
+      setConfirmDel(true)
+      clearTimeout(delTimer.current)
+      delTimer.current = setTimeout(() => setConfirmDel(false), 2600)
+      return
+    }
+    clearTimeout(delTimer.current)
+    setConfirmDel(false)
+    doDelete()
+  }
+  const doDelete = async () => {
+    if (!onDelete) return
+    setDelBusy(true)
+    await onDelete(photo)
+    setDelBusy(false)
+    onClose()
+  }
 
   const send = async () => {
     const body = text.trim()
@@ -37,7 +60,20 @@ export default function PhotoModal({ photo, onClose }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <img src={photo.url} alt="" style={{ width: '100%', borderRadius: 16, display: 'block', objectFit: 'cover', maxHeight: '50vh' }} />
+        <div className="pm-img">
+          <img src={photo.url} alt="" style={{ width: '100%', borderRadius: 16, display: 'block', objectFit: 'cover', maxHeight: '50vh' }} />
+          {mine && onDelete && (
+            <button
+              type="button"
+              className={`ph-del lg tap${confirmDel ? ' on' : ''}`}
+              onClick={tapDelete}
+              disabled={delBusy}
+              aria-label={confirmDel ? '再点一次确认删除' : '删除这张照片'}
+            >
+              <Svg name={confirmDel ? 'check' : 'x'} size={14} stroke={2.4} />
+            </button>
+          )}
+        </div>
         <div className="h-sub">{nameOf(photo.uploader_id)}上传 · {fmtTime(photo.created_at)}</div>
 
         <div className="col" style={{ gap: 10, maxHeight: '28vh', overflowY: 'auto' }}>

@@ -19,6 +19,15 @@ const PATHS = {
   pause: <><rect x="7" y="5" width="4" height="14" rx="1.2" /><rect x="14" y="5" width="4" height="14" rx="1.2" /></>,
   note: <><circle cx="7" cy="18" r="2.6" /><circle cx="17" cy="16" r="2.6" /><path d="M9.6 18V5.5L19.6 4v12" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
+  camera: <><path d="M4 8.5a2 2 0 0 1 2-2h1.6l1-1.6a1.5 1.5 0 0 1 1.3-.7h4.2a1.5 1.5 0 0 1 1.3.7l1 1.6H18a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></>,
+  check: <path d="M5 13l4.5 4.5L19 8" />,
+  wave: <path d="M3 15c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />,
+  doc: <><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /></>,
+  cup: <><path d="M5 9h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z" /><path d="M16 11h1.4a2.4 2.4 0 0 1 0 4.8H16" /></>,
+  film: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M8 5v14M16 5v14M3 9h5M3 15h5M16 9h5M16 15h5" /></>,
+  phones: <><path d="M4 15v-3a8 8 0 0 1 16 0v3" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></>,
+  smile: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5v.5M15 9.5v.5" /></>,
+  eye: <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
 }
 
 export function Svg({ name, size = 22, stroke = 1.6 }) {

@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -51,6 +52,15 @@ function barcode(seed = '') {
   return out
 }
 
+// 更新日志里一行要显示的文字：按方向（我做的 / TA 做的）换说法，并带上自定义留言
+function activityText(p, myId) {
+  if (p.kind === 'letter_sent') return '你寄出了一封信'
+  if (p.kind === 'letter_received') return '收到一封信'
+  const g = GESTURES[p.kind] || GESTURES.poke
+  const mine = p.sender_id === myId
+  const base = mine ? `你${g.verb}了 TA` : `TA ${g.verb}了你`
+  return p.message ? `${base}："${p.message}"` : base
+}
 
 function NowPlaying({ row }) {
   const audioRef = useRef(null)
@@ -77,7 +87,6 @@ function NowPlaying({ row }) {
   )
 }
 
-
 function Envelope({ l }) {
   const locked = isLocked(l)
   const fresh = l.status === 'sent' && !locked
@@ -93,6 +102,12 @@ function Envelope({ l }) {
   )
 }
 
+const FOLDERS = [
+  { t: 0, fn: '01', ft: '状态' },
+  { t: 1, fn: '02', ft: '信箱' },
+  { t: 2, fn: '03', ft: '我们' },
+]
+
 export default function Home() {
   const { me, partner, signOut, session } = useAuth()
   const { theme, toggle } = useTheme()
@@ -101,11 +116,13 @@ export default function Home() {
   const { letters, reload } = useLetters(me?.id)
   const { items: activityLog } = useActivityLog(me?.id, LOG_MAX)
   const { stats } = useLetterStats(me?.id, partner?.id)
+  const [tab, setTab] = useState(0)
   const [openLetter, setOpenLetter] = useState(null)
   const [toast, setToast] = useState('')
   const [counts, setCounts] = useState({ poke: 0, pat: 0 })
+  const [gestureKind, setGestureKind] = useState('poke')
+  const [gestureMsg, setGestureMsg] = useState('')
   const [hit, setHit] = useState(null)
-  const [showLog, setShowLog] = useState(false)
   const [logExpanded, setLogExpanded] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
   const [resetPwd, setResetPwd] = useState('')
@@ -127,7 +144,7 @@ export default function Home() {
   usePokes(me?.id, (row) => {
     const g = GESTURES[row?.kind] || GESTURES.poke
     try { navigator.vibrate?.(row?.kind === 'pat' ? [20, 20, 20, 20] : [40, 50, 40, 50, 80]) } catch { /* iOS 不支持 */ }
-    say(`TA ${row?.label || g.label}`)
+    say(row?.message ? `TA ${g.verb}了你："${row.message}"` : `TA ${row?.label || g.label}`)
   })
 
   useLetterArrivals(me?.id, (row) => setArrivedLetter(row))
@@ -154,15 +171,19 @@ export default function Home() {
     return () => clearInterval(t)
   }, [])
 
-  const sendGesture = async (kind) => {
+  const sendGesture = async () => {
     if (!partner) return say('还没有另一半的账号')
-    const g = GESTURES[kind]
-    const { error } = await supabase.from('pokes').insert({ sender_id: me.id, receiver_id: partner.id, label: g.label, kind })
+    const g = GESTURES[gestureKind]
+    const msg = gestureMsg.trim().slice(0, 40)
+    const { error } = await supabase.from('pokes').insert({
+      sender_id: me.id, receiver_id: partner.id, label: g.label, kind: gestureKind, message: msg || null,
+    })
     if (error) return say(`没${g.doneWord}到，再试一次`)
     try { navigator.vibrate?.(g.vibrate) } catch { /* ignore */ }
-    setCounts((c) => ({ ...c, [kind]: c[kind] + 1 }))
-    say(g.successMsg)
-    setHit(kind); setTimeout(() => setHit(null), 650)
+    setCounts((c) => ({ ...c, [gestureKind]: c[gestureKind] + 1 }))
+    say(msg ? `已送达给 TA："${msg}"` : g.successMsg)
+    setGestureMsg('')
+    setHit(gestureKind); setTimeout(() => setHit(null), 650)
   }
 
   const tapLetter = (l) => {
@@ -203,6 +224,7 @@ export default function Home() {
 
   // 信封牌组：按每张牌离中心的距离写 --d / --da，CSS 据此缩放和后仰
   useEffect(() => {
+    if (tab !== 1) return
     const el = deckRef.current
     if (!el) return
     let raf = 0
@@ -225,7 +247,7 @@ export default function Home() {
     run()
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => { el.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
-  }, [letters.length])
+  }, [letters.length, tab])
 
   const unread = letters.filter((l) => l.status === 'sent' && !isLocked(l)).length
   const s = partnerStatus.row
@@ -246,7 +268,7 @@ export default function Home() {
         <div className="aurora" />
       </div>
 
-           {toast && <div className="toast glass">{toast}</div>}
+      {toast && <div className="toast glass">{toast}</div>}
       <LetterArrival letter={arrivedLetter} onDone={() => setArrivedLetter(null)} />
 
       {/* 滚动后淡入的迷你条：一眼看到 TA 此刻的状态 */}
@@ -260,7 +282,7 @@ export default function Home() {
         ) : <span>{greeting()}</span>}
       </div>
 
-            <div className="page">
+      <div className="page">
         {notif && (
           <div className="notif glass">
             <div className="bellc"><Svg name="bell" size={18} /></div>
@@ -287,194 +309,247 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ===== 我的卡：毛玻璃 + 圆形头像 + 装饰，可编辑 ===== */}
-                <section className="hero glass rv" data-depth data-cardbg={m?.card_bg || 'none'}>
-          <div className="who">我</div>
-          <div className="hero-top">
-            <div className="av-wrap" data-deco={m?.decoration_id || 'none'}>
-              <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
-              <span className="d d-polaroid" data-cap={shortDate} />
-              <span className="d d-ears"><i /><i /></span>
-              <span className="d d-halo" />
-              <span className="d d-orbit" />
-                           <span className="d d-pixel" />
-              <div className="av" style={m?.avatar_url ? { backgroundImage: `url(${m.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
-                {!m?.avatar_url && initial(me?.display_name)}
+        {/* ===== 我的档案窗口：标题栏 + 头像 + 装饰，可编辑 ===== */}
+        <section className="win hero rv" data-depth data-cardbg={m?.card_bg || 'none'}>
+          <header className="tb">
+            <Svg name="doc" size={14} />
+            <b>{me?.display_name || '我'}.profile</b>
+            <span className="grow" />
+            <span className="mono">{clock}</span>
+            <span className="ctl"><i>–</i><i>□</i><i>×</i></span>
+          </header>
+          <div className="wb col" style={{ gap: 14 }}>
+            <div className="hero-top">
+              <div className="av-wrap" data-deco={m?.decoration_id || 'none'}>
+                <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
+                <span className="d d-polaroid" data-cap={shortDate} />
+                <span className="d d-ears"><i /><i /></span>
+                <span className="d d-halo" />
+                <span className="d d-orbit" />
+                <span className="d d-pixel" />
+                <div className="av" style={m?.avatar_url ? { backgroundImage: `url(${m.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                  {!m?.avatar_url && initial(me?.display_name)}
+                </div>
+              </div>
+              <div className="hero-info">
+                <div className="handle"><b>{me?.display_name || ''}</b>{m?.mood && <span className="mood-badge">{m.mood}</span>}<span className="u" /></div>
+                <div className="on-tag"><span className="live" />在线，这张卡只有你能编辑</div>
+                <div className="mychip">
+                  <StatusIcon id={m?.icon_id} />
+                  <span className="ellipsis">{m?.status_text || '还没设置状态'}</span>
+                </div>
+                <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
               </div>
             </div>
-            <div className="hero-info">
-              <div className="handle"><b>{me?.display_name || ''}</b>{m?.mood && <span className="mood-badge">{m.mood}</span>}<span className="u" /></div>
-              <div className="on-tag"><span className="live" />在线，这张卡只有你能编辑</div>
-              <div className="mychip">
-                <StatusIcon id={m?.icon_id} />
-                <span className="ellipsis">{m?.status_text || '还没设置状态'}</span>
+            <NowPlaying row={m} />
+            {m?.secret_text && (
+              <div className="about">
+                <div className="row muted" style={{ gap: 6, fontSize: 12 }}><Svg name="lock" size={13} stroke={1.8} /><span>我的悄悄话，你自己看到的是明文</span></div>
+                <Whisper row={m} mine />
               </div>
-                           <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
-            </div>
+            )}
+            <div className="ticker"><div className="tk">
+              {[0, 1].map((i) => <span key={i}>{Array(6).fill(tk).join('   ·   ')}</span>)}
+            </div></div>
           </div>
-          <NowPlaying row={m} />
-          {m?.secret_text && (
-            <div className="about">
-              <div className="row muted" style={{ gap: 6, fontSize: 12 }}><Svg name="lock" size={13} stroke={1.8} /><span>我的悄悄话，你自己看到的是明文</span></div>
-              <Whisper row={m} mine />
-            </div>
-          )}
-          <div className="ticker"><div className="tk">
-            {[0, 1].map((i) => <span key={i}>{Array(6).fill(tk).join('   ·   ')}</span>)}
-          </div></div>
         </section>
 
-        {/* ===== TA 的卡：挂绳工牌，3D 倾斜，点一下翻面；只读 ===== */}
-        <section className="col rv" style={{ gap: 10, '--rd': '.05s' }}>
-          <div className="sect"><b>TA 此刻</b><span className="mono">{slotNo}</span></div>
-          {!partner ? (
-            <div className="glass h-sub" style={{ borderRadius: 24, padding: 18 }}>另一半的账号还没创建，创建后这里会实时显示 TA 的状态。</div>
-          ) : (
-            <>
-              <div className="badge-wrap">
-                <div className="swing">
-                  <div className="strap" /><div className="clip" />
-                  <div className="pass">
-                    <div className="p3d" ref={p3d} style={{ '--fl': flip ? '180deg' : '0deg' }}
-                      onPointerMove={tilt} onPointerLeave={untilt} onPointerCancel={untilt} onClick={() => setFlip((f) => !f)}>
-                      <div className="face front" data-cardbg={s?.card_bg || 'none'}>
-                        <div className="band"><span>TA</span><i className="hole" /><span className="mono">{slotNo}</span></div>
-                        <div className="pbody">
-                                                   <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
-                            {!s?.avatar_url && initial(partner.display_name)}
-                          </div>
-                          <div className="pf">
-                            <div className="fld"><small>姓名</small><div className="nm ellipsis">{partner.display_name}{s?.mood && <span className="mood-badge">{s.mood}</span>}</div></div>
-                            <div className="fld"><small>此刻</small>
-                              <div className="nowchip"><StatusIcon id={s?.icon_id} /><b>{s?.status_text || '还没设置状态'}</b></div>
+        {/* ===== 文件夹导航：状态 / 信箱 / 我们 ===== */}
+        <nav className="folders rv" aria-label="主页分区">
+          {FOLDERS.map((f) => (
+            <button key={f.t} type="button" className={`folder${tab === f.t ? ' on' : ''}`} onClick={() => setTab(f.t)}>
+              <i className="fl-back" /><i className="fl-paper" /><i className="fl-front" />
+              <span className="fn">{f.fn}</span>
+              <span className="ft">
+                {f.ft}
+                {f.t === 1 && unread > 0 && <span className="badge" style={{ marginLeft: 5 }}>{unread}</span>}
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        {/* ===== 01 状态：TA 的工牌 + 此刻 + 悄悄话 ===== */}
+        {tab === 0 && (
+          <section className="panel in">
+            {!partner ? (
+              <div className="glass h-sub" style={{ borderRadius: 24, padding: 18 }}>另一半的账号还没创建，创建后这里会实时显示 TA 的状态。</div>
+            ) : (
+              <>
+                <div className="badge-wrap">
+                  <div className="swing">
+                    <div className="strap" /><div className="clip" />
+                    <div className="pass">
+                      <div className="p3d" ref={p3d} style={{ '--fl': flip ? '180deg' : '0deg' }}
+                        onPointerMove={tilt} onPointerLeave={untilt} onPointerCancel={untilt} onClick={() => setFlip((f) => !f)}>
+                        <div className="face front" data-cardbg={s?.card_bg || 'none'}>
+                          <div className="band"><span>TA</span><i className="hole" /><span className="mono">{slotNo}</span></div>
+                          <div className="pbody">
+                            <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                              {!s?.avatar_url && initial(partner.display_name)}
                             </div>
+                            <div className="pf">
+                              <div className="fld"><small>姓名</small><div className="nm ellipsis">{partner.display_name}{s?.mood && <span className="mood-badge">{s.mood}</span>}</div></div>
+                              <div className="fld"><small>此刻</small>
+                                <div className="nowchip"><StatusIcon id={s?.icon_id} /><b>{s?.status_text || '还没设置状态'}</b></div>
+                              </div>
+                            </div>
+                            <div className="stamp">LIVE</div>
                           </div>
-                          <div className="stamp">LIVE</div>
+                          <div className="pfoot">
+                            <div className="bars">{barcode(partner.id).map(([w, g], i) => <i key={i} style={{ width: w, marginRight: g }} />)}</div>
+                            <div className="holo" />
+                          </div>
+                          <div className="sheen" />
                         </div>
-                        <div className="pfoot">
-                          <div className="bars">{barcode(partner.id).map(([w, g], i) => <i key={i} style={{ width: w, marginRight: g }} />)}</div>
-                          <div className="holo" />
+                        <div className="face back">
+                          <div className="mag" />
+                          <div className="bk">
+                            <h4>最近一次更新</h4>
+                            <div className="big">{s?.updated_at ? fmtTime(s.updated_at) : '暂无记录'}</div>
+                            <div className="fine">TA 改状态时，这张工牌会实时刷新。<br />再点一下翻回正面。</div>
+                          </div>
+                          <div className="sheen" />
                         </div>
-                        <div className="sheen" />
-                      </div>
-                      <div className="face back">
-                        <div className="mag" />
-                        <div className="bk">
-                          <h4>最近一次更新</h4>
-                          <div className="big">{s?.updated_at ? fmtTime(s.updated_at) : '暂无记录'}</div>
-                          <div className="fine">TA 改状态时，这张工牌会实时刷新。<br />再点一下翻回正面。</div>
-                        </div>
-                        <div className="sheen" />
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-                           <NowPlaying row={s} />
+                <div className="win">
+                  <header className="tb"><Svg name="doc" size={14} /><b>此刻.txt</b><span className="grow" /><span className="mono">live</span></header>
+                  <div className="kv"><span className="k"><Svg name="eye" size={14} />状态</span><span className="v hl">{s?.status_text || '还没设置状态'}</span></div>
+                  {s?.mood && <div className="kv"><span className="k"><Svg name="smile" size={14} />心情</span><span className="v" style={{ fontSize: 18 }}>{s.mood}</span></div>}
+                </div>
 
-              <div className="whisper-card glass" data-depth>
-                <div className="row muted" style={{ gap: 6, fontSize: 12 }}><Svg name="lock" size={13} stroke={1.8} /><span>TA 的悄悄话</span></div>
-                <Whisper row={s} />
-              </div>
-            </>
-          )}
-        </section>
+                <NowPlaying row={s} />
 
-                {/* 戳一戳 / 拍一拍 */}
-        <section className="col rv" style={{ gap: 10 }} data-depth>
-          <div className="poke-row">
-            {Object.entries(GESTURES).map(([kind, g]) => (
-              <button key={kind} className={`glass poke tap${hit === kind ? ' hit' : ''}`} onClick={() => sendGesture(kind)}>
-                <span className="row" style={{ gap: 10, fontSize: 15, fontWeight: 500 }}>
-                  <Svg name={g.icon} />{counts[kind] > 0 ? `已${g.doneWord} TA ${counts[kind]} 次` : `${g.verb} TA`}
-                </span>
-                <span className="h-sub">{g.sub}</span>
-              </button>
-            ))}
-          </div>
+                <div className="win">
+                  <header className="tb"><Svg name="lock" size={13} stroke={1.8} /><b>悄悄话.lock</b><span className="grow" /></header>
+                  <div className="wb"><Whisper row={s} /></div>
+                  <footer className="wf"><span>TA 的悄悄话，解锁后才能看到</span></footer>
+                </div>
+              </>
+            )}
+          </section>
+        )}
 
-                    <button className="mini tap" onClick={() => setShowLog((v) => !v)}>
-            <Svg name="clock" size={14} stroke={1.8} />
-            {showLog ? '收起更新日志' : '查看更新日志'}
-          </button>
-
-          {showLog && (
-            <div className="glass gesture-log">
-              {activityLog.length === 0 ? (
-                <div className="h-sub">还没有记录，戳一戳、拍一拍或寄信之后会出现在这里</div>
+        {/* ===== 02 信箱：横向信封牌组 ===== */}
+        {tab === 1 && (
+          <section className="panel in">
+            <div className="win">
+              <header className="tb"><Svg name="mail" size={14} /><b>收件箱.mail</b><span className="grow" /><span className="mono">{letters.length} 封</span></header>
+              {stats && (
+                <div className="cells">
+                  <span className="muted">已读 {stats.read} · 未读 {stats.unread}</span>
+                  <span className="muted">你寄 {stats.mine} 封 · TA 寄 {stats.partner} 封</span>
+                </div>
+              )}
+              {letters.length === 0 ? (
+                <div className="wb mb-empty rv" data-depth style={{ margin: 0 }}>
+                  <svg className="mb-empty-env" width="112" height="78" viewBox="0 0 112 78" fill="none" aria-hidden="true">
+                    <rect x="3" y="3" width="106" height="72" rx="13" stroke="currentColor" strokeWidth="2" strokeDasharray="6 7" />
+                    <path d="M8 13 L56 47 L104 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <div className="h-sub">邮筒还是空的，等 TA 的第一封信</div>
+                  <div className="mb-empty-dots"><i /><i /><i /></div>
+                </div>
               ) : (
-                activityLog.slice(0, logExpanded ? LOG_MAX : LOG_PAGE).map((p) => (
-                  <div key={p.id} className="gesture-row">
-                    <Svg name={ACTIVITY_ICON[p.kind] || 'heart'} size={16} />
-                    <span className="ellipsis">{p.label}</span>
-                    <span className="mono muted">{fmtTime(p.created_at)}</span>
+                <>
+                  <div className="deck" ref={deckRef}>
+                    {letters.map((l) => (
+                      <button key={l.id} className="dcard tap" onClick={() => tapLetter(l)}>
+                        <Envelope l={l} />
+                        <div className="dmeta">
+                          <div className="t">
+                            {l.status === 'sent' && !isLocked(l) && <span className="udot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ink)' }} />}
+                            <span className="ellipsis" style={{ maxWidth: 200 }}>{l.title || '一封信'}</span>
+                          </div>
+                          <div className="s">{letterMeta(l)}</div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                ))
+                  <div className="deck-foot">{deckIdx + 1} / {letters.length}</div>
+                </>
               )}
-              {activityLog.length > LOG_PAGE && (
-                <button className="mini tap" style={{ alignSelf: 'center' }} onClick={() => setLogExpanded((v) => !v)}>
-                  {logExpanded ? '收起' : `查看更多（还有 ${Math.min(activityLog.length, LOG_MAX) - LOG_PAGE} 条）`}
-                </button>
-              )}
-              <button className="mini tap" style={{ alignSelf: 'center', color: '#e5484d' }} onClick={() => setResetOpen(true)}>
-                <Svg name="flame" size={13} stroke={1.8} />全部重置
-              </button>
+              <footer className="wf"><span>左右滑动翻看，点信封拆开</span><span>{unread > 0 ? `${unread} 封未读` : '全部已读'}</span></footer>
             </div>
-          )}
-               </section>
+          </section>
+        )}
 
-                <Anniversaries />
+        {/* ===== 03 我们：纪念日 + 相册 + 戳一戳 + 更新日志 ===== */}
+        {tab === 2 && (
+          <section className="panel in">
+            <Anniversaries />
+            <Album />
 
-        <Album />
-
-        {/* 收到的信：横向信封牌组 */}
-        <section className="col rv" style={{ gap: 4 }}>
-          <div className="sect">
-            <b>收到的信</b>
-            <span className="badge">{unread > 0 ? `${unread} 封未读` : '全部已读'}</span>
-          </div>
-          {stats && (
-            <div className="glass" style={{ borderRadius: 18, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, marginBottom: 4 }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span className="muted">已读 {stats.read} · 未读 {stats.unread}</span>
-                <span className="muted">你寄 {stats.mine} 封 · TA 寄 {stats.partner} 封</span>
-              </div>
-              {stats.latestAt && <span className="muted">最近一封信：{fmtTime(stats.latestAt)}</span>}
-            </div>
-          )}
-                   {letters.length === 0 ? (
-            <div className="glass mb-empty rv" data-depth>
-              <svg className="mb-empty-env" width="112" height="78" viewBox="0 0 112 78" fill="none" aria-hidden="true">
-                <rect x="3" y="3" width="106" height="72" rx="13" stroke="currentColor" strokeWidth="2" strokeDasharray="6 7" />
-                <path d="M8 13 L56 47 L104 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <div className="h-sub">邮筒还是空的，等 TA 的第一封信</div>
-              <div className="mb-empty-dots"><i /><i /><i /></div>
-            </div>
-          ) : (
-            <>
-              <div className="deck" ref={deckRef}>
-                {letters.map((l) => (
-                  <button key={l.id} className="dcard tap" onClick={() => tapLetter(l)}>
-                    <Envelope l={l} />
-                    <div className="dmeta">
-                      <div className="t">
-                        {l.status === 'sent' && !isLocked(l) && <span className="udot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ink)' }} />}
-                        <span className="ellipsis" style={{ maxWidth: 200 }}>{l.title || '一封信'}</span>
-                      </div>
-                      <div className="s">{letterMeta(l)}</div>
-                    </div>
+            <div className="win">
+              <header className="tb"><Svg name="doc" size={14} /><b>戳一戳.cmd</b><span className="grow" /></header>
+              <div className="wb col" style={{ gap: 12 }}>
+                <div className="gesture-pick">
+                  {Object.entries(GESTURES).map(([kind, g]) => (
+                    <button key={kind} type="button" className={`pill${gestureKind === kind ? ' on' : ''}`} onClick={() => setGestureKind(kind)}>
+                      <Svg name={g.icon} size={14} />{g.verb}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  className="field" maxLength={40} placeholder="想对 TA 说句话（可选）"
+                  value={gestureMsg} onChange={(e) => setGestureMsg(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendGesture() }}
+                />
+                <div className="poke-circle-wrap">
+                  <button type="button" className={`poke-circle tap${hit === gestureKind ? ' fire' : ''}`} onClick={sendGesture} aria-label={GESTURES[gestureKind].verb}>
+                    <Svg name={GESTURES[gestureKind].icon} size={28} />
+                    <i className="rp" /><i className="rp two" />
                   </button>
-                ))}
+                  <div className="col" style={{ gap: 4 }}>
+                    <b style={{ fontSize: 15 }}>
+                      {counts[gestureKind] > 0 ? `已${GESTURES[gestureKind].doneWord} TA ${counts[gestureKind]} 次` : `${GESTURES[gestureKind].verb} TA`}
+                    </b>
+                    <span className="h-sub">{GESTURES[gestureKind].sub}</span>
+                  </div>
+                </div>
               </div>
-              <div className="deck-foot">{deckIdx + 1} / {letters.length}</div>
-            </>
-          )}
-        </section>
+              <footer className="wf"><span>实时送达</span><span>{partner ? '对方已连接' : '还没有另一半的账号'}</span></footer>
+            </div>
+
+            <div className="win">
+              <header className="tb"><Svg name="doc" size={14} /><b>更新日志.txt</b><span className="grow" /><span className="mono">{activityLog.length}</span></header>
+              {activityLog.length === 0 ? (
+                <div className="wb h-sub">还没有记录，戳一戳、拍一拍或寄信之后会出现在这里</div>
+              ) : (
+                <div className="actlog">
+                  {activityLog.slice(0, logExpanded ? LOG_MAX : LOG_PAGE).map((p) => {
+                    const mine = p.sender_id === me?.id
+                    return (
+                      <div key={p.id} className={`act-row${mine ? ' mine' : ''}`}>
+                        <div className="act-ic"><Svg name={ACTIVITY_ICON[p.kind] || 'heart'} size={13} /></div>
+                        <div className="act-bubble">
+                          <span className="act-text">{activityText(p, me?.id)}</span>
+                          <span className="act-time">{fmtTime(p.created_at)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <footer className="wf">
+                {activityLog.length > LOG_PAGE ? (
+                  <button className="mini tap" onClick={() => setLogExpanded((v) => !v)}>
+                    {logExpanded ? '收起' : `查看更多（还有 ${Math.min(activityLog.length, LOG_MAX) - LOG_PAGE} 条）`}
+                  </button>
+                ) : <span />}
+                <button className="mini tap" style={{ color: '#e5484d' }} onClick={() => setResetOpen(true)}>
+                  <Svg name="flame" size={13} stroke={1.8} />全部重置
+                </button>
+              </footer>
+            </div>
+          </section>
+        )}
       </div>
 
-            <TabBar />
+      <TabBar />
       {openLetter && <LetterModal letter={openLetter} onClose={() => setOpenLetter(null)} onChanged={reload} />}
       {resetOpen && (
         <div className="overlay" onClick={() => !resetBusy && setResetOpen(false)}>

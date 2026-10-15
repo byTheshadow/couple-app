@@ -71,20 +71,25 @@ export function usePokes(myId, onPoke) {
   }, [myId])
 }
 
-/** 操作记录：戳一戳 / 拍一拍（TA 对我做的）+ 寄信（我发的）+ 收信（我收的），实时更新，供"更新日志"面板用 */
+/** 操作记录：戳一戳 / 拍一拍（双向，我戳 TA 和 TA 戳我都算）+ 寄信（我发的）+ 收信（我收的），实时更新，供"更新日志"面板用 */
 export function useActivityLog(myId, limit = 20) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const relevant = useCallback((p) => (
-    p.kind === 'letter_sent' ? p.sender_id === myId : p.receiver_id === myId
-  ), [myId])
+  // letter_sent 只认发件人是我自己；letter_received 只认收件人是我自己——
+  // 这两种 kind 在同一封信上各有一条记录（收发双方各看各的那条），不能互相串
+  // 其它动作（戳一戳/拍一拍……）不分方向，我是发起人或是接收人都算
+  const relevant = useCallback((p) => {
+    if (p.kind === 'letter_sent') return p.sender_id === myId
+    if (p.kind === 'letter_received') return p.receiver_id === myId
+    return p.sender_id === myId || p.receiver_id === myId
+  }, [myId])
 
   const reload = useCallback(async () => {
     if (!myId) return
     const { data } = await supabase
       .from('pokes').select('*')
-      .or(`and(receiver_id.eq.${myId},kind.neq.letter_sent),and(sender_id.eq.${myId},kind.eq.letter_sent)`)
+      .or(`and(kind.eq.letter_sent,sender_id.eq.${myId}),and(kind.eq.letter_received,receiver_id.eq.${myId}),and(kind.neq.letter_sent,kind.neq.letter_received,sender_id.eq.${myId}),and(kind.neq.letter_sent,kind.neq.letter_received,receiver_id.eq.${myId})`)
       .order('created_at', { ascending: false }).limit(limit)
     setItems(data || [])
     setLoading(false)
@@ -224,7 +229,9 @@ export function usePhotos(limit = 30) {
     const ch = supabase
       .channel('photos')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' },
-        (p) => setPhotos((list) => [p.new, ...list].slice(0, limit)))
+        (p) => setPhotos((list) => (list.some((x) => x.id === p.new.id) ? list : [p.new, ...list].slice(0, limit))))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'photos' },
+        (p) => setPhotos((list) => list.filter((x) => x.id !== p.old.id)))
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [reload, limit])
