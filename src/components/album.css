@@ -1,0 +1,94 @@
+/* 相册：九宫格拼贴 + 全屏看图。独立文件，由 Album.jsx / PhotoModal.jsx 自己引入。
+   颜色用 styles.css 里已有的主题变量；全屏看图固定用深色底，亮暗主题下都一样。 */
+
+.al { gap: 12px; }
+.al-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
+.al-head b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.al-count { margin-left: 8px; font-size: 11.5px; color: var(--ink2); }
+.al-add { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 15px; border: none; border-radius: 999px;
+  background: var(--btn); color: var(--btnInk); font-size: 13px; font-weight: 500; }
+.al-add[disabled] { opacity: .55; }
+.al-toast { padding: 0 6px; font-size: 12.5px; color: var(--ink2); animation: alIn .3s ease-out; }
+
+/* 正在上传：缩略图 + 转圈 */
+.al-pending { display: flex; gap: 8px; padding: 0 2px; overflow-x: auto; scrollbar-width: none; }
+.al-pending::-webkit-scrollbar { display: none; }
+.al-pend { position: relative; flex-shrink: 0; width: 64px; height: 64px; border-radius: 16px; overflow: hidden; background: var(--chip); }
+.al-pend img { width: 100%; height: 100%; object-fit: cover; opacity: .55; }
+.al-pend i { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+  border: 2.5px solid rgba(255,255,255,.35); border-top-color: #fff; animation: alSpin .8s linear infinite; }
+@keyframes alSpin { to { transform: rotate(360deg); } }
+
+/* 空相册 */
+.al-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 16px; border-radius: 28px; text-align: center; color: var(--ink2);
+  border: 1.5px dashed var(--line); background: var(--chip); }
+.al-empty .btn { height: 40px; font-size: 14px; }
+
+/* 拼贴：第一张占 2×2，其余 1×1，三列正方形格子 */
+.al-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.al-tile { position: relative; display: block; padding: 0; border: none; border-radius: 18px; overflow: hidden; aspect-ratio: 1; background: var(--chip); color: #fff; }
+.al-tile.hero { grid-column: span 2; grid-row: span 2; border-radius: 24px; }
+.al-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.04);
+  transition: opacity .5s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
+.al-tile img.in { opacity: 1; transform: none; }
+.al-tile:active img.in { transform: scale(1.06); }
+.al-tile::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); border-radius: inherit; }
+.al-by { position: absolute; left: 7px; top: 7px; z-index: 1; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 600; color: var(--avInk); background: radial-gradient(circle at 32% 26%, var(--av1), var(--av2) 60%, var(--av3));
+  box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.al-tile.mine .al-by { background: var(--btn); color: var(--btnInk); }
+.al-cap { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 30px 14px 11px; text-align: left; font-size: 12px; line-height: 1.35;
+  background: linear-gradient(to top, rgba(0,0,0,.55), transparent); }
+.al-cap b { display: block; font-size: 13.5px; font-weight: 600; }
+.al-cap span { opacity: .75; font-family: var(--mono); font-size: 10.5px; }
+.al-more { align-self: center; }
+
+@keyframes alIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* ===== 全屏看图 ===== */
+.al-lb { position: fixed; z-index: 50; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh); display: flex; flex-direction: column;
+  max-width: 430px; margin: 0 auto; background: rgba(8,8,10,.97); color: #f5f5f7; animation: alFade .25s ease both; }
+@media (min-width: 431px) { .al-lb { max-width: none; } }
+@keyframes alFade { from { opacity: 0; } }
+.al-lb-top { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 6px; }
+.al-lb-top .grow { flex: 1; }
+.al-ib { width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,.12); color: #fff; display: grid; place-items: center; flex-shrink: 0; }
+.al-ib.on { background: #e5484d; }
+.al-ib[disabled] { opacity: .5; }
+.al-pos { font-family: var(--mono); font-size: 12px; opacity: .7; }
+
+.al-stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; touch-action: pan-y; overflow: hidden; }
+.al-stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; user-select: none; -webkit-user-drag: none; animation: alFade .3s ease both; }
+.al-nav { position: absolute; top: 50%; margin-top: -19px; display: none; }
+.al-nav.l { left: 10px; } .al-nav.r { right: 10px; }
+@media (hover: hover) { .al-nav { display: grid; } }
+
+.al-info { flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 8px 16px 2px; font-size: 13px; }
+.al-info .al-by { position: static; box-shadow: none; }
+.al-info span.t { font-family: var(--mono); font-size: 11px; opacity: .6; margin-left: auto; }
+
+.al-panel { flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; margin: 8px 10px calc(env(safe-area-inset-bottom) + 10px); padding: 12px 12px 10px; border-radius: 24px;
+  background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%); }
+.al-cm-list { display: flex; flex-direction: column; gap: 10px; max-height: 24vh; overflow-y: auto; scrollbar-width: none; }
+.al-cm-list::-webkit-scrollbar { display: none; }
+.al-cm { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.45; }
+.al-cm .bd { flex: 1; min-width: 0; }
+.al-cm b { font-size: 12.5px; margin-right: 6px; }
+.al-cm .t { font-family: var(--mono); font-size: 10.5px; opacity: .5; }
+.al-cm p { margin: 2px 0 0; word-break: break-word; }
+.al-cm-hint { font-size: 13px; opacity: .55; }
+.al-cm-act { display: flex; gap: 2px; }
+.al-cm-act button { width: 28px; height: 28px; border: none; background: none; color: #fff; opacity: .6; display: grid; place-items: center; border-radius: 50%; }
+.al-cm-act button:active { background: rgba(255,255,255,.12); }
+.al-in { display: flex; align-items: center; gap: 8px; }
+.al-in input { flex: 1; min-width: 0; height: 40px; border: none; outline: none; border-radius: 999px; padding: 0 16px; font-size: 16px; font-family: inherit;
+  background: rgba(255,255,255,.12); color: #fff; }
+.al-in input::placeholder { color: rgba(255,255,255,.45); }
+.al-in button.send { height: 40px; padding: 0 18px; border: none; border-radius: 999px; background: #f5f5f7; color: #101012; font-size: 14px; font-weight: 500; }
+.al-in button.send[disabled] { opacity: .35; }
+.al-save { border: none; background: #f5f5f7; color: #101012; border-radius: 999px; height: 32px; padding: 0 12px; font-size: 12.5px; }
+.al-cancel { border: none; background: rgba(255,255,255,.14); color: #fff; border-radius: 999px; height: 32px; padding: 0 12px; font-size: 12.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .al *, .al-lb, .al-lb * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
