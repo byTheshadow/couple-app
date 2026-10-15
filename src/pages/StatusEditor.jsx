@@ -7,7 +7,8 @@ import Whisper from '../components/Whisper'
 import { MusicModal, NowPlaying } from '../components/Music'
 import TabBar from '../components/TabBar'
 import { CARD_BGS, DECORATIONS, MOODS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
-import '../components/badge.css'
+import Badge from '../components/Badge'
+import IdCard from '../components/IdCard'
 
 const REVEAL_TYPES = [
   { id: 'scratch', label: '刮刮乐', desc: 'TA 刮开涂层才能看到' },
@@ -24,27 +25,6 @@ const toLocalInput = (iso) => {
 }
 
 const initial = (name) => (name || '?').trim().slice(0, 1).toUpperCase()
-
-// 心情条：和首页（Home.jsx）里的同名组件长得一样，预览里选了心情 / 写了一句话会立刻显示在这里
-function MoodStrip({ mood, text }) {
-  if (!mood && !text) {
-    return (
-      <div className="mood-strip empty">
-        <div className="ms-emoji"><Svg name="plus" size={18} stroke={1.8} /></div>
-        <div className="ms-text"><small>心情</small><p className="dim">选一个心情、写一句话，这里会实时显示</p></div>
-      </div>
-    )
-  }
-  return (
-    <div className="mood-strip">
-      <div className={`ms-emoji${mood ? '' : ' quote'}`}>{mood || '“'}</div>
-      <div className="ms-text">
-        <small>此刻心情</small>
-        <p className={text ? undefined : 'dim'}>{text || '没有留下一句话'}</p>
-      </div>
-    </div>
-  )
-}
 
 function Backdrop() {
   return (
@@ -68,6 +48,7 @@ export default function StatusEditor() {
     const [musicBusy, setMusicBusy] = useState(false)
   const [musicOpen, setMusicOpen] = useState(false)
   const [toast, setToast] = useState('')
+  const [view, setView] = useState('me') // me = 我自己看到的卡，ta = TA 手机上看到的工牌
   const fileRef = useRef(null)
   const musicFileRef = useRef(null)
 
@@ -195,40 +176,30 @@ export default function StatusEditor() {
           <h1 className="h-title">两层状态</h1>
         </div>
 
-        {/* 实时预览：和首页"我的卡"是同一套样式，选装饰立刻看到效果 */}
-                <section className="hero glass rv" data-depth data-cardbg={form.card_bg}>
-          <div className="who">预览</div>
-          <div className="hero-top">
-                        <div className="av-wrap" data-deco={form.decoration_id}>
-              <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
-              <span className="d d-polaroid" data-cap={shortDate} />
-              <span className="d d-ears"><i /><i /></span>
-              <span className="d d-halo" />
-              <span className="d d-orbit" />
-              <span className="d d-pixel" />
-              <div className="av" style={form.avatar_url ? { backgroundImage: `url(${form.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
-                {!form.avatar_url && initial(name)}
-              </div>
-              <button type="button" className="av-edit tap" onClick={pickAvatar} aria-label="更换头像" disabled={avatarBusy}>
-                <Svg name="pen" size={14} />
-              </button>
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={onAvatarFile} />
-            </div>
-            <div className="hero-info">
-              <div className="handle"><b>{name || '你的名字'}</b><span className="u" /></div>
-              <div className="mychip">
-                <StatusIcon id={form.icon_id} />
-                <span className="ellipsis">{form.status_text || '还没设置状态'}</span>
-              </div>
-            </div>
-          </div>
-          <MoodStrip mood={form.mood} text={form.mood_text} />
-        </section>
+        {/* 实时预览：可以切换「我看到的」和「TA 看到的」，选装饰、写心情立刻看到效果 */}
+        <div className="row rv" style={{ gap: 8 }}>
+          <button type="button" className={`pill${view === 'me' ? ' on' : ''}`} onClick={() => setView('me')}>我看到的</button>
+          <button type="button" className={`pill${view === 'ta' ? ' on' : ''}`} onClick={() => setView('ta')}>TA 看到的</button>
+        </div>
 
-        <section className="col rv" style={{ gap: 10 }}>
-          <div className="label">我的名字</div>
-          <input className="field glass" maxLength={12} value={name} onChange={(e) => setName(e.target.value)} placeholder="TA 看到的你的名字" />
-        </section>
+              {view === 'ta' ? (
+          <Badge
+            preview
+            person={{ id: me.id, name: name || '你的名字', slot: me.slot }}
+            status={{ ...form, updated_at: null }}
+          />
+        ) : (
+          <>
+            <IdCard
+              startOut
+              person={{ id: me.id, name: name || '你的名字', slot: me.slot }}
+              status={{ ...form, updated_at: row?.updated_at }}
+              onEditAvatar={pickAvatar}
+              editBusy={avatarBusy}
+            />
+            <input ref={fileRef} type="file" accept="image/*" hidden onChange={onAvatarFile} />
+          </>
+        )}
 
         <section className="col rv" style={{ gap: 10 }}>
           <div className="label">第一层 · 明面</div>
@@ -279,6 +250,11 @@ export default function StatusEditor() {
               <Svg name="plus" size={14} stroke={2} />添加在听的歌
             </button>
           )}
+        </section>
+
+                <section className="col rv" style={{ gap: 10 }}>
+          <div className="label">我的名字</div>
+          <input className="field glass" maxLength={12} value={name} onChange={(e) => setName(e.target.value)} placeholder="TA 看到的你的名字" />
         </section>
 
         <section className="col rv" style={{ gap: 10 }}>

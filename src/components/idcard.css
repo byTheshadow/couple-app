@@ -1,0 +1,121 @@
+/* 首页「我自己」的证件：身份证式卡片 + 透明毛玻璃袋子 + 抽出动画。独立文件，由 IdCard.jsx 自己引入。
+   颜色全部用 styles.css 里已有的主题变量，亮暗主题自动适配。
+   尺寸用 cqw（容器宽度的 1%）写，卡片宽度变了字号和间距会跟着等比缩放；每个 cqw 声明前面都有一行 px 兜底。
+
+   几何关系（C = 证件高度）：舞台高 1.32C；袋口在 0.26C；证件静止时顶边在 0.30C（整张在袋子里）。
+   舞台宽高比 = 1.586 / 1.32，所以下面的百分比都是"占舞台高度"：袋口 19.7%，证件顶边 22.73%。 */
+
+.idc { padding: 0 8px; }
+
+.idc-stage { position: relative; container-type: inline-size; aspect-ratio: 1.586 / 1.32; cursor: pointer; outline: none;
+  -webkit-user-select: none; user-select: none; touch-action: manipulation; animation: idcFloat 6s ease-in-out infinite; }
+.idc-stage:focus-visible { box-shadow: 0 0 0 2px var(--ink2); border-radius: 18px; }
+@keyframes idcFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* 顶部提示 */
+.idc-hint { position: absolute; top: 0; left: 0; right: 0; z-index: 4; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--ink2); pointer-events: none; }
+.idc-hint svg { animation: idcNudge 1.8s ease-in-out infinite; }
+@keyframes idcNudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* 袋子后片：一张很淡的玻璃，给证件做衬底 */
+.idc-back { position: absolute; left: -8px; right: -8px; top: 19.7%; bottom: 0; z-index: 0; border-radius: 10px 10px 22px 22px;
+  background: rgba(255,255,255,.1); border: 1px solid var(--gb); box-shadow: inset 0 10px 24px rgba(0,0,0,.08); }
+
+/* 袋子前片：真正的毛玻璃，盖在证件上，所以静止时证件隔着磨砂玻璃若隐若现 */
+.idc-bag { position: absolute; left: -8px; right: -8px; top: 19.7%; bottom: 0; z-index: 2; overflow: hidden; pointer-events: none;
+  border-radius: 10px 10px 22px 22px; border: 1px solid rgba(255,255,255,.7); border-top-color: rgba(255,255,255,.92);
+  background: linear-gradient(165deg, rgba(255,255,255,.46), rgba(255,255,255,.12) 45%, rgba(255,255,255,.28));
+  backdrop-filter: blur(3.5px) saturate(1.2); -webkit-backdrop-filter: blur(3.5px) saturate(1.2);
+  box-shadow: 0 14px 30px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.8), inset 0 -10px 20px rgba(255,255,255,.12); }
+:root[data-theme='dark'] .idc-bag { border-color: rgba(255,255,255,.22); border-top-color: rgba(255,255,255,.34);
+  background: linear-gradient(165deg, rgba(255,255,255,.2), rgba(255,255,255,.04) 45%, rgba(255,255,255,.12));
+  box-shadow: 0 14px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.3), inset 0 -10px 20px rgba(255,255,255,.04); }
+/* 斜向反光，复用 styles.css 里的 sheen 关键帧 */
+.idc-bag::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .7;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.55) 42%, rgba(255,255,255,.08) 50%, transparent 60%);
+  background-size: 260% 100%; background-position: 130% 0; animation: sheen 7s ease-in-out infinite; }
+:root[data-theme='dark'] .idc-bag::after { opacity: .35; }
+
+/* 拉链 + 拉头 + 袋身印字 */
+.idc-zip { position: absolute; left: 14px; right: 14px; top: 9px; height: 7px; border-radius: 3px;
+  border-top: 1.5px dashed var(--ink2); border-bottom: 1.5px solid var(--line); }
+.idc-tab { position: absolute; right: 20px; top: 4px; width: 30px; height: 15px; border-radius: 8px; background: var(--btn); opacity: .85;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.idc-tab::after { content: ''; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%;
+  background: var(--bg); box-shadow: inset 0 1px 2px rgba(0,0,0,.4); }
+.idc-print { position: absolute; left: 16px; bottom: 12px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--ink2); opacity: .8; }
+
+/* ---------- 证件本体（身份证式，横版 1.586:1） ---------- */
+.idc-card { position: absolute; left: 0; right: 0; top: 22.73%; z-index: 1; aspect-ratio: 1.586; overflow: hidden;
+  display: grid; grid-template-rows: auto 1fr auto; transform-origin: 50% 100%;
+  padding: 12px 15px 11px; padding: 3.2cqw 4.2cqw 3cqw;
+  border-radius: 15px; border-radius: 4.2cqw;
+  background-color: var(--paper); color: var(--paperInk);
+  box-shadow: 0 8px 20px rgba(0,0,0,.2), inset 0 0 0 1px var(--paperLine); }
+/* 名片背景色：data-cardbg 会在这个元素上写 --cardTint / --cardTint2（styles.css 里那一组），再叠成斜向渐变 */
+.idc-card[data-cardbg]:not([data-cardbg='none']) { background-image: linear-gradient(135deg, var(--cardTint), var(--cardTint2)); }
+/* 底纹：右下角一圈圈防伪细纹 + 左上角一点高光 */
+.idc-card::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-radial-gradient(circle at 78% 112%, transparent 0 5px, var(--paperLine) 5px 5.6px),
+    radial-gradient(circle at 12% 0%, var(--paperLine), transparent 40%); }
+.idc-card > :not(.sheen) { position: relative; }
+
+.idc-head { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--paperLine);
+  font-size: 13px; font-size: 3.5cqw; }
+.idc-head b { font-family: var(--serif); font-weight: 700; letter-spacing: .12em; }
+.idc-emb { width: 22px; height: 22px; width: 6cqw; height: 6cqw; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; border: 1.3px solid currentColor; }
+.idc-no { margin-left: auto; font-family: var(--mono); font-size: 10.5px; font-size: 3cqw; opacity: .65; }
+
+.idc-body { display: flex; align-items: center; gap: 11px; gap: 3.2cqw; min-height: 0; padding-top: 4px; }
+.idc-fields { flex: 1; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; gap: 2.2cqw; }
+.idc-fields > div { min-width: 0; }
+.idc-fields dt { margin: 0; font-size: 10px; font-size: 2.8cqw; letter-spacing: .2em; opacity: .5; }
+.idc-fields dd { margin: 0; font-size: 13px; font-size: 3.7cqw; line-height: 1.3; font-weight: 500; }
+.idc-fields dd.idc-name { font-family: var(--serif); font-size: 21px; font-size: 6.2cqw; font-weight: 700; letter-spacing: .04em; }
+.idc-now { display: flex; align-items: center; gap: 6px; gap: 1.6cqw; }
+.idc-now svg { width: 16px; height: 16px; width: 4.6cqw; height: 4.6cqw; flex-shrink: 0; }
+.idc-now span { min-width: 0; }
+.idc-mood { display: flex; align-items: flex-start; gap: 6px; gap: 1.8cqw; }
+.idc-mood i { font-style: normal; font-size: 19px; font-size: 5.4cqw; line-height: 1.1; flex-shrink: 0; }
+.idc-mood span { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;
+  font-family: var(--serif); font-size: 12px; font-size: 3.4cqw; line-height: 1.4; font-weight: 400; }
+.idc-mood span.dim { font-family: var(--font); opacity: .45; }
+
+/* 照片：覆盖 styles.css 里 .pic-wrap 的固定像素尺寸，改成跟着卡片宽度缩放 */
+.idc .idc-photo { width: 92px; height: 116px; width: 25cqw; height: 32cqw; margin: 0 1cqw 0 0; }
+.idc .idc-photo .pic { font-size: 36px; font-size: 10cqw; border-radius: 8px; border-radius: 2.2cqw; }
+
+.idc-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; gap: 3cqw; padding-top: 5px; border-top: 1px solid var(--paperLine);
+  font-family: var(--mono); font-size: 9.5px; font-size: 2.7cqw; letter-spacing: .06em; }
+.idc-foot span { opacity: .65; white-space: nowrap; }
+.idc-foot .holo { width: 22px; height: 22px; width: 6cqw; height: 6cqw; }
+
+/* 编辑页里头像右下角的换头像小按钮（首页不传 onEditAvatar，就不会出现） */
+.idc .idc-photo { position: relative; }
+.idc-edit { position: absolute; right: 4px; bottom: 4px; z-index: 6; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  border: 0; cursor: pointer; background: var(--btn); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.idc-edit:disabled { opacity: .5; }
+
+/* ---------- 抽出 / 放回 ----------
+   抽出：证件先在袋子里往上滑（z-index 1，被毛玻璃盖着），滑到袋口以上后翻到最前面（z-index 3），再落一点、放大一点、微微歪一下。
+   放回：反过来。z-index 在关键帧里 1% 内切换，肉眼看不出跳变。 */
+.idc-card.is-out { animation: idcOut .95s cubic-bezier(.3,.9,.3,1) forwards; }
+.idc-card.is-in { animation: idcIn .8s cubic-bezier(.3,.9,.3,1) forwards; }
+@keyframes idcOut {
+  0% { transform: none; z-index: 1; }
+  42% { transform: translateY(-26%); z-index: 1; }
+  43% { z-index: 3; }
+  100% { transform: translateY(-12%) scale(1.035) rotate(-1.2deg); z-index: 3; box-shadow: 0 22px 40px rgba(0,0,0,.28), inset 0 0 0 1px var(--paperLine); }
+}
+@keyframes idcIn {
+  0% { transform: translateY(-12%) scale(1.035) rotate(-1.2deg); z-index: 3; box-shadow: 0 22px 40px rgba(0,0,0,.28), inset 0 0 0 1px var(--paperLine); }
+  55% { transform: translateY(-26%); z-index: 3; }
+  56% { z-index: 1; }
+  100% { transform: none; z-index: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idc-stage, .idc-hint svg, .idc-bag::after { animation: none; }
+  .idc-card.is-out, .idc-card.is-in { animation-duration: .01s; }
+}

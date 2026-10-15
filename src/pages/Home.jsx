@@ -14,7 +14,8 @@ import LetterArrival from '../components/LetterArrival'
 import Album from '../components/Album'
 import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
-import '../components/badge.css'
+import Badge from '../components/Badge'
+import IdCard from '../components/IdCard'
 
 // 状态编辑页的路由如果你的 App.jsx 里不是 /status，只改这一行
 const EDIT_ROUTE = '/status'
@@ -24,7 +25,6 @@ const KIND_LABEL = { note: '普通便签', doodle: '涂鸦', capsule: '时间胶
 
 const isLocked = (l) => l.kind === 'capsule' && l.unlock_at && Date.parse(l.unlock_at) > Date.now()
 const daysLeft = (l) => Math.ceil((Date.parse(l.unlock_at) - Date.now()) / 86400000)
-const initial = (name) => (name || '?').trim().slice(0, 1).toUpperCase()
 
 // 肢体互动手势：以后要加新的预设互动，在这里加一条就行；想要完全自定义的动作走下面的「自定义」分支
 const GESTURES = {
@@ -45,18 +45,6 @@ function letterMeta(l) {
   return `${KIND_LABEL[l.kind]} · ${fmtTime(l.created_at)}`
 }
 
-// 用 id 做种子生成稳定的条形码，同一个人永远是同一条
-function barcode(seed = '') {
-  let h = 7
-  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  const out = []
-  for (let i = 0; i < 34; i++) {
-    h = (h * 1664525 + 1013904223) >>> 0
-    out.push([1 + ((h >>> 28) % 3), 1 + ((h >>> 24) % 2)])
-  }
-  return out
-}
-
 // 更新日志里一行要显示的文字：按方向（我做的 / TA 做的）换说法，并带上自定义留言
 // verb 优先读数据库里存的那一条（自定义动作靠这个字段还原动词），老数据没有这个字段时退回预设表
 function activityText(p, myId) {
@@ -68,28 +56,6 @@ function activityText(p, myId) {
   return p.message ? `${base}："${p.message}"` : base
 }
 
-
-// 心情条：心情 emoji + 一句话。mine=true 且两样都没填时显示虚线占位，提示去哪里设置；对方没填就整条不显示
-function MoodStrip({ mood, text, mine = false }) {
-  if (!mood && !text) {
-    if (!mine) return null
-    return (
-      <div className="mood-strip empty">
-        <div className="ms-emoji"><Svg name="plus" size={18} stroke={1.8} /></div>
-        <div className="ms-text"><small>心情</small><p className="dim">还没设置心情，点「编辑状态」选一个</p></div>
-      </div>
-    )
-  }
-  return (
-    <div className="mood-strip">
-      <div className={`ms-emoji${mood ? '' : ' quote'}`}>{mood || '“'}</div>
-      <div className="ms-text">
-        <small>此刻心情</small>
-        <p className={text ? undefined : 'dim'}>{text || '没有留下一句话'}</p>
-      </div>
-    </div>
-  )
-}
 
 function Envelope({ l }) {
   const locked = isLocked(l)
@@ -134,13 +100,11 @@ export default function Home() {
   const [resetPwd, setResetPwd] = useState('')
   const [resetBusy, setResetBusy] = useState(false)
   const [resetErr, setResetErr] = useState('')
-  const [flip, setFlip] = useState(false)
   const [deckIdx, setDeckIdx] = useState(0)
   const [now, setNow] = useState(() => new Date())
   const [arrivedLetter, setArrivedLetter] = useState(null)
   const [notif, setNotif] = useState(null)
   const statusSeenRef = useRef(null)
-  const p3d = useRef(null)
   const deckRef = useRef(null)
 
   useScrollFx()
@@ -222,25 +186,6 @@ export default function Home() {
     setTimeout(() => window.location.reload(), 900)
   }
 
-  // 工牌：指针移动时 3D 倾斜，离开时回正
-  const tilt = (e) => {
-    const el = p3d.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    const x = (e.clientX - r.left) / r.width - 0.5
-    const y = (e.clientY - r.top) / r.height - 0.5
-    el.style.setProperty('--ry', `${(x * 14).toFixed(2)}deg`)
-    el.style.setProperty('--rx', `${(-y * 10).toFixed(2)}deg`)
-    el.classList.add('tilting')
-  }
-  const untilt = () => {
-    const el = p3d.current
-    if (!el) return
-    el.style.setProperty('--ry', '0deg')
-    el.style.setProperty('--rx', '0deg')
-    el.classList.remove('tilting')
-  }
-
   // 信封牌组：按每张牌离中心的距离写 --d / --da，CSS 据此缩放和后仰
   useEffect(() => {
     if (tab !== 1) return
@@ -275,7 +220,6 @@ export default function Home() {
   const shortDate = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
   const clock = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   const tk = `${me?.display_name || ''}  /  ${clock}  /  ${shortDate}  /  ONLINE`
-  const slotNo = partner?.slot ? `NO.${partner.slot.replace(/\D/g, '').padStart(2, '0')}` : ''
 
   return (
     <div className="shell">
@@ -328,8 +272,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ===== 我的档案窗口：标题栏 + 头像 + 装饰，可编辑 ===== */}
-        <section className="win hero rv" data-depth data-cardbg={m?.card_bg || 'none'}>
+        {/* ===== 我的档案窗口：标题栏 + 证件（装在毛玻璃袋子里，点一下取出）+ 编辑入口 ===== */}
+        <section className="win hero rv" data-depth>
           <header className="tb">
             <Svg name="doc" size={14} />
             <b>{me?.display_name || '我'}.profile</b>
@@ -338,29 +282,11 @@ export default function Home() {
             <span className="ctl"><i>–</i><i>□</i><i>×</i></span>
           </header>
           <div className="wb col" style={{ gap: 14 }}>
-            <div className="hero-top">
-              <div className="av-wrap" data-deco={m?.decoration_id || 'none'}>
-                <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
-                <span className="d d-polaroid" data-cap={shortDate} />
-                <span className="d d-ears"><i /><i /></span>
-                <span className="d d-halo" />
-                <span className="d d-orbit" />
-                <span className="d d-pixel" />
-                <div className="av" style={m?.avatar_url ? { backgroundImage: `url(${m.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
-                  {!m?.avatar_url && initial(me?.display_name)}
-                </div>
-              </div>
-              <div className="hero-info">
-                <div className="handle"><b>{me?.display_name || ''}</b><span className="u" /></div>
-                <div className="on-tag"><span className="live" />在线，这张卡只有你能编辑</div>
-                <div className="mychip">
-                  <StatusIcon id={m?.icon_id} />
-                  <span className="ellipsis">{m?.status_text || '还没设置状态'}</span>
-                </div>
-                <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
-              </div>
+            <IdCard person={{ id: me?.id, name: me?.display_name, slot: me?.slot }} status={m} />
+            <div className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
+              <div className="on-tag"><span className="live" />在线，这张卡只有你能编辑</div>
+              <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
             </div>
-            <MoodStrip mood={m?.mood} text={m?.mood_text} mine />
             <NowPlaying row={m} label="我在听" />
             {m?.secret_text && (
               <div className="about">
@@ -395,60 +321,7 @@ export default function Home() {
               <div className="glass h-sub" style={{ borderRadius: 24, padding: 18 }}>另一半的账号还没创建，创建后这里会实时显示 TA 的状态。</div>
             ) : (
               <>
-                <div className="badge-wrap">
-                  <div className="swing">
-                    <div className="strap" /><div className="clip" />
-                    <div className="pass">
-                      <div className="p3d" ref={p3d} style={{ '--fl': flip ? '180deg' : '0deg' }}
-                        onPointerMove={tilt} onPointerLeave={untilt} onPointerCancel={untilt} onClick={() => setFlip((f) => !f)}>
-                        <div className="face front" data-cardbg={s?.card_bg || 'none'}>
-                          <div className="band"><span>TA</span><i className="hole" /><span className="mono">{slotNo}</span></div>
-                          <div className="pbody">
-                            {/* 头像装饰和首页「我的卡」共用同一套 [data-deco] 样式，TA 换了装饰这里会同步显示 */}
-                            <div className="pic-wrap" data-deco={s?.decoration_id || 'none'}>
-                              <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
-                              <span className="d d-polaroid" data-cap={shortDate} />
-                              <span className="d d-ears"><i /><i /></span>
-                              <span className="d d-halo" />
-                              <span className="d d-orbit" />
-                              <span className="d d-pixel" />
-                              <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
-                                {!s?.avatar_url && initial(partner.display_name)}
-                              </div>
-                            </div>
-                            <div className="pf">
-                              <div className="fld">
-                                <small>姓名</small>
-                                <div className="nm-row">
-                                  <span className="nm ellipsis">{partner.display_name}</span>
-                                </div>
-                              </div>
-                              <div className="fld"><small>此刻</small>
-                                <div className="nowchip"><StatusIcon id={s?.icon_id} /><b>{s?.status_text || '还没设置状态'}</b></div>
-                              </div>
-                            </div>
-                            <div className="stamp">LIVE</div>
-                          </div>
-                          <MoodStrip mood={s?.mood} text={s?.mood_text} />
-                          <div className="pfoot">
-                            <div className="bars">{barcode(partner.id).map(([w, g], i) => <i key={i} style={{ width: w, marginRight: g }} />)}</div>
-                            <div className="holo" />
-                          </div>
-                          <div className="sheen" />
-                        </div>
-                        <div className="face back">
-                          <div className="mag" />
-                          <div className="bk">
-                            <h4>最近一次更新</h4>
-                            <div className="big">{s?.updated_at ? fmtTime(s.updated_at) : '暂无记录'}</div>
-                            <div className="fine">TA 改状态时，这张工牌会实时刷新。<br />再点一下翻回正面。</div>
-                          </div>
-                          <div className="sheen" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <Badge person={{ id: partner.id, name: partner.display_name, slot: partner.slot }} status={s} />
 
                 {/* 此刻.txt 已经去掉了：状态文字 + 心情已经在上面工牌里了，没必要重复一遍 */}
                 <NowPlaying row={s} />
