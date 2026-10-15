@@ -57,9 +57,12 @@ export function StatusIcon({ id, size = 30 }) {
   }
 }
 
+// id 要和 styles.css 里的 [data-deco='xxx'] 对上：cat-ears / halo / orbit / pixel / polaroid
 export const DECORATIONS = [
   { id: 'none', label: '无' },
   { id: 'cat-ears', label: '猫耳' },
+  { id: 'halo', label: '光环' },
+  { id: 'orbit', label: '轨道' },
   { id: 'pixel', label: '像素框' },
   { id: 'polaroid', label: '拍立得' },
 ]
