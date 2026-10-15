@@ -7,6 +7,7 @@ import Whisper from '../components/Whisper'
 import { MusicModal, NowPlaying } from '../components/Music'
 import TabBar from '../components/TabBar'
 import { CARD_BGS, DECORATIONS, MOODS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
+import '../components/badge.css'
 
 const REVEAL_TYPES = [
   { id: 'scratch', label: '刮刮乐', desc: 'TA 刮开涂层才能看到' },
@@ -23,6 +24,27 @@ const toLocalInput = (iso) => {
 }
 
 const initial = (name) => (name || '?').trim().slice(0, 1).toUpperCase()
+
+// 心情条：和首页（Home.jsx）里的同名组件长得一样，预览里选了心情 / 写了一句话会立刻显示在这里
+function MoodStrip({ mood, text }) {
+  if (!mood && !text) {
+    return (
+      <div className="mood-strip empty">
+        <div className="ms-emoji"><Svg name="plus" size={18} stroke={1.8} /></div>
+        <div className="ms-text"><small>心情</small><p className="dim">选一个心情、写一句话，这里会实时显示</p></div>
+      </div>
+    )
+  }
+  return (
+    <div className="mood-strip">
+      <div className={`ms-emoji${mood ? '' : ' quote'}`}>{mood || '“'}</div>
+      <div className="ms-text">
+        <small>此刻心情</small>
+        <p className={text ? undefined : 'dim'}>{text || '没有留下一句话'}</p>
+      </div>
+    </div>
+  )
+}
 
 function Backdrop() {
   return (
@@ -65,6 +87,7 @@ export default function StatusEditor() {
       card_bg: row?.card_bg || 'none',
            avatar_url: row?.avatar_url || '',
       mood: row?.mood || '',
+      mood_text: row?.mood_text || '',
       music_title: row?.music_title || '',
       music_url: row?.music_url || '',
       music_source: row?.music_source || 'link',
@@ -142,6 +165,7 @@ export default function StatusEditor() {
         user_id: me.id, icon_id: form.icon_id, status_text: form.status_text.trim(),
         decoration_id: form.decoration_id, card_bg: form.card_bg, avatar_url: form.avatar_url || null,
         mood: form.mood || null,
+        mood_text: form.mood_text.trim() || null,
         music_title: form.music_title.trim() || null,
         music_url: form.music_url.trim() || null,
         music_source: form.music_url.trim() ? form.music_source : null,
@@ -198,6 +222,7 @@ export default function StatusEditor() {
               </div>
             </div>
           </div>
+          <MoodStrip mood={form.mood} text={form.mood_text} />
         </section>
 
         <section className="col rv" style={{ gap: 10 }}>
@@ -236,6 +261,11 @@ export default function StatusEditor() {
               <button key={em} type="button" className={`pill mood-pick${form.mood === em ? ' on' : ''}`}
                 onClick={() => set('mood', form.mood === em ? '' : em)}>{em}</button>
             ))}
+          </div>
+          <div className="label" style={{ marginTop: 4 }}>心情一句话（TA 也能看到，可以不写）</div>
+          <div className="field-wrap">
+            <textarea className="field glass" rows={2} maxLength={40} value={form.mood_text} onChange={(e) => set('mood_text', e.target.value)} placeholder="今天有点累，但是想到你就好了" />
+            <span className="cnt">{form.mood_text.length} / 40</span>
           </div>
 
                     <div className="label" style={{ marginTop: 4 }}>在听（TA 也能看到，可以一起听）</div>

@@ -14,6 +14,7 @@ import LetterArrival from '../components/LetterArrival'
 import Album from '../components/Album'
 import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
+import '../components/badge.css'
 
 // 状态编辑页的路由如果你的 App.jsx 里不是 /status，只改这一行
 const EDIT_ROUTE = '/status'
@@ -67,6 +68,28 @@ function activityText(p, myId) {
   return p.message ? `${base}："${p.message}"` : base
 }
 
+
+// 心情条：心情 emoji + 一句话。mine=true 且两样都没填时显示虚线占位，提示去哪里设置；对方没填就整条不显示
+function MoodStrip({ mood, text, mine = false }) {
+  if (!mood && !text) {
+    if (!mine) return null
+    return (
+      <div className="mood-strip empty">
+        <div className="ms-emoji"><Svg name="plus" size={18} stroke={1.8} /></div>
+        <div className="ms-text"><small>心情</small><p className="dim">还没设置心情，点「编辑状态」选一个</p></div>
+      </div>
+    )
+  }
+  return (
+    <div className="mood-strip">
+      <div className={`ms-emoji${mood ? '' : ' quote'}`}>{mood || '“'}</div>
+      <div className="ms-text">
+        <small>此刻心情</small>
+        <p className={text ? undefined : 'dim'}>{text || '没有留下一句话'}</p>
+      </div>
+    </div>
+  )
+}
 
 function Envelope({ l }) {
   const locked = isLocked(l)
@@ -328,7 +351,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="hero-info">
-                <div className="handle"><b>{me?.display_name || ''}</b>{m?.mood && <span className="mood-badge">{m.mood}</span>}<span className="u" /></div>
+                <div className="handle"><b>{me?.display_name || ''}</b><span className="u" /></div>
                 <div className="on-tag"><span className="live" />在线，这张卡只有你能编辑</div>
                 <div className="mychip">
                   <StatusIcon id={m?.icon_id} />
@@ -337,6 +360,7 @@ export default function Home() {
                 <Link className="mini tap" to={EDIT_ROUTE}>编辑状态<Svg name="arrow" size={14} stroke={2} /></Link>
               </div>
             </div>
+            <MoodStrip mood={m?.mood} text={m?.mood_text} mine />
             <NowPlaying row={m} label="我在听" />
             {m?.secret_text && (
               <div className="about">
@@ -397,7 +421,6 @@ export default function Home() {
                                 <small>姓名</small>
                                 <div className="nm-row">
                                   <span className="nm ellipsis">{partner.display_name}</span>
-                                  {s?.mood && <span className="mood-badge">{s.mood}</span>}
                                 </div>
                               </div>
                               <div className="fld"><small>此刻</small>
@@ -406,6 +429,7 @@ export default function Home() {
                             </div>
                             <div className="stamp">LIVE</div>
                           </div>
+                          <MoodStrip mood={s?.mood} text={s?.mood_text} />
                           <div className="pfoot">
                             <div className="bars">{barcode(partner.id).map(([w, g], i) => <i key={i} style={{ width: w, marginRight: g }} />)}</div>
                             <div className="holo" />
