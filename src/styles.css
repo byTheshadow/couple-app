@@ -119,6 +119,7 @@ textarea.field { resize: none; line-height: 1.5; }
 .badge { font-size: 12px; padding: 5px 11px; border-radius: 999px; background: var(--btn); color: var(--btnInk); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
 .whisper-text { font-size: 16px; line-height: 1.55; transition: filter .5s ease; }
+.whisper-time { font-size: 11.5px; letter-spacing: .02em; margin-top: -4px; }
 .letter { border-radius: 24px; padding: 14px; display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; border: 1px solid var(--gb); }
 
 @keyframes steam { 0%, 100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-3px); opacity: .95; } }
@@ -189,6 +190,8 @@ textarea.field { resize: none; line-height: 1.5; }
 .hero-top { display: flex; gap: 20px; align-items: center; }
 
 .av-wrap { position: relative; width: 96px; height: 96px; flex-shrink: 0; margin: 10px 6px 10px 8px; transition: transform .5s cubic-bezier(.2,.8,.2,1); }
+.av-edit { position: absolute; right: -2px; bottom: -2px; z-index: 4; width: 30px; height: 30px; border-radius: 50%; background: var(--btn); color: var(--btnInk); border: 2px solid var(--bg); display: grid; place-items: center; }
+.av-edit[disabled] { opacity: .5; }
 .av-ring { position: absolute; inset: -4px; border-radius: 50%; border: 1px solid var(--ink2); opacity: 0; animation: ring 4.2s cubic-bezier(.2,.6,.3,1) infinite; }
 .av-ring.r2 { animation-delay: 1.4s; } .av-ring.r3 { animation-delay: 2.8s; }
 @keyframes ring { 0% { transform: scale(.9); opacity: .55; } 100% { transform: scale(1.75); opacity: 0; } }
@@ -294,8 +297,12 @@ textarea.field { resize: none; line-height: 1.5; }
 .whisper-card { border-radius: 26px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 
 /* 戳一戳 */
-.poke { border-radius: 22px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; width: 100%; border: 1px solid var(--gb); }
+.poke-row { display: flex; gap: 10px; }
+.poke { flex: 1; min-width: 0; border-radius: 22px; padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; border: 1px solid var(--gb); }
 .poke.hit svg { animation: beat .6s cubic-bezier(.2,1.4,.4,1); }
+.gesture-log { border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.gesture-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+.gesture-row .ellipsis { flex: 1; }
 @keyframes beat { 30% { transform: scale(1.5); } 60% { transform: scale(.9); } }
 
 /* =====================================================================
@@ -309,6 +316,16 @@ textarea.field { resize: none; line-height: 1.5; }
 .dmeta .t { font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 7px; }
 .dmeta .s { font-size: 12px; color: var(--ink2); margin-top: 3px; }
 .deck-foot { display: flex; align-items: center; justify-content: center; gap: 12px; font-family: var(--mono); font-size: 12px; color: var(--ink2); }
+
+/* 空信箱占位：呼吸的信封轮廓 + 等待小圆点 */
+.mb-empty { border-radius: 24px; padding: 34px 18px 28px; margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.mb-empty-env { animation: mbFloat 4.5s ease-in-out infinite; color: var(--ink2); }
+@keyframes mbFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.mb-empty-dots { display: flex; gap: 6px; }
+.mb-empty-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink2); animation: mbDot 1.4s ease-in-out infinite; }
+.mb-empty-dots i:nth-child(2) { animation-delay: .18s; }
+.mb-empty-dots i:nth-child(3) { animation-delay: .36s; }
+@keyframes mbDot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 
 .env { position: relative; width: 250px; height: 168px; filter: drop-shadow(0 14px 22px rgba(0,0,0,.22)); transform-style: preserve-3d; }
 .env > * { position: absolute; }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useStatus } from '../lib/hooks'
@@ -41,7 +41,9 @@ export default function StatusEditor() {
   const [form, setForm] = useState(null)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [avatarBusy, setAvatarBusy] = useState(false)
   const [toast, setToast] = useState('')
+  const fileRef = useRef(null)
 
   useScrollFx()
 
@@ -54,6 +56,7 @@ export default function StatusEditor() {
       icon_id: row?.icon_id || 'coffee',
       status_text: row?.status_text || '',
       decoration_id: row?.decoration_id || 'none',
+      avatar_url: row?.avatar_url || '',
       secret_text: row?.secret_text || '',
       reveal_type: row?.reveal_type || 'scratch',
       pin: row?.reveal_config?.pin || '',
@@ -72,6 +75,24 @@ export default function StatusEditor() {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const type = REVEAL_TYPES.find((t) => t.id === form.reveal_type)
+
+  const pickAvatar = () => fileRef.current?.click()
+  const onAvatarFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !me) return
+    if (!file.type.startsWith('image/')) return say('只能上传图片')
+    if (file.size > 5 * 1024 * 1024) return say('图片要小于 5MB')
+    setAvatarBusy(true)
+    const ext = file.name.split('.').pop() || 'jpg'
+    const path = `${me.id}/avatar.${ext}`
+    const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, cacheControl: '3600' })
+    setAvatarBusy(false)
+    if (error) return say('上传失败，再试一次')
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+    set('avatar_url', `${data.publicUrl}?t=${Date.now()}`)
+    say('头像已更换，记得点保存')
+  }
   const now = new Date()
   const shortDate = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
 
@@ -82,9 +103,10 @@ export default function StatusEditor() {
     const cfg = form.reveal_type === 'password' ? { pin: form.pin }
       : form.reveal_type === 'timelock' ? { unlockAt: new Date(form.unlockAt).toISOString() } : {}
     const [a, b] = await Promise.all([
-      supabase.from('status').upsert({
+           supabase.from('status').upsert({
         user_id: me.id, icon_id: form.icon_id, status_text: form.status_text.trim(),
-        decoration_id: form.decoration_id, secret_text: form.secret_text.trim(),
+        decoration_id: form.decoration_id, avatar_url: form.avatar_url || null,
+        secret_text: form.secret_text.trim(),
         reveal_type: form.reveal_type, reveal_config: cfg,
       }),
       name.trim() && name.trim() !== me.display_name
@@ -114,14 +136,20 @@ export default function StatusEditor() {
         <section className="hero glass rv" data-depth>
           <div className="who">预览</div>
           <div className="hero-top">
-            <div className="av-wrap" data-deco={form.decoration_id}>
+                        <div className="av-wrap" data-deco={form.decoration_id}>
               <i className="av-ring" /><i className="av-ring r2" /><i className="av-ring r3" />
               <span className="d d-polaroid" data-cap={shortDate} />
               <span className="d d-ears"><i /><i /></span>
               <span className="d d-halo" />
               <span className="d d-orbit" />
               <span className="d d-pixel" />
-              <div className="av">{initial(name)}</div>
+              <div className="av" style={form.avatar_url ? { backgroundImage: `url(${form.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                {!form.avatar_url && initial(name)}
+              </div>
+              <button type="button" className="av-edit tap" onClick={pickAvatar} aria-label="更换头像" disabled={avatarBusy}>
+                <Svg name="pen" size={14} />
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" hidden onChange={onAvatarFile} />
             </div>
             <div className="hero-info">
               <div className="handle"><b>{name || '你的名字'}</b><span className="u" /></div>

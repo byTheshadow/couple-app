@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { fmtTime, greeting, useLetters, usePokes, useStatus } from '../lib/hooks'
+import { fmtTime, greeting, useLetters, usePokeHistory, usePokes, useStatus } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
 import { StatusIcon, Svg } from '../components/Icon'
@@ -19,6 +19,12 @@ const KIND_LABEL = { note: '普通便签', doodle: '涂鸦', capsule: '时间胶
 const isLocked = (l) => l.kind === 'capsule' && l.unlock_at && Date.parse(l.unlock_at) > Date.now()
 const daysLeft = (l) => Math.ceil((Date.parse(l.unlock_at) - Date.now()) / 86400000)
 const initial = (name) => (name || '?').trim().slice(0, 1).toUpperCase()
+
+// 肢体互动手势：以后要加新的互动（比如"亲一下"），在这里加一条就行
+const GESTURES = {
+  poke: { verb: '戳一戳', label: '戳了你一下', icon: 'heart', sub: '想要抱抱', doneWord: '戳', successMsg: '戳到啦，TA 应该感觉到了', vibrate: [30, 40, 30] },
+  pat: { verb: '拍一拍', label: '轻轻拍了拍你', icon: 'wave', sub: '摸摸头', doneWord: '拍', successMsg: '拍到啦，TA 应该感觉到了', vibrate: [20, 20, 20, 20] },
+}
 
 function letterMeta(l) {
   if (isLocked(l)) return `${KIND_LABEL.capsule} · ${daysLeft(l)} 天后开启`
@@ -58,10 +64,12 @@ export default function Home() {
   const partnerStatus = useStatus(partner?.id)
   const myStatus = useStatus(me?.id)
   const { letters, reload } = useLetters(me?.id)
+  const { pokes: gestureHistory } = usePokeHistory(me?.id)
   const [openLetter, setOpenLetter] = useState(null)
   const [toast, setToast] = useState('')
-  const [pokes, setPokes] = useState(0)
-  const [hit, setHit] = useState(false)
+  const [counts, setCounts] = useState({ poke: 0, pat: 0 })
+  const [hit, setHit] = useState(null)
+  const [showLog, setShowLog] = useState(false)
   const [flip, setFlip] = useState(false)
   const [deckIdx, setDeckIdx] = useState(0)
   const [now, setNow] = useState(() => new Date())
@@ -72,9 +80,10 @@ export default function Home() {
 
   const say = useCallback((t) => { setToast(t); setTimeout(() => setToast(''), 2600) }, [])
 
-  usePokes(me?.id, () => {
-    try { navigator.vibrate?.([40, 50, 40, 50, 80]) } catch { /* iOS 不支持 */ }
-    say('TA 戳了你一下')
+  usePokes(me?.id, (row) => {
+    const g = GESTURES[row?.kind] || GESTURES.poke
+    try { navigator.vibrate?.(row?.kind === 'pat' ? [20, 20, 20, 20] : [40, 50, 40, 50, 80]) } catch { /* iOS 不支持 */ }
+    say(`TA ${row?.label || g.label}`)
   })
 
   useEffect(() => {
@@ -82,13 +91,15 @@ export default function Home() {
     return () => clearInterval(t)
   }, [])
 
-  const poke = async () => {
+  const sendGesture = async (kind) => {
     if (!partner) return say('还没有另一半的账号')
-    const { error } = await supabase.from('pokes').insert({ sender_id: me.id, receiver_id: partner.id, label: '戳了你一下' })
-    if (error) return say('没戳到，再试一次')
-    try { navigator.vibrate?.([30, 40, 30]) } catch { /* ignore */ }
-    setPokes((n) => n + 1)
-    setHit(true); setTimeout(() => setHit(false), 650)
+    const g = GESTURES[kind]
+    const { error } = await supabase.from('pokes').insert({ sender_id: me.id, receiver_id: partner.id, label: g.label, kind })
+    if (error) return say(`没${g.doneWord}到，再试一次`)
+    try { navigator.vibrate?.(g.vibrate) } catch { /* ignore */ }
+    setCounts((c) => ({ ...c, [kind]: c[kind] + 1 }))
+    say(g.successMsg)
+    setHit(kind); setTimeout(() => setHit(null), 650)
   }
 
   const tapLetter = (l) => {
@@ -200,8 +211,10 @@ export default function Home() {
               <span className="d d-ears"><i /><i /></span>
               <span className="d d-halo" />
               <span className="d d-orbit" />
-              <span className="d d-pixel" />
-              <div className="av">{initial(me?.display_name)}</div>
+                           <span className="d d-pixel" />
+              <div className="av" style={m?.avatar_url ? { backgroundImage: `url(${m.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                {!m?.avatar_url && initial(me?.display_name)}
+              </div>
             </div>
             <div className="hero-info">
               <div className="handle"><b>{me?.display_name || ''}</b><span className="u" /></div>
@@ -240,7 +253,9 @@ export default function Home() {
                       <div className="face front">
                         <div className="band"><span>TA</span><i className="hole" /><span className="mono">{slotNo}</span></div>
                         <div className="pbody">
-                          <div className="pic">{initial(partner.display_name)}</div>
+                                                   <div className="pic" style={s?.avatar_url ? { backgroundImage: `url(${s.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+                            {!s?.avatar_url && initial(partner.display_name)}
+                          </div>
                           <div className="pf">
                             <div className="fld"><small>姓名</small><div className="nm ellipsis">{partner.display_name}</div></div>
                             <div className="fld"><small>此刻</small>
@@ -277,13 +292,40 @@ export default function Home() {
           )}
         </section>
 
-        {/* 戳一戳 */}
-        <button className={`glass poke tap rv${hit ? ' hit' : ''}`} data-depth onClick={poke} style={{ '--rd': '.05s' }}>
-          <span className="row" style={{ gap: 12, fontSize: 15, fontWeight: 500 }}>
-            <Svg name="heart" />{pokes > 0 ? `已戳 TA ${pokes} 次` : '戳一戳 TA'}
-          </span>
-          <span className="h-sub">想要抱抱</span>
-        </button>
+                {/* 戳一戳 / 拍一拍 */}
+        <section className="col rv" style={{ gap: 10 }} data-depth>
+          <div className="poke-row">
+            {Object.entries(GESTURES).map(([kind, g]) => (
+              <button key={kind} className={`glass poke tap${hit === kind ? ' hit' : ''}`} onClick={() => sendGesture(kind)}>
+                <span className="row" style={{ gap: 10, fontSize: 15, fontWeight: 500 }}>
+                  <Svg name={g.icon} />{counts[kind] > 0 ? `已${g.doneWord} TA ${counts[kind]} 次` : `${g.verb} TA`}
+                </span>
+                <span className="h-sub">{g.sub}</span>
+              </button>
+            ))}
+          </div>
+
+          <button className="mini tap" onClick={() => setShowLog((v) => !v)}>
+            <Svg name="clock" size={14} stroke={1.8} />
+            {showLog ? '收起记录' : 'TA 什么时候戳过我'}
+          </button>
+
+          {showLog && (
+            <div className="glass gesture-log">
+              {gestureHistory.length === 0 ? (
+                <div className="h-sub">还没有记录，TA 戳你一下就会出现在这里</div>
+              ) : (
+                gestureHistory.map((p) => (
+                  <div key={p.id} className="gesture-row">
+                    <Svg name={p.kind === 'pat' ? 'wave' : 'heart'} size={16} />
+                    <span className="ellipsis">{p.label}</span>
+                    <span className="mono muted">{fmtTime(p.created_at)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
 
         {/* 收到的信：横向信封牌组 */}
         <section className="col rv" style={{ gap: 4 }}>
@@ -291,8 +333,15 @@ export default function Home() {
             <b>收到的信</b>
             <span className="badge">{unread > 0 ? `${unread} 封未读` : '全部已读'}</span>
           </div>
-          {letters.length === 0 ? (
-            <div className="glass h-sub" style={{ borderRadius: 24, padding: 18, textAlign: 'center', marginTop: 8 }}>邮筒还是空的，等 TA 的第一封信</div>
+                   {letters.length === 0 ? (
+            <div className="glass mb-empty rv" data-depth>
+              <svg className="mb-empty-env" width="112" height="78" viewBox="0 0 112 78" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="106" height="72" rx="13" stroke="currentColor" strokeWidth="2" strokeDasharray="6 7" />
+                <path d="M8 13 L56 47 L104 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div className="h-sub">邮筒还是空的，等 TA 的第一封信</div>
+              <div className="mb-empty-dots"><i /><i /><i /></div>
+            </div>
           ) : (
             <>
               <div className="deck" ref={deckRef}>

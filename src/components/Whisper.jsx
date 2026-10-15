@@ -1,6 +1,7 @@
+
 import { useEffect, useRef, useState } from 'react'
 import { Svg } from './Icon'
-
+import { fmtTime } from '../lib/hooks'
 const storeKey = (row) => `whisper:${row?.user_id}:${row?.updated_at}`
 const readFlag = (k) => { try { return localStorage.getItem(k) === '1' } catch { return false } }
 const writeFlag = (k) => { try { localStorage.setItem(k, '1') } catch { /* ignore */ } }
@@ -41,6 +42,7 @@ export default function Whisper({ row, mine = false }) {
   const reveal = () => { setRevealed(true); writeFlag(key) }
   const timeUnlocked = type === 'timelock' && unlockAt != null && now >= unlockAt
   const visible = mine || revealed || timeUnlocked
+  const whisperTime = row.updated_at && !Number.isNaN(Date.parse(row.updated_at)) ? fmtTime(row.updated_at) : null
 
   const pressStart = () => {
     if (visible) return
@@ -75,6 +77,10 @@ export default function Whisper({ row, mine = false }) {
       <div className="whisper-text" style={{ filter: visible ? 'none' : 'blur(8px)', userSelect: visible ? 'auto' : 'none' }}>
         {row.secret_text}
       </div>
+
+      {visible && whisperTime && (
+        <div className="whisper-time mono muted">{mine ? '更新于 ' : 'TA 写于 '}{whisperTime}</div>
+      )}
 
       {!visible && type === 'scratch' && (
         <button className="btn" style={{ alignSelf: 'flex-start', height: 38, fontSize: 13 }} onClick={reveal}>擦开雾面</button>

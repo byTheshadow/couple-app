@@ -12,6 +12,7 @@ const PATHS = {
   arrow: <path d="M5 12h14M13 6l6 6-6 6" />,
   sliders: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>,
   out: <path d="M10 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4M15 8l4 4-4 4M19 12H9" />,
+  wave: <path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 12V5a1.5 1.5 0 0 1 3 0v7M14 12V6.5a1.5 1.5 0 0 1 3 0V13M17 9.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-2c-2.5 0-4-1-5.5-3L4 14.5a1.4 1.4 0 0 1 2-2L8 14" />,
 }
 
 export function Svg({ name, size = 22, stroke = 1.6 }) {

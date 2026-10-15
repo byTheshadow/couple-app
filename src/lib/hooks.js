@@ -71,6 +71,36 @@ export function usePokes(myId, onPoke) {
   }, [myId])
 }
 
+/** 我收到的戳一戳 / 拍一拍记录，实时更新，供"记录"面板用 */
+export function usePokeHistory(myId, limit = 20) {
+  const [pokes, setPokes] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!myId) return
+    const { data } = await supabase
+      .from('pokes').select('*')
+      .eq('receiver_id', myId)
+      .order('created_at', { ascending: false }).limit(limit)
+    setPokes(data || [])
+    setLoading(false)
+  }, [myId, limit])
+
+  useEffect(() => {
+    if (!myId) { setLoading(false); return }
+    reload()
+    const ch = supabase
+      .channel(`poke-history-${myId}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'pokes', filter: `receiver_id=eq.${myId}` },
+        (p) => setPokes((list) => [p.new, ...list].slice(0, limit)))
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, reload, limit])
+
+  return { pokes, loading, reload }
+}
+
 export function fmtTime(iso) {
   const d = new Date(iso)
   const now = new Date()
