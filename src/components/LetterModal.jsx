@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { DoodleReplay } from './DoodlePad'
 
 const KIND_LABEL = { note: '便签', doodle: '涂鸦', capsule: '时间胶囊', burn: '阅后即焚' }
 
@@ -44,7 +45,7 @@ export default function LetterModal({ letter, onClose, onChanged }) {
 
   return (
     <div className="overlay" onClick={close}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+           <div className="sheet" style={{ maxHeight: '94dvh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div className="h-sub">{KIND_LABEL[letter.kind]} · 来自 TA</div>
           {left != null && <div className="badge">{left}s 后焚毁</div>}
@@ -52,7 +53,8 @@ export default function LetterModal({ letter, onClose, onChanged }) {
         <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.01em' }}>{letter.title || '一封信'}</div>
         {state.loading && <div className="h-sub">正在拆开…</div>}
         {state.error && <div className="h-sub">{state.error}</div>}
-        {state.data && (
+              {state.data && letter.kind === 'doodle' && state.data.o_payload && <DoodleReplay payload={state.data.o_payload} />}
+        {state.data && !(letter.kind === 'doodle' && state.data.o_payload) && (
           <div style={{ fontSize: 17, lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>{state.data.o_body}</div>
         )}
         <button className="btn" onClick={close}>{letter.kind === 'burn' && state.data ? '看完了，焚毁' : '收好'}</button>
