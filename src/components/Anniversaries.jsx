@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAnniversaries } from '../lib/hooks'
 import { Svg } from './Icon'
+import './anniversaries.css'
 
 const DAY = 86400000
+const GAP = 10 // 要和 anniversaries.css 里 .an-track 的 gap 一致
 const pad = (n) => String(n).padStart(2, '0')
 const todayStr = () => {
   const d = new Date()
@@ -12,6 +14,9 @@ const todayStr = () => {
 }
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 const daysBetween = (a, b) => Math.round((b - a) / DAY)
+const dotDate = (s) => s.replaceAll('-', '.')
+const cnDate = (s) => { const [y, m, d] = s.split('-').map(Number); return `${y} 年 ${m} 月 ${d} 日` }
+const cnMD = (s) => { const [, m, d] = s.split('-').map(Number); return `${m} 月 ${d} 日` }
 
 // 算下一次「每年都算」的日子落在哪一天（今年过了就顺到明年）
 function nextOccurrence(dateStr) {
@@ -22,7 +27,8 @@ function nextOccurrence(dateStr) {
   return next
 }
 
-// 三种展示：一次性未来日期 → 倒计时；一次性过去日期 → 正计时（比如"在一起多少天"）；每年都算 → 倒计时 + 第几年
+// 三种展示：一次性过去日期 → 正计时（在一起多少天）；一次性未来日期 → 倒计时；每年都算 → 倒计时 + 第几年
+// 返回：sortKey 排序用；label 数字上方的小字；num 大数字；footL / footR 窗口底栏左右两段字
 function describe(a) {
   const start = new Date(`${a.date}T00:00:00`)
   const today = startOfDay(new Date())
@@ -32,15 +38,28 @@ function describe(a) {
     const yearNum = next.getFullYear() - start.getFullYear()
     return {
       sortKey: 1000 + daysLeft,
-      text: daysLeft === 0 ? `就是今天 · 第 ${yearNum} 年` : `还有 ${daysLeft} 天 · 第 ${yearNum} 年`,
+      label: daysLeft === 0 ? '就是今天' : '还有',
+      num: daysLeft,
+      footL: `每年 ${cnMD(a.date)}`,
+      footR: yearNum > 0 ? `第 ${yearNum} 年` : '今天开始',
     }
   }
   if (start <= today) {
-    const daysPassed = daysBetween(start, today)
-    return { sortKey: -1e6 + start.getTime(), text: `已经 ${daysPassed} 天` }
+    return {
+      sortKey: -1e6 + start.getTime(),
+      label: '已经',
+      num: daysBetween(start, today),
+      footL: `从 ${cnDate(a.date)}开始`,
+      footR: '还在继续',
+    }
   }
-  const daysLeft = daysBetween(today, start)
-  return { sortKey: 1000 + daysLeft, text: `还有 ${daysLeft} 天` }
+  return {
+    sortKey: 1000 + daysBetween(today, start),
+    label: '还有',
+    num: daysBetween(today, start),
+    footL: cnDate(a.date),
+    footR: '倒计时',
+  }
 }
 
 const emptyForm = () => ({ title: '', date: todayStr(), repeat_yearly: false })
@@ -53,6 +72,8 @@ export default function Anniversaries() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
+  const [idx, setIdx] = useState(0)
+  const trackRef = useRef(null)
 
   const say = (t) => { setToast(t); setTimeout(() => setToast(''), 2400) }
 
@@ -86,6 +107,19 @@ export default function Anniversaries() {
   }
 
   const sorted = [...items].sort((a, b) => describe(a).sortKey - describe(b).sortKey)
+  const cur = Math.min(idx, Math.max(0, sorted.length - 1))
+
+  // 滑动时算出当前是第几张，用来点亮下面的分页点
+  const onScroll = () => {
+    const el = trackRef.current
+    if (!el) return
+    const i = Math.round(el.scrollLeft / (el.clientWidth + GAP))
+    if (i !== idx) setIdx(i)
+  }
+  const goTo = (i) => {
+    const el = trackRef.current
+    if (el) el.scrollTo({ left: i * (el.clientWidth + GAP), behavior: 'smooth' })
+  }
 
   return (
     <section className="col rv" style={{ gap: 10 }} data-depth>
@@ -100,18 +134,58 @@ export default function Anniversaries() {
         <div className="glass h-sub" style={{ borderRadius: 24, padding: 18, textAlign: 'center' }}>
           还没有纪念日，点右上角「添加」记一个吧
         </div>
-      ) : (
-        <div className="anniv-list">
-          {sorted.map((a) => {
-            const d = describe(a)
-            return (
-              <button key={a.id} className="glass anniv-card tap" onClick={() => startEdit(a)}>
-                <div className="anniv-title ellipsis">{a.title}</div>
-                <div className="anniv-sub">{d.text}</div>
-              </button>
-            )
-          })}
-        </div>
+      ) : sorted.length > 0 && (
+        <>
+          <div className="an-track" ref={trackRef} onScroll={onScroll}>
+            {sorted.map((a) => {
+              const d = describe(a)
+              const len = String(d.num).length
+              return (
+                <article key={a.id} className="win an-win">
+                  <header className="tb">
+                    <Svg name="doc" size={14} />
+                    <b className="ellipsis">{a.title}</b>
+                    <span className="grow" />
+                    <span className="mono">{dotDate(a.date)}</span>
+                    <button type="button" className="tb-btn tap" onClick={() => startEdit(a)} aria-label={`编辑 ${a.title}`}>
+                      <Svg name="pen" size={12} stroke={2} />编辑
+                    </button>
+                  </header>
+
+                  <div className="wb an-body">
+                    <div className="an-orbit" aria-hidden="true">
+                      <div className="an-spin"><i className="an-ball" /><i className="an-ball k" /></div>
+                      <span className="an-heart"><Svg name="heart" size={26} stroke={1.8} /></span>
+                    </div>
+
+                    <div className="an-top">
+                      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+                        <path d="M16 4 V28 M5.6 10 L26.4 22 M5.6 22 L26.4 10" />
+                      </svg>
+                      <span>{d.label}</span>
+                    </div>
+
+                    <div className="an-numrow">
+                      <div className={`an-num${len >= 5 ? ' l5' : len === 4 ? ' l4' : ''}`}>{d.num}</div>
+                      <span className="an-unit">天</span>
+                    </div>
+                  </div>
+
+                  <footer className="wf"><span>{d.footL}</span><span>{d.footR}</span></footer>
+                </article>
+              )
+            })}
+          </div>
+
+          {sorted.length > 1 && (
+            <div className="an-dots" role="tablist" aria-label="切换纪念日">
+              {sorted.map((a, i) => (
+                <button key={a.id} type="button" role="tab" aria-selected={i === cur} aria-label={a.title}
+                  className={i === cur ? 'on' : undefined} onClick={() => goTo(i)} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {open && (

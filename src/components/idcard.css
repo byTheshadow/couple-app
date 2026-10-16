@@ -57,8 +57,7 @@
 .idc-card[data-cardbg]:not([data-cardbg='none']) { background-image: linear-gradient(135deg, var(--cardTint), var(--cardTint2)); }
 /* 底纹：右下角一圈圈防伪细纹 + 左上角一点高光 */
 .idc-card::before { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-radial-gradient(circle at 78% 112%, transparent 0 5px, var(--paperLine) 5px 5.6px),
-    radial-gradient(circle at 12% 0%, var(--paperLine), transparent 40%); }
+  background: radial-gradient(circle at 12% 0%, var(--paperLine), transparent 40%); }
 .idc-card > :not(.sheen) { position: relative; }
 
 .idc-head { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--paperLine);

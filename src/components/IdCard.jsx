@@ -54,7 +54,7 @@ export default function IdCard({ person, status, onEditAvatar, editBusy = false,
         <div className={cardClass} data-cardbg={s.card_bg || 'none'}>
           <header className="idc-head">
             <span className="idc-emb"><Svg name="heart" size={13} stroke={1.8} /></span>
-            <b>小世界 · 居民身份卡</b>
+            <b>US · 居民身份卡</b>
             <span className="idc-no">{slotNo}</span>
           </header>
 

@@ -1,0 +1,47 @@
+/* 纪念日：一个纪念日一个「档案窗口」，左右滑动切换。独立文件，由 Anniversaries.jsx 自己引入。
+   数字大小用 cqw（窗口内容区宽度的 1%）写，每个 cqw 声明前面都有一行 px 兜底。 */
+
+.an-track { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.an-track::-webkit-scrollbar { display: none; }
+
+.an-win { flex: 0 0 100%; min-width: 0; scroll-snap-align: center; scroll-snap-stop: always; }
+.an-win .tb b { min-width: 0; flex: 0 1 auto; }
+
+.an-body { position: relative; overflow: hidden; container-type: inline-size; min-height: 224px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 14px; padding: 16px 16px 18px; }
+
+/* 左上角的小星号 + 标签（已经 / 还有） */
+.an-top { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; color: var(--ink); }
+.an-top svg { width: 30px; height: 30px; flex-shrink: 0; }
+.an-top span { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; color: var(--ink2); }
+
+/* 大数字：一个细边框的方块 + 灰色的「天」 */
+.an-numrow { position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 6px; }
+.an-num { border: 1.5px solid var(--ink); background: var(--chip); color: var(--ink); max-width: 100%;
+  padding: .04em .14em .02em .1em; font-weight: 700; letter-spacing: -.05em; line-height: 1.02; font-variant-numeric: tabular-nums;
+  font-size: 76px; font-size: 25cqw; }
+.an-num.l4 { font-size: 62px; font-size: 20cqw; }
+.an-num.l5 { font-size: 50px; font-size: 16cqw; }
+.an-unit { padding-bottom: .3em; color: var(--ink2); font-size: 22px; font-size: 7cqw; }
+
+/* 右侧的轨道：一圈实线、一圈虚线、中间一颗心，两颗小球绕着转 */
+.an-orbit { position: absolute; top: 50%; right: -50px; right: -14cqw; width: 210px; width: 62cqw; aspect-ratio: 1; transform: translateY(-50%);
+  border: 1px solid var(--line); border-radius: 50%; pointer-events: none; }
+.an-orbit::before { content: ''; position: absolute; inset: 12%; border: 1px dashed var(--line); border-radius: 50%; }
+.an-spin { position: absolute; inset: 0; animation: anOrbit 32s linear infinite; }
+.an-ball { position: absolute; left: -3%; top: 46%; width: 26px; width: 7.4cqw; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #d6d9df 70%); box-shadow: 0 3px 9px rgba(0,0,0,.22); }
+.an-ball.k { left: auto; top: auto; right: 14%; bottom: 10%; width: 20px; width: 5.6cqw; background: #0b0b0d; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.an-heart { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--ink); }
+@keyframes anOrbit { to { transform: rotate(360deg); } }
+
+/* 分页点 */
+.an-dots { display: flex; justify-content: center; gap: 6px; padding-top: 2px; }
+.an-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--line); transition: width .25s, background .25s; }
+.an-dots button.on { width: 18px; background: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .an-spin { animation: none; }
+  .an-dots button { transition: none; }
+}

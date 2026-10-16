@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
-        name: '我们的小世界',
-        short_name: '小世界',
+              name: 'US',
+        short_name: 'US',
         description: '只属于两个人的小空间',
         theme_color: '#08080a',
         background_color: '#08080a',
