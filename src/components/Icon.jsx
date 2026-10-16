@@ -34,6 +34,14 @@ const PATHS = {
   reply: <path d="M9 14L4 9l5-5M4 9h9a7 7 0 0 1 7 7v1" />,
   copy: <><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></>,
   undo: <path d="M8 5L4 9l4 4M4 9h9a6 6 0 0 1 0 12H9" />,
+  // 涂鸦画板 / 小物页用的图标
+  redo: <path d="M16 5l4 4-4 4M20 9h-9a6 6 0 0 0 0 12h4" />,
+  marker: <><path d="M13 4.5l6.5 6.5-7.5 7.5L6 19l-.5-5.5z" /><path d="M4 21.5h8" /></>,
+  eraser: <g transform="rotate(-45 12 12)"><rect x="3.5" y="8.5" width="17" height="9" rx="2.2" /><path d="M11 8.5v9" /></g>,
+  back: <path d="M15 5l-7 7 7 7" />,
+  send: <><path d="M21 3L10 14" /><path d="M21 3l-7 18-4-7-7-4z" /></>,
+  trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /></>,
+  drawer: <><rect x="4" y="4" width="16" height="16" rx="2.5" /><path d="M4 12h16M10 8h4M10 16h4" /></>,
   // 以下三个是「戳一戳」新增动作用的图标：抱一抱 / 亲一口 / 揍一拳
   hug: <><path d="M4 15c0-5 3.5-9 8-9s8 4 8 9" /><path d="M7 15a5 5 0 0 1 10 0" /></>,
   kiss: <path d="M4 12c2-3 4-3 5 0 .7-2 2-2 3 0 1-2 2.3-2 3 0 1.3-2 3-2 5 0" />,

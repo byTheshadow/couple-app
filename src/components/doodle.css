@@ -1,0 +1,93 @@
+/* 涂鸦小纸条：画板页 + 拆信回放。独立文件，由 DoodlePad.jsx 自己引入。
+   纸张、方格、笔迹用的是固定颜色（不跟明暗主题走），这样 TA 看到的永远和你画的一样；
+   窗口、按钮、弹层等其余部分用 styles.css 里已有的主题变量。 */
+
+/* .btn 里放「图标 + 文字」需要横排（全局 svg 是 block，不加这个会上下叠） */
+.dd-root .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.dd-root .btn.danger { color: #e5484d; }
+.dd-root .btn.send { flex: 1; }
+
+.page.dd { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
+.dd .h-title.sm { font-size: 24px; }
+
+/* 纸：方格底纹用百分比，网格永远是 15×20 个正方形；导出 PNG 时画一模一样的格子 */
+.dd-sheet { position: relative; padding: 0 4px; }
+.dd-paper { position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: 6px; overflow: hidden; background-color: #fbfbf9;
+  background-image: linear-gradient(rgba(26,26,28,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(26,26,28,.09) 1px, transparent 1px);
+  background-size: calc(100% / 15) calc(100% / 20);
+  box-shadow: inset 0 0 0 1px rgba(26,26,28,.09), 0 10px 24px rgba(0,0,0,.16); }
+.dd-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.dd-cv.ro { cursor: pointer; }
+.dd-tape { position: absolute; top: -9px; width: 62px; height: 20px; z-index: 3; pointer-events: none; border: 1px solid var(--gb);
+  background: rgba(190,194,204,.55); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.dd-tape.l { left: 18px; transform: rotate(-7deg); }
+.dd-tape.r { right: 18px; transform: rotate(6deg); }
+.dd-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: #1a1a1c; opacity: .38; pointer-events: none; font-family: var(--serif); font-size: 15px; letter-spacing: .06em; transition: opacity .3s; }
+.dd-empty.gone { opacity: 0; }
+
+/* 工具栏 */
+.dd-tools { display: flex; align-items: center; gap: 8px; }
+.dd-tool { flex: 1; min-width: 0; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--chip);
+  display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 500;
+  transition: background .25s, color .25s, transform .18s; }
+.dd-tool.on { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+.dd-tool:active { transform: scale(.95); }
+.dd-sq { width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--line); background: var(--chip); display: grid; place-items: center;
+  flex-shrink: 0; transition: opacity .2s, transform .18s; }
+.dd-sq:active { transform: scale(.92); }
+.dd-sq[disabled] { opacity: .3; cursor: default; }
+.dd-vsep { width: 1px; height: 24px; background: var(--line); flex-shrink: 0; margin: 0 2px; }
+
+/* 笔刷粗细 */
+.dd-size { display: flex; align-items: center; gap: 12px; }
+.dd-dotbox { width: 44px; height: 44px; border-radius: 14px; background: #fbfbf9; box-shadow: inset 0 0 0 1px rgba(26,26,28,.09);
+  display: grid; place-items: center; flex-shrink: 0; overflow: hidden; }
+.dd-dot { border-radius: 50%; transition: width .12s, height .12s, background .2s; }
+.dd-size .mono { font-size: 12px; color: var(--ink2); width: 22px; text-align: right; }
+.dd-range { flex: 1; -webkit-appearance: none; appearance: none; height: 28px; background: transparent; margin: 0; cursor: pointer; }
+.dd-range::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--chip); box-shadow: inset 0 0 0 1px var(--line); }
+.dd-range::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px; border-radius: 50%;
+  background: var(--btn); border: 3px solid var(--bg); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.dd-range::-moz-range-track { height: 6px; border-radius: 3px; background: var(--chip); box-shadow: inset 0 0 0 1px var(--line); }
+.dd-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--btn); border: 3px solid var(--bg); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+
+/* 颜色 */
+.dd-colors { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; transition: opacity .25s; }
+.dd-colors.off { opacity: .3; pointer-events: none; }
+.dd-sw { aspect-ratio: 1; width: 100%; border-radius: 50%; border: none; padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.14), inset 0 -3px 6px rgba(0,0,0,.12);
+  transition: transform .18s cubic-bezier(.3,1.4,.4,1), outline-offset .18s; outline: 2px solid transparent; outline-offset: 0; }
+.dd-sw.on { outline-color: var(--ink); outline-offset: 3px; transform: scale(1.06); }
+.dd-sw:active { transform: scale(.9); }
+
+/* 底部操作条：贴着屏幕底部 */
+.dd-actions { position: sticky; bottom: calc(env(safe-area-inset-bottom) + 12px); z-index: 10; border-radius: 28px; padding: 10px; display: flex; gap: 10px; }
+
+/* 弹层（离开确认 / 寄出预览） */
+.dd-root .overlay { animation: ddFade .25s ease; }
+.dd-root .sheet { max-height: 94dvh; overflow-y: auto; animation: ddRise .38s cubic-bezier(.2,.9,.3,1); }
+@keyframes ddFade { from { opacity: 0; } }
+@keyframes ddRise { from { transform: translateY(40px); opacity: 0; } }
+
+/* 寄出预览：成品斜放在桌面上 */
+.dd-pv { position: relative; padding: 14px 8px 8px; display: flex; justify-content: center; }
+.dd-pv-paper { position: relative; width: min(76%, 280px); transform: rotate(-1.6deg); }
+.dd-pv-paper img { display: block; width: 100%; height: auto; border-radius: 6px; background: #fbfbf9;
+  box-shadow: 0 14px 30px rgba(0,0,0,.24), 0 0 0 1px rgba(26,26,28,.09); }
+.dd-pv-paper .dd-tape { top: -10px; left: 50%; right: auto; margin-left: -31px; transform: rotate(2deg); }
+.dd-cnt { position: relative; }
+.dd-cnt .field { padding-right: 56px; }
+.dd-cnt span { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 11px; color: var(--ink2); pointer-events: none; }
+.dd-err { padding: 0 6px; font-size: 12.5px; color: #e5484d; }
+.dd-fly { position: fixed; z-index: 95; pointer-events: none; }
+.dd-fly img { width: 100%; height: 100%; display: block; border-radius: 6px; box-shadow: 0 14px 30px rgba(0,0,0,.28); }
+
+/* 拆信回放（放在 TA 拆信的弹层里）：宽度按屏幕高度封顶，小屏手机上也不会把弹层撑出屏幕 */
+.dd-replay { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 6px; }
+.dd-replay .dd-sheet { width: min(100%, 40dvh); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dd-root .overlay, .dd-root .sheet { animation: none; }
+}

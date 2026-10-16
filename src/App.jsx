@@ -8,6 +8,7 @@ const Login = lazy(() => import('./pages/Login'))
 const Home = lazy(() => import('./pages/Home'))
 const StatusEditor = lazy(() => import('./pages/StatusEditor'))
 const Chat = lazy(() => import('./pages/Chat'))
+const Toys = lazy(() => import('./pages/Toys'))
 
 function Loading() {
   return (
@@ -40,7 +41,8 @@ export default function App() {
           <Route path="/login" element={<Sandbox><Login /></Sandbox>} />
           <Route path="/" element={<Protected><Sandbox><Home /></Sandbox></Protected>} />
           <Route path="/status" element={<Protected><Sandbox><StatusEditor /></Sandbox></Protected>} />
-          <Route path="/chat" element={<Protected><Sandbox><Chat /></Sandbox></Protected>} />
+                 <Route path="/chat" element={<Protected><Sandbox><Chat /></Sandbox></Protected>} />
+          <Route path="/toys" element={<Protected><Sandbox><Toys /></Sandbox></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
