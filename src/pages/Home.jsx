@@ -16,12 +16,13 @@ import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
 import Badge from '../components/Badge'
 import IdCard from '../components/IdCard'
+import ChatEntry from '../components/ChatEntry'
 
 // 状态编辑页的路由如果你的 App.jsx 里不是 /status，只改这一行
 const EDIT_ROUTE = '/status'
 
-const KIND_ICON = { note: 'mail', doodle: 'pen', milktea: 'cup', crystal: 'globe', capsule: 'clock', burn: 'flame' }
-const KIND_LABEL = { note: '普通便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚' }
+const KIND_ICON = { note: 'mail', doodle: 'pen', milktea: 'cup', crystal: 'globe', capsule: 'clock', burn: 'flame', riddle: 'lock' }
+const KIND_LABEL = { note: '普通便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚', riddle: '破译信' }
 
 const isLocked = (l) => l.kind === 'capsule' && l.unlock_at && Date.parse(l.unlock_at) > Date.now()
 const daysLeft = (l) => Math.ceil((Date.parse(l.unlock_at) - Date.now()) / 86400000)
@@ -278,6 +279,7 @@ export default function Home() {
             <Svg name="doc" size={14} />
             <b>{me?.display_name || '我'}.profile</b>
             <span className="grow" />
+            <ChatEntry />
             <span className="mono">{clock}</span>
             <span className="ctl"><i>–</i><i>□</i><i>×</i></span>
           </header>

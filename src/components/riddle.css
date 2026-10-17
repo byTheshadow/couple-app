@@ -1,0 +1,42 @@
+/* 破译信：写信页的出题输入框 + 拆信页的猜答案面板
+   这个文件会在 LetterComposer 和 RiddleBox 里各引入一次，里面的 .lc-kinds 覆盖要排在 letter.css 之后 */
+
+/* 写信页现在有 4 种信，一行放下 */
+.lc-kinds { grid-template-columns: repeat(4, 1fr); }
+.lc-kind span { white-space: nowrap; font-size: 12.5px; }
+
+.lc-riddle { display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 0; }
+.lc-riddle input {
+  width: 100%; padding: 10px 12px; font-size: 15px; border: none; outline: none;
+  border-radius: 12px; background: var(--chip); color: var(--ink);
+}
+.lc-riddle input::placeholder { color: var(--ink2); }
+
+/* 拆信页 */
+.rd-box { display: flex; flex-direction: column; gap: 12px; }
+.rd-hint {
+  display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 16px;
+  background: var(--chip); border: 1px dashed var(--ink2); font-size: 15px; line-height: 1.55;
+}
+.rd-hint svg { flex: none; margin-top: 3px; }
+.rd-hint small { flex: none; color: var(--ink2); font-size: 12px; margin-top: 2px; }
+.rd-hint b { font-weight: 600; word-break: break-word; }
+.rd-row { display: flex; gap: 8px; }
+.rd-row .field { flex: 1; min-width: 0; }
+.rd-row .btn { flex: none; min-width: 64px; padding: 0 18px; }
+.rd-row.shake { animation: rd-shake .42s ease; }
+.rd-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--ink2); min-height: 30px; }
+.rd-msg { color: var(--ink); }
+.rd-msg.bad { color: #e5484d; }
+.rd-giveup { border: none; background: none; color: var(--ink2); font-size: 12.5px; text-decoration: underline; cursor: pointer; padding: 6px 2px; }
+.rd-giveup.sure { color: #e5484d; text-decoration: none; font-weight: 600; }
+.rd-tag { font-size: 12.5px; color: var(--ink2); }
+
+@keyframes rd-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) { .rd-row.shake { animation: none; } }

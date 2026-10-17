@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase'
 import { DoodleReplay } from './DoodlePad'
 import MilkTeaTicket from './MilkTeaTicket'
 import CrystalLetter from './CrystalLetter'
+import RiddleBox from './RiddleBox'
 import { normalizePayload } from './crystal/data'
-const KIND_LABEL = { note: '便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚' }
+const KIND_LABEL = { note: '便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚', riddle: '破译信' }
 
 
 /** 拆信：正文只能通过服务端 open_letter 拿到（时间胶囊未到点会被拒绝） */
@@ -48,6 +49,13 @@ export default function LetterModal({ letter, onClose, onChanged }) {
     const close = () => (letter.kind === 'burn' && state.data ? burnNow() : onClose())
   // 水晶球：payload 一律先过校验，认不出来就当普通信显示正文
   const crystal = state.data && letter.kind === 'crystal' ? normalizePayload(state.data.o_payload) : null
+  // 破译信：服务端在没解开之前不会返回正文，只返回提示；猜对或放弃后才有正文
+  const rp = state.data && letter.kind === 'riddle' && state.data.o_payload && state.data.o_payload.riddle ? state.data.o_payload : null
+  const riddleLocked = !!rp && !rp.solved && !rp.gave_up
+  const solveTo = (o_payload, o_body) => {
+    setState({ loading: false, error: null, data: { o_body, o_payload, o_kind: 'riddle', o_title: letter.title } })
+    onChanged?.()
+  }
 
   return (
     <div className="overlay" onClick={close}>
@@ -62,10 +70,20 @@ export default function LetterModal({ letter, onClose, onChanged }) {
               {state.data && letter.kind === 'doodle' && state.data.o_payload && <DoodleReplay payload={state.data.o_payload} />}
         {state.data && letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea && <MilkTeaTicket payload={state.data.o_payload} mode="received" />}
         {crystal && <CrystalLetter payload={crystal} onClose={onClose} />}
-        {state.data && !(letter.kind === 'doodle' && state.data.o_payload) && !(letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea) && !crystal && (
+        {riddleLocked && (
+          <RiddleBox
+            letterId={letter.id} hint={rp.hint} tries={rp.tries || 0}
+            onSolved={(body, tries) => solveTo({ riddle: true, solved: true, tries }, body)}
+            onGaveUp={(answer, body, tries) => solveTo({ riddle: true, gave_up: true, answer, tries }, body)}
+          />
+        )}
+        {rp && !riddleLocked && (
+          <div className="rd-tag">{rp.gave_up ? `放弃了，答案是「${rp.answer}」` : `猜了 ${rp.tries} 次，破解成功`}</div>
+        )}
+        {state.data && !riddleLocked && !(letter.kind === 'doodle' && state.data.o_payload) && !(letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea) && !crystal && (
           <div style={{ fontSize: 17, lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>{state.data.o_body}</div>
         )}
-        <button className="btn" onClick={close}>{letter.kind === 'burn' && state.data ? '看完了，焚毁' : '收好'}</button>
+        <button className="btn" onClick={close}>{letter.kind === 'burn' && state.data ? '看完了，焚毁' : riddleLocked ? '先放着' : '收好'}</button>
       </div>
     </div>
   )

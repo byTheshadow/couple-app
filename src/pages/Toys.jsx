@@ -77,27 +77,10 @@ function ArtCrystal() {
   )
 }
 
-function ArtStore() {
-  const awning = { fill: 'rgba(229,72,77,.85)' }
-  return (
-    <svg className="il" viewBox="0 0 132 92" {...ART}>
-      <path d="M20 34V92M112 34V92" />
-      <rect x="28" y="48" width="26" height="22" rx="2" style={PAPER} />
-      <rect x="70" y="48" width="30" height="44" rx="2" style={PAPER} />
-      <path d="M74 70h4" />
-      <text x="41" y="63" textAnchor="middle" fontSize="10" style={{ fontFamily: 'var(--mono)' }} stroke="none" fill="currentColor">24h</text>
-      <path d="M14 30L21 8H111L118 30" style={awning} />
-      <path d="M14 30q6.5 9 13 0q6.5 9 13 0q6.5 9 13 0q6.5 9 13 0q6.5 9 13 0q6.5 9 13 0q6.5 9 13 0q6.5 9 13 0" style={awning} />
-      <path d="M7 4l-3 8M122 2l-3 8M127 18l-3 8" opacity=".5" />
-    </svg>
-  )
-}
-
 const DRAWERS = [
   { id: 'doodle', no: '01', name: '涂鸦小纸条', cap: '画一张，寄给 TA', go: '拿出来', Art: ArtDoodle, ready: true },
   { id: 'milktea', no: '02', name: '奶茶店', cap: '做一杯，寄张小票给 TA', go: '拿出来', Art: ArtMilkTea, ready: true },
   { id: 'crystal', no: '03', name: '水晶球', cap: '摇一摇，看看今天', go: '拿出来', Art: ArtCrystal, ready: true },
-  { id: 'store', no: '04', name: '雨夜便利店', cap: '下着雨，灯还亮着', go: '还没开门', Art: ArtStore, ready: false },
 ]
 
 // 涂鸦草稿：只要本机存着草稿，抽屉前脸就挂一个「有草稿」
