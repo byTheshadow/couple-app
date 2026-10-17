@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase'
 
 import { DoodleReplay } from './DoodlePad'
 import MilkTeaTicket from './MilkTeaTicket'
-const KIND_LABEL = { note: '便签', doodle: '涂鸦', milktea: '奶茶小票', capsule: '时间胶囊', burn: '阅后即焚' }
+import CrystalLetter from './CrystalLetter'
+import { normalizePayload } from './crystal/data'
+const KIND_LABEL = { note: '便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚' }
 
 
 /** 拆信：正文只能通过服务端 open_letter 拿到（时间胶囊未到点会被拒绝） */
@@ -43,7 +45,9 @@ export default function LetterModal({ letter, onClose, onChanged }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [left])
 
-  const close = () => (letter.kind === 'burn' && state.data ? burnNow() : onClose())
+    const close = () => (letter.kind === 'burn' && state.data ? burnNow() : onClose())
+  // 水晶球：payload 一律先过校验，认不出来就当普通信显示正文
+  const crystal = state.data && letter.kind === 'crystal' ? normalizePayload(state.data.o_payload) : null
 
   return (
     <div className="overlay" onClick={close}>
@@ -57,7 +61,8 @@ export default function LetterModal({ letter, onClose, onChanged }) {
         {state.error && <div className="h-sub">{state.error}</div>}
               {state.data && letter.kind === 'doodle' && state.data.o_payload && <DoodleReplay payload={state.data.o_payload} />}
         {state.data && letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea && <MilkTeaTicket payload={state.data.o_payload} mode="received" />}
-        {state.data && !(letter.kind === 'doodle' && state.data.o_payload) && !(letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea) && (
+        {crystal && <CrystalLetter payload={crystal} onClose={onClose} />}
+        {state.data && !(letter.kind === 'doodle' && state.data.o_payload) && !(letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea) && !crystal && (
           <div style={{ fontSize: 17, lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>{state.data.o_body}</div>
         )}
         <button className="btn" onClick={close}>{letter.kind === 'burn' && state.data ? '看完了，焚毁' : '收好'}</button>

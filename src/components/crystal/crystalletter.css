@@ -1,0 +1,7 @@
+/* TA 寄来的水晶球：拆信时那一块。独立文件，由 CrystalLetter.jsx 自己引入。 */
+.crl { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0 2px; }
+.crl-snap { width: 168px; border-radius: 16px; box-shadow: var(--shadow); background: var(--chip); }
+.crl-none { height: 212px; display: grid; place-items: center; color: #fff; font-size: 13px; opacity: .9; }
+.crl-note { font-size: 17px; line-height: 1.6; text-align: center; font-family: var(--serif); }
+.crl-sub { text-align: center; }
+.crl-btn { align-self: stretch; }

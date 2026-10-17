@@ -20,8 +20,8 @@ import IdCard from '../components/IdCard'
 // 状态编辑页的路由如果你的 App.jsx 里不是 /status，只改这一行
 const EDIT_ROUTE = '/status'
 
-const KIND_ICON = { note: 'mail', doodle: 'pen', milktea: 'cup', capsule: 'clock', burn: 'flame' }
-const KIND_LABEL = { note: '普通便签', doodle: '涂鸦', milktea: '奶茶小票', capsule: '时间胶囊', burn: '阅后即焚' }
+const KIND_ICON = { note: 'mail', doodle: 'pen', milktea: 'cup', crystal: 'globe', capsule: 'clock', burn: 'flame' }
+const KIND_LABEL = { note: '普通便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚' }
 
 const isLocked = (l) => l.kind === 'capsule' && l.unlock_at && Date.parse(l.unlock_at) > Date.now()
 const daysLeft = (l) => Math.ceil((Date.parse(l.unlock_at) - Date.now()) / 86400000)
