@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import PageBoundary from './components/PageBoundary'
+import Splash from './components/Splash'
 
 // 每个页面都是独立的懒加载块 + 独立的错误边界：一页崩了不会连累别的页
 const Login = lazy(() => import('./pages/Login'))
@@ -37,6 +38,7 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        <Splash />
         <Routes>
           <Route path="/login" element={<Sandbox><Login /></Sandbox>} />
           <Route path="/" element={<Protected><Sandbox><Home /></Sandbox></Protected>} />
