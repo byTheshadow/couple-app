@@ -1,0 +1,99 @@
+/* 水晶球：摆球页。独立文件，由 Crystal.jsx 自己引入。
+   界面（窗口、按钮、弹层）用 styles.css 里已有的主题变量；只有 3D 场景保留预览里的样子。
+   悬在场景上的面板一律用不透明度较高的 --win2，而不是半透明的玻璃，避免背景太亮时看不清字。
+   --cr-panel 由 Crystal.jsx 实时写入：底部面板现在有多高（选中条据此浮在面板上方）。 */
+
+.cr-root { position: fixed; inset: 0; z-index: 30; background: #0b0b10; overflow: hidden; --cr-panel: 0px; }
+.cr-root .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.cr-root .btn.send { flex: 1; }
+.cr-stage { position: absolute; inset: 0; }
+
+.cr-load { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: #0b0b10; transition: opacity .6s; }
+.cr-load.gone { opacity: 0; pointer-events: none; }
+.cr-load i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,.16); border-top-color: #fff; animation: cr-spin .9s linear infinite; display: block; }
+@keyframes cr-spin { to { transform: rotate(360deg); } }
+
+/* 界面层：竖着排「顶栏 / 底部面板」，居中最宽 430px（和整个 app 一致）；空白处的手势留给下面的 3D 画面 */
+.cr-ui { position: absolute; inset: 0; z-index: 2; max-width: 430px; margin: 0 auto; pointer-events: none;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.cr-ui > * { pointer-events: auto; }
+.cr-ui.off { display: none; }
+
+.cr-top { display: flex; align-items: center; gap: 8px; }
+.cr-top .icon-btn { flex-shrink: 0; background: var(--win2); color: var(--ink); }
+.cr-glyph { font-size: 16px; line-height: 1; }
+.cr-title { flex: 1; min-width: 0; padding: 0 4px; text-shadow: 0 1px 8px rgba(0,0,0,.45); color: #fff; }
+.cr-title h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.cr-title .sub { font-size: 11px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.cr-hint { position: absolute; left: 50%; top: calc(env(safe-area-inset-top) + 68px); transform: translateX(-50%); max-width: calc(100% - 32px);
+  padding: 6px 13px; border-radius: 999px; font-size: 12px; white-space: nowrap; color: var(--ink); background: var(--win2); border: 1px solid var(--line);
+  pointer-events: none; animation: cr-fade .35s both; }
+@keyframes cr-fade { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } }
+
+/* 选中摆件时浮在面板上方的小条 */
+.cr-sel { position: absolute; left: 12px; right: 12px; bottom: calc(var(--cr-panel, 0px) + env(safe-area-inset-bottom) + 22px);
+  display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 14px; background: var(--win2); border: 1.5px solid var(--bd);
+  font-size: 12.5px; animation: cr-rise .22s both; }
+.cr-sel b { font-weight: 600; margin-right: 2px; padding-left: 4px; }
+.cr-sel .grow { flex: 1; }
+@keyframes cr-rise { from { opacity: 0; transform: translateY(6px); } }
+.cr-sq { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 10px; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+  display: inline-grid; place-items: center; font-size: 14px; cursor: pointer; transition: transform .16s, opacity .2s; }
+.cr-sq:active { transform: scale(.92); }
+.cr-sq.warn { color: #e5484d; }
+.cr-sq[disabled] { opacity: .4; cursor: default; }
+
+/* 底部窗口 */
+.cr-panel { background: var(--win2); }
+.cr-wb { display: flex; flex-direction: column; gap: 12px; }
+.cr-ptitle b { font-size: 17px; font-weight: 650; }
+.cr-tabs { display: flex; gap: 6px; padding: 10px 12px 0; overflow-x: auto; scrollbar-width: none; }
+.cr-tabs::-webkit-scrollbar { display: none; }
+.cr-tab { flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; font-size: 13px; color: var(--ink); background: var(--chip); border: 1px solid var(--line);
+  cursor: pointer; transition: background .25s, color .25s, transform .18s; }
+.cr-tab:active { transform: scale(.94); }
+.cr-tab.on { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+.cr-body { padding: 10px 12px 12px; max-height: 38vh; overflow-y: auto; overscroll-behavior: contain; }
+@supports (height: 1dvh) { .cr-body { max-height: 38dvh; } }
+
+.cr-lbl { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; margin-bottom: 6px; font-size: 11.5px; color: var(--ink2); }
+.cr-lbl span:last-child { font-family: var(--mono); }
+.cr-sep { height: 1px; background: var(--line); margin: 10px 0; }
+.cr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.cr-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px 7px; border-radius: 14px; background: var(--chip); border: 1px solid var(--line);
+  color: var(--ink); font-size: 11.5px; line-height: 1.2; text-align: center; cursor: pointer; transition: transform .16s, background .2s, color .2s; }
+.cr-cell:active { transform: scale(.95); }
+.cr-cell.on { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+.cr-cell .em { font-size: 19px; line-height: 1; }
+.cr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cr-row.tight { gap: 6px; }
+.cr-row input[type=range] { flex: 1; height: 26px; accent-color: var(--ink); }
+.cr-row .btn { flex: 1; }
+.cr-note { width: 100%; border: 1px solid var(--line); outline: none; border-radius: 12px; background: var(--chip); color: var(--ink);
+  padding: 10px 12px; font-size: 16px; font-family: inherit; line-height: 1.5; resize: none; }
+.cr-note:focus { box-shadow: 0 0 0 1.5px var(--ink2); }
+
+/* 摆件架 */
+.cr-shelf { display: flex; flex-direction: column; gap: 8px; }
+.cr-sh { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 14px; background: var(--chip); border: 1px solid var(--line); }
+.cr-thumb { width: 46px; height: 52px; flex: 0 0 auto; object-fit: cover; border-radius: 9px; background: var(--btn); }
+.cr-sh .t { flex: 1; min-width: 0; }
+.cr-sh .t b { display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cr-sh .t small { font-size: 11px; color: var(--ink2); font-family: var(--mono); }
+.cr-empty { text-align: center; color: var(--ink2); font-size: 12.5px; padding: 18px 10px; line-height: 1.7; }
+
+/* 助眠：整页压暗，只留一个时钟 */
+.cr-sleep { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; cursor: pointer;
+  padding: 0 0 calc(env(safe-area-inset-bottom) + 34px); background: rgba(0,0,0,.55); animation: cr-dim 1.2s both; }
+@keyframes cr-dim { from { background: rgba(0,0,0,0); } }
+.cr-clock { font-size: 30px; color: #fff; opacity: .5; letter-spacing: .04em; }
+.cr-tip { margin-top: 8px; font-size: 12px; color: #fff; opacity: .3; }
+
+/* 寄出确认 */
+.cr-sendcard { display: flex; flex-direction: column; align-items: center; gap: 10px; transition: transform .8s cubic-bezier(.5,0,.8,.4), opacity .8s; }
+.cr-sendcard.away { transform: translateY(-60vh) scale(.3) rotate(8deg); opacity: 0; }
+.cr-snap { width: 150px; border-radius: 14px; box-shadow: var(--shadow); background: var(--chip); }
+.cr-nosnap { height: 190px; display: grid; place-items: center; font-size: 12px; color: var(--ink2); }
+.cr-err { font-size: 13px; color: #e5484d; }
