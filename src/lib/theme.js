@@ -24,7 +24,8 @@ applyTheme(getTheme())
 export function useTheme() {
   const [theme, setTheme] = useState(getTheme)
   const toggle = useCallback(() => {
-    const next = theme === 'light' ? 'dark' : 'light'
+    const i = THEMES.findIndex((t) => t.id === theme)
+    const next = THEMES[(i + 1) % THEMES.length].id
     applyTheme(next)
     setTheme(next)
   }, [theme])
