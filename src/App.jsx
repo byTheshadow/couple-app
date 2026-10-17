@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
+import './lib/perf'
 import PageBoundary from './components/PageBoundary'
 import Splash from './components/Splash'
 

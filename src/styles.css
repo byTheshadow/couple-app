@@ -57,21 +57,25 @@ svg { display: block; }
 .shell { position: relative; z-index: 1; min-height: 100dvh; max-width: 430px; margin: 0 auto; overflow-x: clip; }
 .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
 .blobs { position: absolute; inset: -8%; translate: 0 calc(var(--sy, 0) * -.12px); }
-.blob { filter: blur(72px); pointer-events: none; will-change: translate, scale, rotate; }
+.blob { filter: blur(44px); pointer-events: none; will-change: translate, scale; }
 .blobs > .blob { position: absolute; }
 .shell > .blob { position: fixed; z-index: 0; }
 .blob.a { width: 58vmax; height: 58vmax; max-width: 640px; max-height: 640px; top: -8%; right: -10%; background: var(--b1);
-  animation: morph 21s ease-in-out infinite, driftA 28s ease-in-out infinite, inhale 9s ease-in-out infinite; }
+  border-radius: 58% 42% 61% 39% / 45% 55% 45% 55%;
+  animation: driftA 28s ease-in-out infinite, inhale 9s ease-in-out infinite; }
 .blob.b { width: 52vmax; height: 52vmax; max-width: 600px; max-height: 600px; top: 38%; left: -16%; background: var(--b2);
-  animation: morph 25s ease-in-out -7s infinite, driftB 31s ease-in-out infinite, inhale 11s ease-in-out -3s infinite; }
+  border-radius: 40% 60% 45% 55% / 62% 38% 62% 38%;
+  animation: driftB 31s ease-in-out infinite, inhale 11s ease-in-out -3s infinite; }
 .blob.c { width: 48vmax; height: 48vmax; max-width: 560px; max-height: 560px; bottom: -12%; right: -8%; background: var(--b3);
-  animation: morph 23s ease-in-out -12s infinite, driftC 26s ease-in-out infinite, inhale 8s ease-in-out -5s infinite; }
+  border-radius: 55% 45% 38% 62% / 40% 60% 40% 60%;
+  animation: driftC 26s ease-in-out infinite, inhale 8s ease-in-out -5s infinite; }
 .blob.d { width: 36vmax; height: 36vmax; max-width: 420px; max-height: 420px; top: 4%; left: -8%; background: var(--b4);
-  animation: morph 29s ease-in-out -4s infinite, driftA 34s ease-in-out -9s infinite, inhale 12s ease-in-out -8s infinite; }
+  border-radius: 58% 42% 61% 39% / 45% 55% 45% 55%; }
 .blob.e { width: 40vmax; height: 40vmax; max-width: 460px; max-height: 460px; bottom: 6%; left: 18%; background: var(--b2);
-  animation: morph 22s ease-in-out -15s infinite, driftB 24s ease-in-out -6s infinite, inhale 10s ease-in-out -2s infinite; }
-.aurora { position: absolute; left: 50%; top: 40%; width: 150vmax; height: 150vmax; margin: -75vmax 0 0 -75vmax; opacity: .32; filter: blur(90px);
+  border-radius: 40% 60% 45% 55% / 62% 38% 62% 38%; }
+.aurora { position: absolute; left: 50%; top: 40%; width: 110vmax; height: 110vmax; margin: -55vmax 0 0 -55vmax; opacity: .3; filter: blur(55px);
   background: conic-gradient(from 0deg, transparent, var(--b1), transparent 28%, var(--b4), transparent 62%, var(--b2), transparent); animation: spin 80s linear infinite; }
+html[data-bg-paused] .blob, html[data-bg-paused] .aurora { animation-play-state: paused; }
 @keyframes morph {
   0%, 100% { border-radius: 58% 42% 61% 39% / 45% 55% 45% 55%; rotate: 0deg; }
   33% { border-radius: 40% 60% 45% 55% / 62% 38% 62% 38%; rotate: 40deg; }
@@ -95,7 +99,7 @@ svg { display: block; }
    3. 通用组件
    ===================================================================== */
 .glass { background: var(--glass); border: 1px solid var(--gb);
-  backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%); box-shadow: var(--shadow); }
+ backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);  box-shadow: var(--shadow); }
 .tap { cursor: pointer; transition: scale .18s ease, opacity .18s ease, background .25s; }
 .tap:hover { opacity: .9; }
 .tap:active { scale: .97; }
@@ -449,7 +453,7 @@ textarea.field { resize: none; line-height: 1.5; }
    11. 档案窗口系统：标题栏窗口 + 文件夹导航（主页第二轮重做）
    ===================================================================== */
 .win { position: relative; border: 1.5px solid var(--bd); border-radius: 16px; background: var(--win);
-  backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%); box-shadow: var(--shadow); }
+   backdrop-filter: blur(14px) saturate(145%); -webkit-backdrop-filter: blur(14px) saturate(145%);box-shadow: var(--shadow); }
 /* 顶部"我的档案"窗口复用 .hero 的头像/装饰/跑马灯样式，这里把 .hero 自带的 flex/padding 清零，
    交给 .win 的标题栏 + .wb 来排版，不然两套布局规则会打架 */
 .win.hero { display: block; padding: 0; gap: 0; }
@@ -466,7 +470,7 @@ textarea.field { resize: none; line-height: 1.5; }
 .folders { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .folder { position: relative; height: 86px; border: none; background: none; padding: 0; color: var(--ink); perspective: 600px; transition: transform .2s; }
 .folder:active { transform: scale(.97); }
-.fl-back { position: absolute; left: 0; right: 0; top: 12px; bottom: 0; border: 1.5px solid var(--bd); border-radius: 4px 14px 14px 14px; background: var(--win); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); transition: background .3s; }
+.fl-back { position: absolute; left: 0; right: 0; top: 12px; bottom: 0; border: 1.5px solid var(--bd); border-radius: 4px 14px 14px 14px; background: var(--win); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: background .3s; }
 .fl-back::before { content: ''; position: absolute; left: -1.5px; top: -12px; width: 48%; height: 12px; border: 1.5px solid var(--bd); border-bottom: 0; border-radius: 8px 8px 0 0; background: inherit; }
 .fl-paper { position: absolute; left: 9px; right: 9px; top: 14px; height: 46px; border-radius: 3px; background: var(--paper); transition: transform .5s cubic-bezier(.3,1.4,.4,1); }
 .fl-front { position: absolute; left: 0; right: 0; top: 30px; bottom: 0; border: 1.5px solid var(--bd); border-radius: 6px 6px 14px 14px; background: var(--win2); transform-origin: 50% 100%; transition: transform .5s cubic-bezier(.3,1.4,.4,1); }
