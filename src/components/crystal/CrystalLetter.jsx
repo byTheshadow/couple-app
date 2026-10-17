@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ENVS, describe, cleanNote } from './crystal/data'
+import { ENVS, describe, cleanNote } from './data'
 import './crystalletter.css'
 
 /* ===========================================================================

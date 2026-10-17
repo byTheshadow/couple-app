@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 
 import { DoodleReplay } from './DoodlePad'
 import MilkTeaTicket from './MilkTeaTicket'
-import CrystalLetter from './CrystalLetter'
+import CrystalLetter from './crystal/CrystalLetter'
 import RiddleBox from './RiddleBox'
 import { normalizePayload } from './crystal/data'
 const KIND_LABEL = { note: '便签', doodle: '涂鸦', milktea: '奶茶小票', crystal: '水晶球', capsule: '时间胶囊', burn: '阅后即焚', riddle: '破译信' }
