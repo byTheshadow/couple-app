@@ -1,6 +1,13 @@
 import { useCallback, useState } from 'react'
+import './dusk'
 
 const KEY = 'couple-theme'
+
+export const THEMES = [
+  { id: 'light', label: '浅色' },
+  { id: 'dark', label: '深色' },
+  { id: 'dusk', label: '晚霞' },
+]
 
 export function getTheme() {
   try { return localStorage.getItem(KEY) || 'light' } catch { return 'light' }
@@ -21,5 +28,9 @@ export function useTheme() {
     applyTheme(next)
     setTheme(next)
   }, [theme])
-  return { theme, toggle }
+   const choose = useCallback((next) => {
+    applyTheme(next)
+    setTheme(next)
+  }, [])
+  return { theme, toggle, choose }
 }

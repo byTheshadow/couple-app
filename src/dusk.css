@@ -1,0 +1,66 @@
+/* =====================================================================
+   晚霞主题（data-theme='dusk'）：和开屏页同一种弥散光 + 颗粒，
+   整页底色会跟着一天里的时间慢慢变（颜色由 src/lib/dusk.js 写入）。
+   文字、卡片、按钮沿用「浅色」那一套，只换背景和玻璃的通透度。
+   想让变色更快/更慢：改下面 transition 里的 40s。
+   ===================================================================== */
+
+/* 注册成颜色类型，浏览器才会在两个颜色之间平滑过渡 */
+@property --dk1 { syntax: '<color>'; inherits: true; initial-value: #a4aee3; }
+@property --dk2 { syntax: '<color>'; inherits: true; initial-value: #c4c4e7; }
+@property --dk3 { syntax: '<color>'; inherits: true; initial-value: #f8dcc0; }
+@property --dk4 { syntax: '<color>'; inherits: true; initial-value: #ff8a3d; }
+
+:root[data-theme='dusk'] {
+  color-scheme: light;
+  background: var(--dk2); /* 下拉回弹时露出来的颜色 */
+  transition: --dk1 40s linear, --dk2 40s linear, --dk3 40s linear, --dk4 40s linear;
+
+  --bg: color-mix(in srgb, var(--dk2) 70%, #ffffff);
+  --ink: #0e0e10; --ink2: rgba(14,14,16,.52); --line: rgba(14,14,16,.14);
+  --glass: rgba(255,255,255,.42); --gb: rgba(255,255,255,.72); --shadow: 0 10px 40px rgba(70,50,110,.14);
+  --chip: rgba(14,14,16,.06); --btn: #0e0e10; --btnInk: #fff;
+  --b1: rgba(255,255,255,.6);
+  --b2: color-mix(in srgb, var(--dk4) 40%, transparent);
+  --b3: color-mix(in srgb, var(--dk1) 55%, transparent);
+  --b4: rgba(255,255,255,.38);
+  --av1: #ffffff; --av2: #cfd2d9; --av3: #7b7f89; --avInk: rgba(14,14,16,.62);
+  --env1: #ffffff; --env2: #dcdfe5; --env3: #f0f1f4;
+  --paper: #fbfbf9; --paperInk: #1a1a1c; --paperLine: rgba(26,26,28,.09);
+  --pass: linear-gradient(160deg, #ffffff, #e4e6eb); --passInk: #0e0e10; --passLine: rgba(14,14,16,.16);
+  --win: rgba(255,255,255,.55); --win2: rgba(255,255,255,.88); --bd: rgba(14,14,16,.88); --spot: rgba(255,255,255,.75);
+  /* 聊天页专用变量（chat.css 里 light / dark 各有一组，这里补上晚霞的） */
+  --meBg: rgba(14,14,16,.86); --meInk: #f6f6f8; --taBg: rgba(255,255,255,.5); --bar: rgba(255,255,255,.62);
+}
+
+/* 底色：三段渐变 + 一层胶片颗粒（颗粒和渐变用 overlay 叠在一起） */
+:root[data-theme='dusk'] body { background: transparent; }
+:root[data-theme='dusk'] body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, var(--dk1) 0%, var(--dk2) 36%, var(--dk3) 72%, color-mix(in srgb, var(--dk4) 55%, var(--dk3)) 100%);
+  background-size: 180px 180px, auto;
+  background-blend-mode: overlay, normal;
+}
+
+/* 会呼吸的光晕（和开屏页同一个节奏） */
+:root[data-theme='dusk'] body::after {
+  content: ''; position: fixed; z-index: 0; pointer-events: none;
+  left: -20vw; top: calc(46% - 70vw); width: 140vw; height: 140vw; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--dk4) 80%, transparent), color-mix(in srgb, var(--dk4) 0%, transparent) 72%);
+  will-change: transform, opacity;
+  animation: dusk-breathe 6.4s ease-in-out infinite;
+}
+@keyframes dusk-breathe {
+  0%, 100% { transform: scale(.86); opacity: .7; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+/* 晚霞自己有光晕，页面里原来的漂浮光团调淡一点，免得太花 */
+:root[data-theme='dusk'] .bg { opacity: .7; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme='dusk'] { transition: none; }
+  :root[data-theme='dusk'] body::after { animation: none; }
+}

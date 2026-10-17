@@ -6,7 +6,9 @@ import { useScrollFx } from '../lib/scrollfx'
 import Whisper from '../components/Whisper'
 import { MusicModal, NowPlaying } from '../components/Music'
 import TabBar from '../components/TabBar'
-import { CARD_BGS, DECORATIONS, MOODS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
+import { CARD_BGS, DECORATIONS, MOOD_GROUPS, STATUS_ICONS, StatusIcon, Svg } from '../components/Icon'
+import { THEMES, useTheme } from '../lib/theme'
+import '../components/moodpick.css'
 import Badge from '../components/Badge'
 import IdCard from '../components/IdCard'
 
@@ -48,7 +50,9 @@ export default function StatusEditor() {
     const [musicBusy, setMusicBusy] = useState(false)
   const [musicOpen, setMusicOpen] = useState(false)
   const [toast, setToast] = useState('')
-  const [view, setView] = useState('me') // me = 我自己看到的卡，ta = TA 手机上看到的工牌
+    const [view, setView] = useState('me') // me = 我自己看到的卡，ta = TA 手机上看到的工牌
+  const [moodTab, setMoodTab] = useState(0) // 心情选择器当前在哪个分类
+  const { theme, choose: chooseTheme } = useTheme()
   const fileRef = useRef(null)
   const musicFileRef = useRef(null)
 
@@ -226,10 +230,22 @@ export default function StatusEditor() {
             ))}
           </div>
 
-          <div className="label" style={{ marginTop: 4 }}>心情</div>
+                    <div className="label" style={{ marginTop: 4 }}>页面主题（只对这台设备生效）</div>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            {MOODS.map((em) => (
-              <button key={em} type="button" className={`pill mood-pick${form.mood === em ? ' on' : ''}`}
+            {THEMES.map((t) => (
+              <button key={t.id} type="button" className={`pill${theme === t.id ? ' on' : ''}`} onClick={() => chooseTheme(t.id)}>{t.label}</button>
+            ))}
+          </div>
+
+          <div className="label" style={{ marginTop: 4 }}>心情 / 小图标（点一下选中，再点一下取消）</div>
+          <div className="mood-tabs">
+            {MOOD_GROUPS.map((g, i) => (
+              <button key={g.id} type="button" className={`mood-tab${moodTab === i ? ' on' : ''}`} onClick={() => setMoodTab(i)}>{g.label}</button>
+            ))}
+          </div>
+          <div className="mood-grid">
+            {MOOD_GROUPS[moodTab].items.map((em) => (
+              <button key={em} type="button" className={`mood-cell${form.mood === em ? ' on' : ''}`}
                 onClick={() => set('mood', form.mood === em ? '' : em)}>{em}</button>
             ))}
           </div>
