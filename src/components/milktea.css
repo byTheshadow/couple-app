@@ -1,0 +1,114 @@
+/* 奶茶店：点单页 + 小票。独立文件，由 MilkTea.jsx / MilkTeaTicket.jsx 自己引入。
+   界面（窗口、按钮、弹层）用 styles.css 里已有的主题变量；
+   小票纸张是固定颜色（不跟明暗主题走），TA 看到的永远和你寄出的一样。
+   注意：3D 场景的昼夜和 app 的明暗主题可以不一致（比如暗色主题里手动切成白天），
+   所以悬在场景上的面板一律用不透明度较高的 --win2，而不是半透明的玻璃，避免看不清字。 */
+
+.mt-root { position: fixed; inset: 0; z-index: 30; background: #0d0c10; overflow: hidden; }
+.mt-root .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.mt-root .btn.danger { color: #e5484d; }
+.mt-root .btn.send { flex: 1; }
+
+.mt-stage { position: absolute; inset: 0; }
+.mt-vig { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 44%, transparent 45%, rgba(0,0,0,.34) 100%); }
+.mt-load { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: #0d0c10; transition: opacity .6s; }
+.mt-load.gone { opacity: 0; pointer-events: none; }
+.mt-load i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,.16); border-top-color: #fff; animation: mt-spin .9s linear infinite; display: block; }
+@keyframes mt-spin { to { transform: rotate(360deg); } }
+
+/* 界面层：竖着排「顶栏 / 底部面板」，居中最宽 430px（和整个 app 一致）；空白处的手势留给下面的 3D 画面 */
+.mt-ui { position: absolute; inset: 0; z-index: 2; max-width: 430px; margin: 0 auto; pointer-events: none;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.mt-ui > * { pointer-events: auto; }
+
+.mt-top { display: flex; align-items: center; gap: 8px; }
+.mt-top .icon-btn { flex-shrink: 0; background: var(--win2); color: var(--ink); }
+.mt-steps { flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 6px; overflow-x: auto; scrollbar-width: none;
+  border-radius: 999px; background: var(--win2); }
+.mt-steps::-webkit-scrollbar { display: none; }
+.mt-sp { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--ink2); white-space: nowrap; transition: background .3s, color .3s; }
+.mt-sp i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+.mt-sp.on { background: var(--btn); color: var(--btnInk); }
+.mt-sp.on i { opacity: 1; }
+.mt-sp.done { color: var(--ink); }
+
+/* 底部点单窗口 */
+.mt-panel { background: var(--win2); transition: opacity .3s; }
+.mt-panel.busy .mt-opts, .mt-panel.busy .btn { pointer-events: none; }
+.mt-wb { display: flex; flex-direction: column; gap: 12px; }
+.mt-ptitle { display: flex; align-items: baseline; gap: 9px; }
+.mt-ptitle b { font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.mt-ptitle span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink2); }
+
+.mt-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.mt-op { flex: 1 1 auto; min-width: 72px; height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--chip); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: background .22s, color .22s, transform .16s, opacity .2s; }
+.mt-op:active { transform: scale(.95); }
+.mt-op.on { background: var(--btn); color: var(--btnInk); border-color: transparent; }
+.mt-op.wide { flex-basis: 100%; }
+.mt-op[disabled] { cursor: default; }
+.mt-op[disabled]:not(.on) { opacity: .4; }
+.mt-op em { font-style: normal; font-family: var(--mono); font-size: 11px; opacity: .6; }
+.mt-op .sw { width: 13px; height: 13px; border-radius: 50%; flex: 0 0 auto; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+
+.mt-meter { height: 7px; border-radius: 4px; background: var(--chip); overflow: hidden; }
+.mt-meter i { display: block; height: 100%; border-radius: 4px; background: var(--btn); transition: width .25s cubic-bezier(.2,.9,.3,1); }
+
+/* 写小票页：盖在 3D 画面上，整页可以上下滑 */
+.mt-tl { position: absolute; inset: 0; z-index: 5; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: rgba(8,7,11,.58); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.mt-tl-in { max-width: 430px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px;
+  padding: calc(env(safe-area-inset-top) + 26px) 18px calc(env(safe-area-inset-bottom) + 30px); }
+.mt-tkwrap { transition: transform .8s cubic-bezier(.5,0,.8,.4), opacity .8s; }
+.mt-tkwrap.away { transform: translateY(-70vh) scale(.3) rotate(8deg); opacity: 0; }
+.mt-form { padding: 16px; border-radius: 24px; display: flex; flex-direction: column; gap: 10px; background: var(--win2); }
+.mt-form textarea.field { resize: none; }
+.mt-lab { font-size: 13px; color: var(--ink2); margin-top: 4px; }
+.mt-cnt { align-self: flex-end; margin-top: -4px; font-family: var(--mono); font-size: 11px; color: var(--ink2); }
+.mt-time { font-family: var(--mono); }
+.mt-err { font-size: 13px; color: #e5484d; }
+.mt-send { gap: 10px; margin-top: 6px; }
+
+/* =====================================================================
+   小票（热敏纸）。MilkTeaTicket.jsx 用；点单页预览和 TA 拆信都是它
+   ===================================================================== */
+.mt-tk { width: 100%; max-width: 340px; margin: 0 auto; filter: drop-shadow(0 12px 18px rgba(0,0,0,.26)); }
+.mt-tk-paper { position: relative; padding: 28px 20px 32px; background: #fbf8f1; color: #2a2622;
+  font-family: var(--mono), ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
+  /* 上下两条锯齿边：不支持 mask 的老浏览器就是一张直边的纸，不影响阅读 */
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 12px 51% repeat-x,
+                conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / 12px 51% repeat-x;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 12px 51% repeat-x,
+        conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / 12px 51% repeat-x; }
+
+.mt-tk-hd { text-align: center; }
+.mt-tk-hd b { display: block; font-size: 36px; font-weight: 700; letter-spacing: .08em; line-height: 1; }
+.mt-tk-hd span { display: block; margin-top: 6px; font-size: 11px; letter-spacing: .2em; opacity: .65; }
+.mt-tk-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; font-size: 11px; opacity: .7; }
+
+.mt-tk-snap { width: 150px; margin: 16px auto 0; padding: 6px 6px 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); transform: rotate(-2deg); }
+.mt-tk-snap img { display: block; width: 100%; aspect-ratio: 300 / 380; object-fit: cover; background: #eee; }
+
+.mt-tk-line { margin: 14px 0; border-top: 1.5px dashed rgba(42,38,34,.4); }
+.mt-tk-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.mt-tk-items li { display: flex; align-items: baseline; gap: 6px; }
+.mt-tk-items li i { flex: 1; min-width: 12px; border-bottom: 1px dotted rgba(42,38,34,.35); transform: translateY(-3px); }
+.mt-tk-items li em { font-style: normal; }
+
+.mt-tk-total { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; }
+.mt-tk-total b { font-size: 24px; }
+.mt-tk-pay { margin-top: 4px; text-align: right; font-size: 11px; opacity: .65; }
+
+.mt-tk-note small, .mt-tk-eta small { display: block; font-size: 10.5px; letter-spacing: .24em; opacity: .6; }
+.mt-tk-note p { margin: 6px 0 0; font-family: var(--serif); font-size: 15px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+
+.mt-tk-eta { text-align: center; }
+.mt-tk-eta b { display: block; margin-top: 4px; font-size: 21px; }
+.mt-tk-cd { margin-top: 6px; font-size: 16px; letter-spacing: .06em; color: #b4603a; }
+.mt-tk-eta.done .mt-tk-cd { color: #3c8a5a; }
+
+.mt-tk-bar { display: block; width: 100%; height: 34px; margin-top: 18px; color: #2a2622; }
+.mt-tk-foot { margin-top: 10px; text-align: center; font-size: 11px; letter-spacing: .14em; opacity: .55; }
