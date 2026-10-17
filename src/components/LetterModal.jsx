@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { DoodleReplay } from './DoodlePad'
 
-const KIND_LABEL = { note: '便签', doodle: '涂鸦', capsule: '时间胶囊', burn: '阅后即焚' }
+import { DoodleReplay } from './DoodlePad'
+import MilkTeaTicket from './MilkTeaTicket'
+const KIND_LABEL = { note: '便签', doodle: '涂鸦', milktea: '奶茶小票', capsule: '时间胶囊', burn: '阅后即焚' }
+
 
 /** 拆信：正文只能通过服务端 open_letter 拿到（时间胶囊未到点会被拒绝） */
 export default function LetterModal({ letter, onClose, onChanged }) {
@@ -54,7 +56,8 @@ export default function LetterModal({ letter, onClose, onChanged }) {
         {state.loading && <div className="h-sub">正在拆开…</div>}
         {state.error && <div className="h-sub">{state.error}</div>}
               {state.data && letter.kind === 'doodle' && state.data.o_payload && <DoodleReplay payload={state.data.o_payload} />}
-        {state.data && !(letter.kind === 'doodle' && state.data.o_payload) && (
+        {state.data && letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea && <MilkTeaTicket payload={state.data.o_payload} mode="received" />}
+        {state.data && !(letter.kind === 'doodle' && state.data.o_payload) && !(letter.kind === 'milktea' && state.data.o_payload && state.data.o_payload.tea) && (
           <div style={{ fontSize: 17, lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: 80 }}>{state.data.o_body}</div>
         )}
         <button className="btn" onClick={close}>{letter.kind === 'burn' && state.data ? '看完了，焚毁' : '收好'}</button>

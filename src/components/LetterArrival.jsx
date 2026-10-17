@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Svg } from './Icon'
 
-const KIND_ICON = { note: 'mail', doodle: 'pen', capsule: 'clock', burn: 'flame' }
+const KIND_ICON = { note: 'mail', doodle: 'pen', milktea: 'cup', capsule: 'clock', burn: 'flame' }
 
 /** 收到新信时，一封信从角落飞入屏幕中央再淡出的提示动画 */
 export default function LetterArrival({ letter, onDone }) {

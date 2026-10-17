@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
@@ -6,6 +6,9 @@ import { Svg } from '../components/Icon'
 import TabBar from '../components/TabBar'
 import DoodlePad, { DOODLE_DRAFT_KEY } from '../components/DoodlePad'
 import './toys.css'
+
+// 奶茶店带着 three.js，单独拆成一个懒加载块：不进奶茶店就不会下载它
+const MilkTea = lazy(() => import('../components/MilkTea'))
 
 /* ===========================================================================
    小物：一个小抽屉柜。点抽屉前脸拉开，再点里面的东西拿出来。
@@ -91,7 +94,7 @@ function ArtStore() {
 
 const DRAWERS = [
   { id: 'doodle', no: '01', name: '涂鸦小纸条', cap: '画一张，寄给 TA', go: '拿出来', Art: ArtDoodle, ready: true },
-  { id: 'milktea', no: '02', name: '奶茶店', cap: '点杯奶茶，约 TA 出门', go: '还在备料', Art: ArtMilkTea, ready: false },
+  { id: 'milktea', no: '02', name: '奶茶店', cap: '做一杯，寄张小票给 TA', go: '拿出来', Art: ArtMilkTea, ready: true },
   { id: 'crystal', no: '03', name: '水晶球', cap: '摇一摇，看看今天', go: '还在擦亮', Art: ArtCrystal, ready: false },
   { id: 'store', no: '04', name: '雨夜便利店', cap: '下着雨，灯还亮着', go: '还没开门', Art: ArtStore, ready: false },
 ]
@@ -105,7 +108,9 @@ export default function Toys() {
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
-  const inDoodle = new URLSearchParams(location.search).get('p') === 'doodle'
+  const sub = new URLSearchParams(location.search).get('p')
+  const inDoodle = sub === 'doodle'
+  const inMilkTea = sub === 'milktea'
 
   const [open, setOpen] = useState(null) // 当前拉开的抽屉 id，一次只开一个
   const [touched, setTouched] = useState(false) // 动过抽屉之后，第一格就不再做「提示一下」的小动画
@@ -127,7 +132,7 @@ export default function Toys() {
   useEffect(() => {
     window.scrollTo(0, 0)
     setHasDraft(readDraft())
-  }, [inDoodle])
+  }, [sub])
 
   const toggleDrawer = (id) => {
     const willOpen = open !== id
@@ -139,6 +144,7 @@ export default function Toys() {
   const pick = (d) => {
     if (!d.ready) { say('这个抽屉还在整理，等等～'); return }
     if (d.id === 'doodle') navigate({ pathname: '/toys', search: '?p=doodle' }, { state: { fromHub: true } })
+    else if (d.id === 'milktea') navigate({ pathname: '/toys', search: '?p=milktea' }, { state: { fromHub: true } })
   }
 
   // 离开涂鸦页：如果是从抽屉柜点进来的，就退一步（历史记录里不留重复的一条）；直接打开链接进来的，就换成抽屉柜
@@ -162,6 +168,10 @@ export default function Toys() {
 
       {inDoodle ? (
         <DoodlePad onExit={exitDoodle} />
+      ) : inMilkTea ? (
+        <Suspense fallback={<div className="page center"><div className="h-sub">正在开店…</div></div>}>
+          <MilkTea onExit={exitDoodle} />
+        </Suspense>
       ) : (
         <main className="page">
           <div className="top">
@@ -219,7 +229,7 @@ export default function Toys() {
         </main>
       )}
 
-      <TabBar hidden={inDoodle} />
+      <TabBar hidden={inDoodle || inMilkTea} />
     </div>
   )
 }
