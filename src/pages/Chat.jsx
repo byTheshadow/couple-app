@@ -64,13 +64,25 @@ export default function Chat() {
   }, [])
   useEffect(() => () => { clearTimeout(toastTimer.current); clearTimeout(blurTimer.current); clearTimeout(lp.current.t) }, [])
 
-  // ---------- 页面环境：锁住 body 滚动；清掉别的页面留下的"导航已收起"标记 ----------
+   // ---------- 页面环境：锁住 html + body 的滚动（只锁 body 不够，iOS 聚焦输入框时
+  // 还是会把 <html> 自己滚一下，跟下面 visualViewport 的矫正打架，就是乱弹的根源）----------
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const html = document.documentElement
+    const body = document.body
+    const prevHtml = html.style.overflow
+    const prevBody = body.style.overflow
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
     delete document.documentElement.dataset.dir
     window.scrollTo(0, 0)
-    return () => { document.body.style.overflow = prev }
+    // 双保险：键盘动画过程中如果文档还是被偷偷滚了一下，立刻按回 0,0
+    const pin = () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0) }
+    window.addEventListener('scroll', pin, { passive: true })
+    return () => {
+      html.style.overflow = prevHtml
+      body.style.overflow = prevBody
+      window.removeEventListener('scroll', pin)
+    }
   }, [])
 
   // 软键盘弹出时，聊天页只占"看得见的那一块"，输入栏就会贴在键盘上面
@@ -81,11 +93,21 @@ export default function Chat() {
     const apply = () => {
       root.style.setProperty('--vvh', `${vv.height}px`)
       root.style.setProperty('--vvt', `${vv.offsetTop}px`)
+      if (window.scrollX || window.scrollY) window.scrollTo(0, 0)
     }
     apply()
     vv.addEventListener('resize', apply)
     vv.addEventListener('scroll', apply)
     return () => { vv.removeEventListener('resize', apply); vv.removeEventListener('scroll', apply) }
+  }, [])
+
+  // 聊天页待得比较久，背景的呼吸/漂移动画一直在跑，叠加气泡的 backdrop-filter 比较费电；
+  // 在聊天页时把背景暂停成静止的（玻璃效果还在，只是不再动），复用现有的 data-bg-paused 机制
+  useEffect(() => {
+    const html = document.documentElement
+    const already = html.hasAttribute('data-bg-paused')
+    if (!already) html.setAttribute('data-bg-paused', '')
+    return () => { if (!already && !document.hidden) html.removeAttribute('data-bg-paused') }
   }, [])
 
   useEffect(() => {
