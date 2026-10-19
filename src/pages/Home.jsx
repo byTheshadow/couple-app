@@ -37,7 +37,7 @@ const GESTURES = {
 }
 
 // 更新日志里每种动作对应的图标；自定义动作统一用 heart
-const ACTIVITY_ICON = { poke: 'heart', pat: 'wave', hug: 'hug', kiss: 'kiss', bonk: 'fist', custom: 'heart', letter_sent: 'mail', letter_received: 'mail' }
+const ACTIVITY_ICON = { poke: 'heart', pat: 'wave', hug: 'hug', kiss: 'kiss', bonk: 'fist', custom: 'heart', letter_sent: 'mail', letter_received: 'mail', status_update: 'pen' }
 const LOG_PAGE = 10
 const LOG_MAX = 20
 
@@ -51,6 +51,10 @@ function letterMeta(l) {
 function activityText(p, myId) {
   if (p.kind === 'letter_sent') return '你寄出了一封信'
   if (p.kind === 'letter_received') return '收到一封信'
+  if (p.kind === 'status_update') {
+    const base = p.sender_id === myId ? '你更新了状态' : 'TA 更新了状态'
+    return p.message ? `${base}："${p.message}"` : base
+  }
   const verb = p.verb || GESTURES[p.kind]?.doneWord || '戳'
   const mine = p.sender_id === myId
   const base = mine ? `你${verb}了 TA` : `TA ${verb}了你`
