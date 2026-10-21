@@ -74,8 +74,9 @@ export function useChat(me, partner) {
       let list = cur
       let keep
       // 我自己发的消息从实时通道先到了：把对应的"发送中"临时消息换掉，沿用它的 key，界面不会闪
+      // （文字和图片都要对上，不然同时发好几张没配文字的图时会认错对象）
       if (row.sender_id === myId) {
-        const t = cur.findIndex((m) => m.tmp && m.body === row.body)
+        const t = cur.findIndex((m) => m.tmp && m.body === row.body && (m.image_url || null) === (row.image_url || null))
         if (t >= 0) { keep = cur[t].id; list = cur.filter((_, k) => k !== t) }
       }
       if (live && !keep) setFresh(row.id)
@@ -118,17 +119,19 @@ export function useChat(me, partner) {
     return () => { document.removeEventListener('visibilitychange', announce); supabase.removeChannel(pc); setOnline(false) }
   }, [myId, pid])
 
-  const send = useCallback(async (text, replyTo, retryId) => {
+  // text 和 imageUrl 至少要有一个；两个都给就是「图片配文字」
+  const send = useCallback(async (text, replyTo, retryId, imageUrl) => {
     const body = (text || '').trim()
-    if (!body || !myId) return { error: 'empty' }
+    const img = imageUrl || null
+    if ((!body && !img) || !myId) return { error: 'empty' }
     const tmpId = retryId || `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const reply = replyTo && !String(replyTo).startsWith('tmp-') ? replyTo : null
     setMsgs((cur) => [
       ...cur.filter((m) => m.id !== tmpId),
-      { id: tmpId, tmp: true, state: 'sending', sender_id: myId, receiver_id: pid, body, reply_to: reply, created_at: new Date().toISOString(), read_at: null, recalled_at: null },
+      { id: tmpId, tmp: true, state: 'sending', sender_id: myId, receiver_id: pid, body: body || null, image_url: img, reply_to: reply, created_at: new Date().toISOString(), read_at: null, recalled_at: null },
     ].sort(byTime))
     setFresh(tmpId)
-    const { data, error: e } = await supabase.rpc('send_message', { p_body: body, p_reply_to: reply })
+    const { data, error: e } = await supabase.rpc('send_message', { p_body: body, p_reply_to: reply, p_image_url: img })
     if (e) {
       setMsgs((cur) => cur.map((m) => (m.id === tmpId ? { ...m, state: 'failed', err: chatError(e) } : m)))
       return { error: chatError(e) }
@@ -147,7 +150,7 @@ export function useChat(me, partner) {
   const recall = useCallback(async (id) => {
     const old = msgsRef.current.find((m) => m.id === id)
     if (!old || old.tmp) return { error: '还没发出去' }
-    setMsgs((cur) => cur.map((m) => (m.id === id ? { ...m, body: null, recalled_at: new Date().toISOString() } : m)))
+    setMsgs((cur) => cur.map((m) => (m.id === id ? { ...m, body: null, image_url: null, recalled_at: new Date().toISOString() } : m)))
     const { error: e } = await supabase.rpc('recall_message', { p_id: id })
     if (e) {
       setMsgs((cur) => cur.map((m) => (m.id === id ? old : m)))

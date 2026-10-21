@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth'
 import { useStatus } from '../lib/hooks'
 import { useChat } from '../lib/chat'
 import { useTheme } from '../lib/theme'
+import { supabase } from '../lib/supabase'
 import { Svg } from '../components/Icon'
 import TabBar from '../components/TabBar'
 import './chat.css'
@@ -11,6 +12,9 @@ const MAX_LEN = 1000
 const GROUP_MS = 5 * 60 * 1000 // 同一个人 5 分钟内连着发的消息算一组
 const MENU_W = 156
 const MENU_ITEM = 44
+const MAX_IMG_PICK = 9 // 一次最多选几张
+const MAX_ORIGINAL = 25 * 1024 * 1024 // 原图上限；压缩后会小很多
+const MAX_UPLOAD = 6 * 1024 * 1024 // 压缩后的上限
 
 const pad = (n) => String(n).padStart(2, '0')
 const hm = (iso) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
@@ -23,6 +27,23 @@ const dayLabel = (iso) => {
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日`
 }
 const initial = (s) => (s || '?').trim().slice(0, 1).toUpperCase()
+
+// 上传前在本地把图片压小：最长边不超过 1600px，转成 JPEG（跟相册那边的压缩逻辑一致）
+async function compressImage(file, maxDim = 1600, quality = 0.82) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+    const w = Math.round(bitmap.width * scale)
+    const h = Math.round(bitmap.height * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+    return blob || file
+  } catch {
+    return file
+  }
+}
 
 export default function Chat() {
   const { me, partner } = useAuth()
@@ -43,12 +64,16 @@ export default function Chat() {
   const [atBottom, setAtBottom] = useState(true)
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
   const [justRead, setJustRead] = useState(() => new Set())
+  const [stagedImgs, setStagedImgs] = useState([]) // 待发送的图片：{ key, file, preview }
+  const [uploading, setUploading] = useState(false)
+  const [viewImg, setViewImg] = useState(null) // 全屏看图
 
   const rootRef = useRef(null)
   const headRef = useRef(null)
   const bottomRef = useRef(null)
   const listRef = useRef(null)
   const taRef = useRef(null)
+  const imgFileRef = useRef(null)
   const stick = useRef(true)
   const lastKey = useRef(null)
   const restore = useRef(null)
@@ -222,14 +247,70 @@ export default function Chat() {
     if (replyId && (!replyTarget || replyTarget.recalled_at)) setReplyId(null)
   }, [replyId, replyTarget])
 
+  // ---------- 图片：选图 / 移除 / 发送 ----------
+  const pickImages = () => imgFileRef.current?.click()
+
+  const onImageFile = (e) => {
+    const files = [...(e.target.files || [])].slice(0, MAX_IMG_PICK)
+    e.target.value = ''
+    if (!files.length) return
+    const ok = files.filter((f) => f.type.startsWith('image/') && f.size <= MAX_ORIGINAL)
+    if (ok.length < files.length) say('有的文件不是图片或太大，跳过了')
+    const next = ok.map((f) => ({ key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, file: f, preview: URL.createObjectURL(f) }))
+    setStagedImgs((cur) => [...cur, ...next].slice(0, MAX_IMG_PICK))
+  }
+
+  const removeStaged = (key) => {
+    setStagedImgs((cur) => {
+      const hit = cur.find((p) => p.key === key)
+      if (hit) URL.revokeObjectURL(hit.preview)
+      return cur.filter((p) => p.key !== key)
+    })
+  }
+
   const doSend = async () => {
+    if (uploading) return
     const t = text.trim()
-    if (!t) return
+    const imgs = stagedImgs
+    if (!t && imgs.length === 0) return
     const rp = replyId
-    setText(''); setReplyId(null)
+    setReplyId(null)
     stick.current = true
-    const r = await chat.send(t, rp)
-    if (r.error && r.error !== 'empty') say(r.error === 'setup' ? '聊天的 SQL 还没有运行' : r.error)
+
+    if (imgs.length === 0) {
+      setText('')
+      const r = await chat.send(t, rp)
+      if (r.error && r.error !== 'empty') say(r.error === 'setup' ? '聊天的 SQL 还没有运行' : r.error)
+      return
+    }
+
+    // 有图片：按顺序一张一张传，文字说明带在最后一张上
+    setUploading(true)
+    let sentCount = 0
+    for (let i = 0; i < imgs.length; i += 1) {
+      const img = imgs[i]
+      const caption = i === imgs.length - 1 ? t : ''
+      const replyFor = i === 0 ? rp : null
+      let path = ''
+      try {
+        const blob = await compressImage(img.file)
+        if (blob.size > MAX_UPLOAD) throw new Error('too big')
+        path = `${myId}/${img.key}.jpg`
+        const { error: upErr } = await supabase.storage.from('chat-images').upload(path, blob, { contentType: 'image/jpeg' })
+        if (upErr) throw upErr
+        const { data } = supabase.storage.from('chat-images').getPublicUrl(path)
+        const r = await chat.send(caption, replyFor, null, data.publicUrl)
+        if (r.error) { await supabase.storage.from('chat-images').remove([path]); throw new Error(r.error) }
+        sentCount += 1
+        URL.revokeObjectURL(img.preview)
+        setStagedImgs((cur) => cur.filter((p) => p.key !== img.key))
+      } catch {
+        say(sentCount ? `发了 ${sentCount} 张，剩下的没发出去` : '图片发送失败，再试一次')
+        break
+      }
+    }
+    if (sentCount === imgs.length) setText('')
+    setUploading(false)
   }
 
   const onKeyDown = (e) => {
@@ -247,7 +328,8 @@ export default function Chat() {
     const mine = m.sender_id === myId
     const rr = root.getBoundingClientRect()
     const r = el.getBoundingClientRect()
-    const mh = (mine ? 3 : 2) * MENU_ITEM + 12 + (mine ? 7 : 0)
+    const itemCount = (mine ? 1 : 0) + (m.body ? 1 : 0) + 1 // 收回(仅自己) + 复制(有文字才有) + 回复
+    const mh = itemCount * MENU_ITEM + 12 + (mine ? 7 : 0)
     const headBottom = headRef.current.getBoundingClientRect().bottom
     let top = r.top - mh - 8
     let oy = '100%'
@@ -329,7 +411,8 @@ export default function Chat() {
     if (!m.reply_to) return null
     const q = msgs.find((x) => x.id === m.reply_to)
     if (!q) return { gone: true, who: '', text: '更早的消息', id: m.reply_to }
-    return { gone: !!q.recalled_at, who: q.sender_id === myId ? '你' : 'TA', text: q.recalled_at ? '此讯息已被收回' : q.body, id: q.id }
+    const text = q.recalled_at ? '此讯息已被收回' : (q.body || (q.image_url ? '[图片]' : ''))
+    return { gone: !!q.recalled_at, who: q.sender_id === myId ? '你' : 'TA', text, id: q.id }
   }
 
   const pname = partner?.display_name || 'TA'
@@ -346,6 +429,14 @@ export default function Chat() {
         <div className="aurora" />
       </div>
       {toast && <div className="toast glass">{toast}</div>}
+      {viewImg && (
+        <div className="ch-imgview" onClick={() => setViewImg(null)}>
+          <img src={viewImg} alt="" />
+          <button type="button" className="ch-imgview-x" onClick={() => setViewImg(null)} aria-label="关闭">
+            <Svg name="x" size={20} stroke={2.2} />
+          </button>
+        </div>
+      )}
 
       <div ref={rootRef} className={`ch-root${typing ? ' typing' : ''}`}>
         <header ref={headRef} className="ch-head glass">
@@ -393,13 +484,19 @@ export default function Chat() {
             const q = quoteOf(m)
             const cls = `ch-row ${mineMsg ? 'me' : 'ta'}${it.first ? ' first' : ''}${it.last ? ' last' : ''}${chat.fresh && (chat.fresh === m.id || chat.fresh === m._k) ? ' new' : ''}${flashId === m.id ? ' flash' : ''}${m.state === 'failed' ? ' failed' : ''}`
             const bub = (
-              <div className={`ch-bub${menu?.id === m.id ? ' pressed' : ''}${m.state === 'sending' ? ' sending' : ''}`} data-id={m.id}>
+              <div className={`ch-bub${m.image_url ? ' ch-bub-img' : ''}${menu?.id === m.id ? ' pressed' : ''}${m.state === 'sending' ? ' sending' : ''}`} data-id={m.id}>
                 {q && (
                   <button type="button" className={`ch-q${q.gone ? ' gone' : ''}`} data-q={q.id}>
                     {q.who && <b>{q.who}</b>}<span>{q.text}</span>
                   </button>
                 )}
-                {m.body}
+                {m.image_url && (
+                  <img
+                    className="ch-img" src={m.image_url} alt="" loading="lazy" decoding="async"
+                    onClick={(e) => { e.stopPropagation(); setViewImg(m.image_url) }}
+                  />
+                )}
+                {m.body && (m.image_url ? <div className="ch-cap">{m.body}</div> : m.body)}
               </div>
             )
             if (!mineMsg) {
@@ -416,7 +513,7 @@ export default function Chat() {
             else if (m.state === 'failed') {
               status = (
                 <span className="rd bad">
-                  <button type="button" onClick={() => chat.send(m.body, m.reply_to, m.id)}>重发</button>
+                  <button type="button" onClick={() => chat.send(m.body, m.reply_to, m.id, m.image_url)}>重发</button>
                   {' · '}
                   <button type="button" onClick={() => chat.discard(m.id)}>删除</button>
                 </span>
@@ -443,20 +540,40 @@ export default function Chat() {
               <div className="bar" />
               <div className="tx">
                 <b>回复 {replyTarget.sender_id === myId ? '你' : pname}</b>
-                <span>{replyTarget.body}</span>
+                <span>{replyTarget.body || (replyTarget.image_url ? '[图片]' : '')}</span>
               </div>
               <button type="button" onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={() => setReplyId(null)} aria-label="取消回复">
                 <Svg name="x" size={14} stroke={2} />
               </button>
             </div>
           )}
+
+          {stagedImgs.length > 0 && (
+            <div className="ch-staged glass on">
+              {stagedImgs.map((p) => (
+                <div key={p.key} className="ch-st-item">
+                  <img src={p.preview} alt="" />
+                  {!uploading && (
+                    <button type="button" onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={() => removeStaged(p.key)} aria-label="移除这张图片">
+                      <Svg name="x" size={11} stroke={2.4} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="ch-compose glass">
+            <button type="button" className="ch-cam tap" disabled={uploading || stagedImgs.length >= MAX_IMG_PICK} onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={pickImages} aria-label="发送图片">
+              <Svg name="camera" size={19} stroke={1.8} />
+            </button>
+            <input ref={imgFileRef} type="file" accept="image/*" multiple hidden onChange={onImageFile} />
             <textarea
               ref={taRef} rows={1} value={text} maxLength={MAX_LEN} placeholder="输入消息"
               onChange={(e) => setText(e.target.value)} onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown}
               enterKeyHint="send" aria-label="输入消息"
             />
-            <button type="button" className="ch-send tap" disabled={!text.trim()} onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={doSend} aria-label="发送">
+            <button type="button" className="ch-send tap" disabled={(!text.trim() && stagedImgs.length === 0) || uploading} onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={doSend} aria-label="发送">
               <Svg name="up" size={18} stroke={2.2} />
             </button>
           </div>
@@ -468,7 +585,7 @@ export default function Chat() {
             <div className="ch-scrim" onClick={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu() }} />
             <div className="ch-menu glass" role="menu" style={{ left: menu.left, top: menu.top, '--ox': menu.ox, '--oy': menu.oy }}>
               <button type="button" role="menuitem" onClick={() => runMenu('reply')}><Svg name="reply" size={18} />回复</button>
-              <button type="button" role="menuitem" onClick={() => runMenu('copy')}><Svg name="copy" size={18} />复制</button>
+              {menuMsg?.body && <button type="button" role="menuitem" onClick={() => runMenu('copy')}><Svg name="copy" size={18} />复制</button>}
               {menu.mine && (
                 <>
                   <hr />

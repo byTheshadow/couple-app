@@ -74,6 +74,12 @@
 .ch-q span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: .9; }
 .ch-q.gone span { font-style: italic; opacity: .55; }
 
+/* 图片气泡：去掉文字气泡的内边距，图片贴边，配文字单独留一圈内边距 */
+.ch-bub-img { max-width: 62%; padding: 4px; }
+.ch-bub-img .ch-q { width: calc(100% + 4px); margin: -0 -0 6px; }
+.ch-img { display: block; width: 100%; max-height: 320px; border-radius: 16px; object-fit: cover; cursor: zoom-in; }
+.ch-cap { padding: 7px 8px 2px; }
+
 /* 气泡旁边的时间 / 已读状态（每组最后一条才显示） */
 .ch-meta { flex-shrink: 0; align-self: flex-end; font-family: var(--mono); font-size: 10px; line-height: 1.4; color: var(--ink2); white-space: nowrap; padding-bottom: 2px; }
 .ch-row.me .ch-meta { text-align: right; }
@@ -88,7 +94,7 @@
 .ch-fab { position: absolute; right: 14px; bottom: calc(var(--botH, 150px) + 10px); z-index: 4; display: none; align-items: center; gap: 6px; height: 36px; padding: 0 14px 0 11px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--ink); }
 .ch-fab.on { display: flex; animation: chIn .3s ease-out; }
 
-/* 回复条 + 输入栏 + 给底部导航留的位置 */
+/* 回复条 + 待发送图片条 + 输入栏 + 给底部导航留的位置 */
 .ch-bottom { position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
 .ch-replying { flex-shrink: 0; display: flex; align-items: center; gap: 10px; margin: 6px 12px 0; padding: 8px 8px 8px 12px; border-radius: 18px; animation: chIn .28s ease-out; }
 .ch-replying .bar { width: 3px; align-self: stretch; border-radius: 2px; background: var(--ink); }
@@ -97,8 +103,15 @@
 .ch-replying .tx span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-replying button { width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--chip); color: var(--ink); display: grid; place-items: center; flex-shrink: 0; }
 
-.ch-compose { flex-shrink: 0; margin: 8px 12px 0; display: flex; align-items: flex-end; padding: 5px 5px 5px 16px; border-radius: 26px; min-height: 48px; }
-.ch-compose textarea { flex: 1; min-width: 0; border: none; outline: none; resize: none; background: none; font-family: inherit; color: var(--ink); font-size: 16px; line-height: 22px; max-height: 110px; padding: 8px 0; }
+.ch-staged { flex-shrink: 0; display: flex; gap: 8px; margin: 6px 12px 0; padding: 10px; border-radius: 18px; overflow-x: auto; animation: chIn .28s ease-out; }
+.ch-st-item { position: relative; flex-shrink: 0; width: 56px; height: 56px; border-radius: 12px; overflow: hidden; }
+.ch-st-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ch-st-item button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; display: grid; place-items: center; }
+
+.ch-compose { flex-shrink: 0; margin: 8px 12px 0; display: flex; align-items: flex-end; padding: 5px 5px 5px 6px; border-radius: 26px; min-height: 48px; }
+.ch-cam { width: 38px; height: 38px; margin-right: 2px; border-radius: 50%; border: none; background: none; color: var(--ink2); display: grid; place-items: center; flex-shrink: 0; transition: opacity .2s; }
+.ch-cam[disabled] { opacity: .32; }
+.ch-compose textarea { flex: 1; min-width: 0; border: none; outline: none; resize: none; background: none; font-family: inherit; color: var(--ink); font-size: 16px; line-height: 22px; max-height: 110px; padding: 8px 0 8px 4px; }
 .ch-compose textarea::placeholder { color: var(--ink2); }
 .ch-send { width: 38px; height: 38px; margin-left: 6px; border-radius: 50%; border: none; background: var(--btn); color: var(--btnInk); display: grid; place-items: center; flex-shrink: 0; transition: opacity .25s, scale .18s; }
 .ch-send[disabled] { opacity: .22; scale: .92; }
@@ -117,6 +130,11 @@
 .ch-menu button:active { background: var(--chip); }
 .ch-menu button.danger { color: #e5484d; }
 .ch-menu hr { border: none; height: 1px; background: var(--line); margin: 3px 10px; }
+
+/* 全屏看图：盖住整个页面，点哪里都能关 */
+.ch-imgview { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.92); display: grid; place-items: center; animation: chFade .2s both; }
+.ch-imgview img { max-width: 92vw; max-height: 86vh; border-radius: 10px; }
+.ch-imgview-x { position: absolute; top: calc(env(safe-area-inset-top) + 14px); right: 16px; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,.14); color: #fff; display: grid; place-items: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .ch-root *, .ch-root *::before, .ch-root *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
