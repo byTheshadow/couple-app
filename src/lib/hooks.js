@@ -268,3 +268,53 @@ export function usePhotoComments(photoId) {
 
   return { comments, loading, reload }
 }
+/** 记仇本记录（双方可见，只有作者能改/删），实时更新 */
+export function useGrudges() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    const { data } = await supabase
+      .from('grudges').select('*')
+      .order('happened_on', { ascending: false })
+      .order('created_at', { ascending: false })
+    setItems(data || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    reload()
+    const ch = supabase
+      .channel('grudges')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'grudges' }, () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [reload])
+
+  return { items, loading, reload }
+}
+
+/** 记仇本全部评论（量很小，一次取完，页面里按 grudge_id 分组） */
+export function useGrudgeComments() {
+  const [comments, setComments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    const { data } = await supabase
+      .from('grudge_comments').select('*')
+      .order('created_at', { ascending: true })
+    setComments(data || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    reload()
+    const ch = supabase
+      .channel('grudge-comments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'grudge_comments' }, () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [reload])
+
+  return { comments, loading, reload }
+}

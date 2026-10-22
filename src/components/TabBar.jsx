@@ -7,6 +7,7 @@ const TABS = [
   { to: '/', label: '首页', icon: 'home', end: true },
   { to: '/status', label: '状态', icon: 'sliders' },
   { to: '/toys', label: '小物', icon: 'drawer' },
+   { to: '/grudge', label: '记仇本', icon: 'grudge' },
 ]
 
 // hidden：聊天页输入文字时把导航收起来

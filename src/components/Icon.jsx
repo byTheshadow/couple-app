@@ -13,6 +13,7 @@ const PATHS = {
   sliders: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></>,
   out: <path d="M10 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4M15 8l4 4-4 4M19 12H9" />,
   plus: <path d="M12 5v14M5 12h14" />,
+    grudge: <><rect x="5" y="3.5" width="14" height="17" rx="2.5" /><path d="M9 3.5v17" /><path d="M14.2 8.6c.5 1.5 2 2 2 3.7a2 2 0 0 1-4 0c0-.8.4-1.3.8-1.6.1.5.4.8.8.9-.1-1 0-2 .4-3z" /></>,
   x: <path d="M6 6l12 12M18 6L6 18" />,
   bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 21a2 2 0 0 0 4 0" /></>,
   play: <path d="M8 5.5v13l11-6.5z" />,
