@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { normalizeSettings, normalizeState, btnLinesToRow } from './art'
+import { registerUserScene, unregisterUserScene } from './scenes'
 import { presetFromRow, presetToRow } from './presets'
 
 const mapError = (e) => {
@@ -21,6 +22,12 @@ const mapError = (e) => {
   if (e?.code === '42P01' || e?.code === 'PGRST205' || /could not find the table|does not exist/i.test(m)) {
     return '服务端还没有像素小屋的表，先把像素小屋的 SQL 跑一下'
   }
+  if (/pal_scene_(save|delete|copy)/.test(m) && (e?.code === 'PGRST202' || /could not find the function/i.test(m))) return '服务端还没有画室的函数，先把第七轮 B 的 SQL（pixelpals-round7b.sql）跑一下'
+  if (m.includes('bad scene name')) return '场景的名字要 1~8 个字'
+  if (m.includes('bad scene data')) return '这幅画没通过服务端的检查（颜色数量、大小或格式不对），先把第七轮 B 的 SQL（pixelpals-round7b.sql）跑一下，还不行就告诉我'
+  if (m.includes('too many scenes')) return '最多存 6 个场景，先删掉一个'
+  if (m.includes('scene not found')) return '找不到这个场景（可能已经被删了），刷新一下再试'
+  if (m.includes('copy own scene')) return '这是你自己的场景，不用复制'
   if (e?.code === 'PGRST202' || /could not find the function/i.test(m)) return '服务端没找到像素小屋的函数，先把像素小屋的 SQL 跑一下（第二轮、第四轮那段也要跑）'
   if (e?.code === '42501' || /row-level security|permission denied/i.test(m)) return '没有权限，检查一下像素小屋表的行级权限（RLS）策略'
   if (/pal_settings_work_scene_check|pal_settings_idle_scene_check/.test(m)) return '服务端还不认识这个场景，先把第五轮的 SQL（pixelpals-round5.sql）跑一下'
@@ -272,4 +279,63 @@ export function usePalLog(myId, taId, onInsert) {
   }, [myId, taId, reload, loadNotes])
 
   return { items, notes, loading, reload }
+}
+
+/* ---------- 自己画的场景（像素画室） ---------- */
+
+/**
+ * 某个人画的场景（最多 6 个）：{ items, loading, missing, reload }
+ * items 每项 { id: 'u:uuid'（写进设置里的名字）, uuid, name, data }；读到就登记进场景表，两边的小屋都能画出来。
+ * watch：随便一个会变的值（比如 TA 设置里选的场景），变了就重新读一遍，TA 换了新场景我这边才画得出来
+ */
+export function usePalScenes(userId, watch) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+  const reg = useRef([]) // 这个人已经登记过的场景名
+
+  const reload = useCallback(async () => {
+    if (!supabase || !userId) { setLoading(false); return }
+    const { data, error } = await supabase
+      .from('pal_scenes').select('id, name, data, updated_at')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: true })
+    if (error) {
+      setMissing(error.code === '42P01' || error.code === 'PGRST205' || /could not find the table|does not exist/i.test(error.message || ''))
+      setLoading(false)
+      return
+    }
+    const list = []
+    for (const r of data || []) {
+      const id = `u:${r.id}`
+      const d = r.data && typeof r.data === 'object' && !Array.isArray(r.data) ? { ...r.data, name: r.name } : null
+      if (d && registerUserScene(id, d)) list.push({ id, uuid: r.id, name: r.name, data: d })
+    }
+    // 以前登记过、这次没有了（被删了）的，从场景表里拿掉
+    const keep = new Set(list.map((x) => x.id))
+    reg.current.forEach((id) => { if (!keep.has(id)) unregisterUserScene(id) })
+    reg.current = list.map((x) => x.id)
+    setItems(list)
+    setMissing(false)
+    setLoading(false)
+  }, [userId])
+
+  useEffect(() => { reload() }, [reload, watch])
+  useEffect(() => () => { reg.current.forEach(unregisterUserScene); reg.current = [] }, [])
+
+  return { items, loading, missing, reload }
+}
+
+/** 保存一幅画：uuid 为空 = 新建，有 = 覆盖自己的那个。返回 { error, uuid } */
+export async function sceneSave(uuid, name, data) {
+  if (!supabase) return { error: '还没有连上服务器', uuid: null }
+  const { data: id, error } = await supabase.rpc('pal_scene_save', { p_id: uuid || null, p_name: name, p_data: data })
+  return { error: error ? mapError(error) : null, uuid: id || null }
+}
+export const sceneDelete = (uuid) => rpc('pal_scene_delete', { p_id: uuid })
+/** 把 TA 的一个场景复制一份到自己的画室 */
+export async function sceneCopy(uuid) {
+  if (!supabase) return { error: '还没有连上服务器', uuid: null }
+  const { data: id, error } = await supabase.rpc('pal_scene_copy', { p_id: uuid })
+  return { error: error ? mapError(error) : null, uuid: id || null }
 }

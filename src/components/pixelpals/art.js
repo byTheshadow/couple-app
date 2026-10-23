@@ -11,7 +11,7 @@ export const H = 120
 export const FLOOR = 98
 
 // 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
-import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
+import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, USER_SCENE_RE, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
 export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
@@ -181,6 +181,9 @@ export const WINDOW_KINDS = [
   { k: 'idle', n: '放空', e: '☁️' },
 ]
 
+// 认得的场景：内置的，或者自己画的（u:uuid，数据可能还没从服务器读回来，先认下来，读到了再画）
+const sceneKnown = (k) => typeof k === 'string' && (has(SCENES, k) || USER_SCENE_RE.test(k))
+
 export function normalizeSettings(row, slot) {
   const r = row || {}
   const d = DEFAULT_SETTINGS
@@ -188,8 +191,8 @@ export function normalizeSettings(row, slot) {
   const [xf, xt] = normWin(r.idle_from, r.idle_to)
   const buttons = normalizeButtons(r.buttons, slot)
   return {
-    work_scene: has(SCENES, r.work_scene) ? r.work_scene : d.work_scene,
-    idle_scene: has(SCENES, r.idle_scene) ? r.idle_scene : null,
+    work_scene: sceneKnown(r.work_scene) ? r.work_scene : d.work_scene,
+    idle_scene: sceneKnown(r.idle_scene) ? r.idle_scene : null,
     home_theme: has(THEMES, r.home_theme) ? r.home_theme : d.home_theme,
     wake_h: clampH(r.wake_h, d.wake_h),
     work_h: clampH(r.work_h, d.work_h, 47),

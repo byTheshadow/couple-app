@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, usePresets, saveSettings, palPoke, palSettle, palLogClear } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, usePalScenes, saveSettings, palPoke, palSettle, palLogClear } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
@@ -16,6 +16,7 @@ import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, est
 import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
+import Studio from './pixelpals/Studio'
 import './pixelpals.css'
 
 /* ===========================================================================
@@ -256,9 +257,9 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       }
 
       const place = placeOf(cur.settings, actor.state) // 在哪个场景（在家 = null）
-      const label = actor.state === 'work' ? `上班中 · ${SCENES[place]}`
+      const label = actor.state === 'work' ? `上班中 · ${SCENES[place] || '自己画的场景'}`
         : actor.state === 'play' ? '在家 · 玩耍中'
-          : actor.state === 'idle' ? (place ? `放空中 · ${SCENES[place]}` : '在家 · 放空中')
+          : actor.state === 'idle' ? (place ? `放空中 · ${SCENES[place] || '自己画的场景'}` : '在家 · 放空中')
             : actor.state === 'home' ? '在家' : '睡觉中'
       const key = `${fmtHour(cur.hr)}|${label}`
       if (key !== hudKey) {
@@ -408,7 +409,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, onSavePreset, onDeletePreset, say }) {
+function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, userScenes, onSavePreset, onDeletePreset, say }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
   const [sec, setSec] = useState('preset') // 当前翻到哪一页：预设 / 场景 / 作息 / 互动
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
@@ -555,7 +556,11 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
             {SCENE_LIST.map(({ k, n, e }) => (
               <button key={k} type="button" className={`pp-chip${draft.work_scene === k ? ' on' : ''}`} onClick={() => set('work_scene', k)}>{e} {n}</button>
             ))}
+            {userScenes.map((s) => (
+              <button key={s.id} type="button" className={`pp-chip${draft.work_scene === s.id ? ' on' : ''}`} onClick={() => set('work_scene', s.id)}>🎨 {s.name}</button>
+            ))}
           </div>
+          <p className="pp-hint">🎨 是自己画的场景，在页面最下面的「像素画室」里画；画好了就会出现在这里。</p>
         </div>
 
         <div className="pp-blk" hidden={sec !== 'scene'}>
@@ -592,6 +597,9 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
             <button type="button" className={`pp-chip${!draft.idle_scene ? ' on' : ''}`} onClick={() => setIdleScene(null)}>🏠 在家窗前</button>
             {SCENE_LIST.map(({ k, n, e }) => (
               <button key={k} type="button" className={`pp-chip${draft.idle_scene === k ? ' on' : ''}`} onClick={() => setIdleScene(k)}>{e} {n}</button>
+            ))}
+            {userScenes.map((s) => (
+              <button key={s.id} type="button" className={`pp-chip${draft.idle_scene === s.id ? ' on' : ''}`} onClick={() => setIdleScene(s.id)}>🎨 {s.name}</button>
             ))}
           </div>
           <p className="pp-hint">不设就是没有。时间要完整落在「起床后到上班前」或「下班后到睡觉前」里，两段不能重叠。玩耍时小人{slot === 'u2' ? '弹吉他' : '玩掌机'}；放空时站着发呆（在家就在窗前，选了别的地方就去那里）；拖下面的「预览时间」就能看到。</p>
@@ -699,6 +707,9 @@ export default function PixelPals({ onExit }) {
   const myPal = usePal(me && me.id, mySlot, true)
   const presets = usePresets(me && me.id, mySlot)
   const taPal = usePal(partner && partner.id, taSlot, false)
+  // 自己画的场景：我的 + TA 的都读下来、登记进场景表（TA 换了新场景，这边跟着重新读，才画得出来）
+  const myScenes = usePalScenes(me && me.id)
+  const taScenes = usePalScenes(partner && partner.id, `${taPal.settings.work_scene}|${taPal.settings.idle_scene}`)
 
   const [tab, setTab] = useState('mine')
   const [sim, setSim] = useState(null) // null = 用真实时间
@@ -831,6 +842,12 @@ export default function PixelPals({ onExit }) {
 
   const onReset = () => setDraft(myPal.settings)
 
+  // 删掉了自己画的场景：服务端已经把正在用它的设置换回默认；草稿里如果还选着它也换掉，再读一遍设置
+  const onSceneDeleted = (id) => {
+    setDraft((d) => (d ? { ...d, work_scene: d.work_scene === id ? 'office' : d.work_scene, idle_scene: d.idle_scene === id ? null : d.idle_scene } : d))
+    myPal.reload()
+  }
+
   // 套预设：只改草稿，小人马上预览，保存了才算数
   const onPreset = (p) => {
     const base = draft || myPal.settings
@@ -944,8 +961,10 @@ export default function PixelPals({ onExit }) {
             onTryButton={onTryButton}
             say={say}
             settleNote={settleNote}
+            userScenes={myScenes.items}
             income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
           />
+          <Studio mine={myScenes} ta={taScenes} taName={taName} slot={mySlot} settings={myPal.settings} say={say} onDeleted={onSceneDeleted} />
         </>
       ) : partner ? (
         <>

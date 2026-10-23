@@ -787,9 +787,142 @@ function runOps(ctx, ops, sc, hr, t) {
 export function drawScene(ctx, key, layer, o) {
   const sc = SCENE_DATA[key]
   if (!sc) return
-  if (layer === 'front') { if (sc.front && sc.front.length) runOps(ctx, sc.front, sc, o.hr, o.t); return }
+  if (layer === 'front') {
+    if (sc.bmp) drawBmp(ctx, sc, 'fg', o.hr)
+    if (sc.front && sc.front.length) runOps(ctx, sc.front, sc, o.hr, o.t)
+    return
+  }
+  if (sc.bmp) drawBmp(ctx, sc, 'bg', o.hr)
   runOps(ctx, sc.draw, sc, o.hr, o.t)
   if (o.working && sc.jobs && sc.jobs[o.job]) runOps(ctx, sc.jobs[o.job], sc, o.hr, o.t)
+}
+
+/* ---------- 自己画的场景：80×60 的像素画（每格 2×2 个像素），分「背景」和「前景」两层 ----------
+   scene.bmp = { w: 80, h: 60, dim?: 1, bg: '行程压缩', fg?: '行程压缩' }
+   行程压缩 = 一串「连续几格*颜色」用逗号连起来，颜色是调色板里的第几个，前景层里 _ 表示这一格透明。
+   例：'40*3,2*_,38*0' = 先 40 格颜色 3，再 2 格透明，再 38 格颜色 0。一层一共必须正好 4800 格（80×60，一行一行数）。
+   背景层每一格都要有颜色（先画，在小人后面）；前景层可以有透明（后画，盖在小人前面）。
+   dim = 1：夜里和傍晚自动变暗（和上面的 shade 一个节奏）。
+   这些只是数据：页面按格子涂色，永远不会把它当程序运行。 */
+
+export const BMP_W = 80
+export const BMP_H = 60
+export const BMP_SCALE = 2
+export const BMP_CELLS = BMP_W * BMP_H
+export const BMP_MAX_LEN = 26000
+export const CLEAR = 255 // 这一格是透明的（只有前景层可以）
+/** 自己画的场景在设置里的名字：u: + 一个 uuid（服务端的场景白名单也认这个格式） */
+export const USER_SCENE_RE = /^u:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** 一层格子（Uint8Array，长度 4800，值 = 调色板序号，255 = 透明）→ 行程压缩字符串 */
+export function encodeLayer(cells) {
+  const out = []
+  let i = 0
+  while (i < cells.length) {
+    const v = cells[i]
+    let j = i + 1
+    while (j < cells.length && cells[j] === v) j++
+    out.push(`${j - i}*${v === CLEAR ? '_' : v}`)
+    i = j
+  }
+  return out.join(',')
+}
+
+/** 行程压缩字符串 → 一层格子；格式不对、格数不是 4800、颜色超出调色板，都返回 null */
+export function decodeLayer(str, palLen, allowClear) {
+  if (typeof str !== 'string' || str.length === 0 || str.length > BMP_MAX_LEN) return null
+  const out = new Uint8Array(BMP_CELLS)
+  let pos = 0
+  for (const tok of str.split(',')) {
+    const m = /^(\d{1,4})\*(\d{1,2}|_)$/.exec(tok)
+    if (!m) return null
+    const n = Number(m[1])
+    if (n < 1 || pos + n > BMP_CELLS) return null
+    let v
+    if (m[2] === '_') {
+      if (!allowClear) return null
+      v = CLEAR
+    } else {
+      v = Number(m[2])
+      if (v >= palLen) return null
+    }
+    out.fill(v, pos, pos + n)
+    pos += n
+  }
+  return pos === BMP_CELLS ? out : null
+}
+
+// 解码后的格子、画好的小画布都缓存在这里（按场景对象；场景数据换了一份，缓存就跟着作废）
+const BMP_CACHE = new WeakMap()
+const cacheOf = (sc) => {
+  let c = BMP_CACHE.get(sc)
+  if (!c) { c = { cells: {}, cv: {} }; BMP_CACHE.set(sc, c) }
+  return c
+}
+function cellsOf(sc, which) {
+  const c = cacheOf(sc)
+  if (!(which in c.cells)) c.cells[which] = decodeLayer(sc.bmp[which], sc.pal.length, which === 'fg')
+  return c.cells[which]
+}
+
+/** 把一层格子涂到 ctx 上（每格 BMP_SCALE 个像素；同一行里连着的同色格子并成一条） */
+export function paintCells(ctx, cells, pal, scale = BMP_SCALE) {
+  for (let y = 0; y < BMP_H; y++) {
+    let x = 0
+    while (x < BMP_W) {
+      const v = cells[y * BMP_W + x]
+      if (v === CLEAR) { x++; continue }
+      let e = x + 1
+      while (e < BMP_W && cells[y * BMP_W + e] === v) e++
+      ctx.fillStyle = pal[v]
+      ctx.fillRect(x * scale, y * scale, (e - x) * scale, scale)
+      x = e
+    }
+  }
+}
+
+// 夜里最深，傍晚、清晨淡淡的，白天不变暗（和 shade 画法一样）
+const dimAlpha = (hr) => (hr < 5.5 || hr >= 19.5 ? 0.5 : hr < 7 ? 0.14 : hr < 16.5 ? 0 : 0.16)
+
+function drawBmp(ctx, sc, which, hr) {
+  const cells = cellsOf(sc, which)
+  if (!cells) { if (which === 'bg') R(ctx, '#000', 0, 0, W, H); return }
+  const a = sc.bmp.dim ? dimAlpha(hr) : 0
+  const shade = a > 0 ? `rgba(8,12,32,${a})` : ''
+  if (typeof document === 'undefined') { // 没有 document（测试环境）就直接涂
+    paintCells(ctx, cells, sc.pal)
+    if (shade && which === 'bg') R(ctx, shade, 0, 0, W, H)
+    return
+  }
+  const c = cacheOf(sc)
+  const key = which === 'fg' && shade ? `fg:${a}` : which
+  let cv = c.cv[key]
+  if (!cv) {
+    cv = document.createElement('canvas')
+    cv.width = W
+    cv.height = H
+    const g = cv.getContext('2d')
+    paintCells(g, cells, sc.pal)
+    if (which === 'fg' && shade) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = shade; g.fillRect(0, 0, W, H) }
+    c.cv[key] = cv
+  }
+  ctx.drawImage(cv, 0, 0)
+  if (which === 'bg' && shade) R(ctx, shade, 0, 0, W, H)
+}
+
+/** 把一份（通过检查的）自己画的场景登记进场景表：之后设置里写它的 id，两边的小屋就都能画出来 */
+export function registerUserScene(id, data) {
+  if (typeof id !== 'string' || !USER_SCENE_RE.test(id) || validateScene(data)) return false
+  SCENE_DATA[id] = data
+  SCENES[id] = Array.from(String(data.name || '我的场景')).slice(0, 8).join('')
+  SCENE_ICON[id] = '🎨'
+  return true
+}
+export function unregisterUserScene(id) {
+  if (typeof id !== 'string' || !USER_SCENE_RE.test(id)) return
+  delete SCENE_DATA[id]
+  delete SCENES[id]
+  delete SCENE_ICON[id]
 }
 
 /* ---------- 检查一份场景数据（以后 AI 生成的、自己画的，存之前都先过这一关；服务端也会按同样的规则再查一遍） ---------- */
@@ -847,5 +980,13 @@ export function validateScene(sc) {
   }
   // 两个小人各自的小物件只能是 coder / worker
   if (sc.jobs && Object.keys(sc.jobs).some((k) => k !== 'coder' && k !== 'worker')) return '上班的小物件只能分给 coder / worker'
+  // 自己画的像素画（可以没有）
+  if (sc.bmp != null) {
+    const b = sc.bmp
+    if (typeof b !== 'object' || Array.isArray(b) || b.w !== BMP_W || b.h !== BMP_H) return `像素画的大小要是 ${BMP_W}×${BMP_H}`
+    if (b.dim !== undefined && b.dim !== 0 && b.dim !== 1) return '像素画的「夜里变暗」只能是 0 或 1'
+    if (!decodeLayer(b.bg, pal.length, false)) return '像素画的背景数据不对（格数要正好 4800，每格都要有颜色）'
+    if (b.fg != null && !decodeLayer(b.fg, pal.length, true)) return '像素画的前景数据不对（格数要正好 4800）'
+  }
   return ''
 }
