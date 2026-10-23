@@ -15,6 +15,7 @@ import './extra.css'
 export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts, busy, onAct, consoleRef, say }) {
   const [note, setNote] = useState('')
   const [chat, setChat] = useState('')
+  const [sec, setSec] = useState('act')
 
   const sendNote = async () => {
     const v = note.trim()
@@ -45,8 +46,13 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
       </header>
       <div className="wb">
         <p className="pp-lead">你改不了{name}的设定，但你做的每件事，都会写进{name}的日记。</p>
+        <div className="pp-tabs" role="tablist">
+          {[['act', '互动 · 投喂'], ['gift', '礼物'], ['talk', '纸条 · 聊天']].map(([k, n]) => (
+            <button key={k} type="button" role="tab" aria-selected={sec === k} className={sec === k ? 'on' : ''} onClick={() => setSec(k)}>{n}</button>
+          ))}
+        </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'act'}>
           <div className="pp-h">{name}今天准备的互动</div>
           <div className="pp-acts">
             {buttons.map((b, i) => (
@@ -57,7 +63,7 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
           </div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'act'}>
           <div className="pp-h">投喂 <small>我的钱包 ¥{coins}</small></div>
           <div className="pp-chips">
             {FOODS.map((f) => (
@@ -68,7 +74,7 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
           </div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'gift'}>
           <div className="pp-h">送礼物 <small>会摆进{name}的家里</small></div>
           <div className="pp-chips">
             {GIFTS.map((g) => {
@@ -82,7 +88,7 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
           </div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'talk'}>
           <div className="pp-h">悄悄话 <small>只有{name}自己能打开</small></div>
           <div className="pp-inrow">
             <input className="pp-in" type="text" maxLength={40} value={note} placeholder="写一张小纸条……" aria-label="悄悄话"
@@ -91,7 +97,7 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
           </div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'talk'}>
           <div className="pp-h">和{name}聊两句</div>
           <div className="pp-inrow">
             <input className="pp-in" type="text" maxLength={40} value={chat} placeholder="试试：今天好累 / 想你 / 晚安" aria-label="聊天"

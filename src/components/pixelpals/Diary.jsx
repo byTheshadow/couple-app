@@ -11,8 +11,12 @@ import './extra.css'
    悄悄话的内容：只有收件人看得到；寄件人只看到「已经送到了」；服务器本来就不会把它给第三个人。
    =========================================================================== */
 
-export default function Diary({ items, notes, loading, myId, myName, mySlot, taName, taSlot }) {
+const SHOW = 6 // 默认只显示最新几条，其余点「展开」
+
+export default function Diary({ items, notes, loading, myId, myName, mySlot, taName, taSlot, onClear }) {
   const [filter, setFilter] = useState('all')
+  const [all, setAll] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const rows = items
     .map((e) => {
@@ -25,6 +29,13 @@ export default function Diary({ items, notes, loading, myId, myName, mySlot, taN
       return { e, mine, ownerSlot, ownerName, text }
     })
     .filter((r) => r.text && (filter === 'all' || (filter === 'mine' ? r.mine : !r.mine)))
+  const shown = all ? rows : rows.slice(0, SHOW)
+  const clear = async () => {
+    setBusy(true)
+    await onClear()
+    setBusy(false)
+    setAll(false)
+  }
 
   return (
     <section className="win">
@@ -42,7 +53,7 @@ export default function Diary({ items, notes, loading, myId, myName, mySlot, taN
           <button type="button" className={`pp-chip${filter === 'ta' ? ' on' : ''}`} onClick={() => setFilter('ta')}>{taName}</button>
         </div>
         <ul className="pp-log">
-          {rows.map(({ e, mine, ownerSlot, ownerName, text }) => {
+          {shown.map(({ e, mine, ownerSlot, ownerName, text }) => {
             let secret = null
             if (e.kind === 'note' && e.data && e.data.note_id != null) {
               if (mine) secret = notes[e.data.note_id] != null ? `🔒 “${notes[e.data.note_id]}”` : '🔒 纸条还在送来的路上'
@@ -62,6 +73,13 @@ export default function Diary({ items, notes, loading, myId, myName, mySlot, taN
           })}
           {!rows.length && <li className="pp-empty">{loading ? '正在翻日记…' : '还没有日记，去看看对方的小人吧。'}</li>}
         </ul>
+        <div className="pp-logbar">
+          {rows.length > SHOW && (
+            <button type="button" className="pp-chip" onClick={() => setAll((v) => !v)}>{all ? '收起' : `展开全部（还有 ${rows.length - SHOW} 条）`}</button>
+          )}
+          <span className="grow" />
+          {onClear && items.length > 0 && <button type="button" className="pp-chip" disabled={busy} onClick={clear}>{busy ? '清空中…' : '🗑 清空日记'}</button>}
+        </div>
       </div>
     </section>
   )

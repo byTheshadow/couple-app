@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, usePresets, saveSettings, palPoke, palSettle } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, saveSettings, palPoke, palSettle, palLogClear } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
@@ -86,6 +86,7 @@ const winOpts = (list) => [<option key="none" value="">不设</option>, ...list.
 const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i)
 const winFromList = (s) => homeSegments(s).flatMap(([f, t]) => range(f, t - 1))
 const winToList = (s, from) => homeSegments(s).filter(([f, t]) => from == null || (from >= f && from < t)).flatMap(([f, t]) => range(Math.max(f + 1, from == null ? 0 : from + 1), t))
+const PLAN_TABS = [['preset', '预设'], ['scene', '场景'], ['sched', '作息'], ['touch', '互动']]
 const SCHED_NAMES = { wake_h: '起床', work_h: '上班', off_h: '下班', sleep_h: '睡觉' }
 const MINI_KEY = 'pp-mini'
 const MINI_POS_KEY = 'pp-mini-pos'
@@ -109,7 +110,7 @@ function CountUp({ to }) {
   return <>{n}</>
 }
 
-const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA }, ref) {
+const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay }, ref) {
   const [banner, setBanner] = useState(null)
   const bannerT = useRef(0)
   const canvasRef = useRef(null)
@@ -391,7 +392,12 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         </div>,
         document.body,
       )}
-      {mine && <footer className="wf"><span>A 戳一戳（试试你写的被戳反应，连点 3 下看「被戳烦了」）· B 打招呼（只有你自己看得到）</span></footer>}
+      {mine && (
+        <footer className="wf pp-wf">
+          <span>A 戳一戳（试试你写的被戳反应，连点 3 下看「被戳烦了」）· B 打招呼（只有你自己看得到）</span>
+          {onReplay && <button type="button" className="pp-chip" onClick={onReplay}>🎬 回放下班庆祝</button>}
+        </footer>
+      )}
       {!mine && onA && <footer className="wf"><span>A 戳一戳（会写进 TA 的日记）· B 打招呼</span></footer>}
     </section>
   )
@@ -401,6 +407,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset, say }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
+  const [sec, setSec] = useState('preset') // 当前翻到哪一页：预设 / 场景 / 作息 / 互动
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
   const [pn, setPn] = useState('')
   const [pBusy, setPBusy] = useState(false)
@@ -496,8 +503,13 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
       </header>
       <div className="wb">
         <p className="pp-lead">只有你能改{name}。TA 来看小屋时，看到的就是你保存的这一份。</p>
+        <div className="pp-tabs" role="tablist">
+          {PLAN_TABS.map(([k, n]) => (
+            <button key={k} type="button" role="tab" aria-selected={sec === k} className={sec === k ? 'on' : ''} onClick={() => setSec(k)}>{n}</button>
+          ))}
+        </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'preset'}>
           <div className="pp-h">一键预设 <small>套上去只是预览，保存了才算数</small></div>
           <div className="pp-sub">日常</div>
           <div className="pp-chips">{DAILY_PRESETS.map(presetBtn)}</div>
@@ -527,7 +539,7 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           <p className="pp-hint">{active ? `${active.e} ${active.n}：${active.d}` : '日常预设只换上班地点和作息；特殊日和「我的预设」整套都换，连墙纸、3 个互动按钮和被戳反应一起（第四轮之前存的老预设不动你的被戳反应）。套错了点最下面的「还原」。同名再存一次就是覆盖。'}</p>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'scene'}>
           <div className="pp-h">上班地点</div>
           <div className="pp-chips">
             {SCENE_LIST.map(({ k, n, e }) => (
@@ -536,7 +548,7 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           </div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'scene'}>
           <div className="pp-h">家里的墙纸 <small>只有在家的时候看得到</small></div>
           <div className="pp-chips">
             {Object.entries(THEMES).map(([k, t]) => (
@@ -545,7 +557,7 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           </div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'sched'}>
           <div className="pp-h">作息 <small>其余时间在家，睡觉时间之后关灯</small></div>
           <div className="pp-sched">
             <label>起床 <select className="pp-sel" value={draft.wake_h} onChange={(e) => setSched('wake_h', +e.target.value)}>{hourOpts(0, 23)}</select></label>
@@ -557,11 +569,11 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           {schedProblem && <p className="pp-warn">{schedProblem}</p>}
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'sched'}>
           <div className="pp-h">在家的活动 <small>可选：在家的时间里，安排一段玩耍、一段放空</small></div>
           {WINDOW_KINDS.map(({ k, n, e }) => (
             <div className="pp-sched" key={k} style={{ marginBottom: 8 }}>
-              <label>{e} {n}从 <select className="pp-sel" value={draft[`${k}_from`] == null ? '' : draft[`${k}_from`]} onChange={(ev) => setWin(k, 'from', ev.target.value)} aria-label={`${n}的开始时间`}>{winOpts(winFromList(draft))}</select></label>
+              <label>{e} {n} <select className="pp-sel" value={draft[`${k}_from`] == null ? '' : draft[`${k}_from`]} onChange={(ev) => setWin(k, 'from', ev.target.value)} aria-label={`${n}的开始时间`}>{winOpts(winFromList(draft))}</select></label>
               <label>到 <select className="pp-sel" value={draft[`${k}_to`] == null ? '' : draft[`${k}_to`]} onChange={(ev) => setWin(k, 'to', ev.target.value)} aria-label={`${n}的结束时间`}>{winOpts(winToList(draft, draft[`${k}_from`]))}</select></label>
             </div>
           ))}
@@ -575,11 +587,11 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           <p className="pp-hint">不设就是没有。时间要完整落在「起床后到上班前」或「下班后到睡觉前」里，两段不能重叠。玩耍时小人{slot === 'u2' ? '弹吉他' : '玩掌机'}；放空时站着发呆（在家就在窗前，选了别的地方就去那里）；拖下面的「预览时间」就能看到。</p>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'touch'}>
           <div className="pp-h">被戳反应 <small>TA 戳{name}的时候，{name}会在 TA 的屏幕上说这些话</small></div>
           {POKE_SETS.map(({ k, n, hint }) => (
-            <div key={k}>
-              <div className="pp-sub">{n} <small>{hint}</small></div>
+            <details key={k} className="pp-fold" open={k === 'work'}>
+              <summary><b>{n}</b><small>{hint}</small><i>{pad4(draft.poke_lines && draft.poke_lines[k]).filter((s) => s.trim()).length}/{POKE_MAX}</i></summary>
               <div className="pp-edits" style={{ gridTemplateColumns: '1fr' }}>
                 {pad4(draft.poke_lines && draft.poke_lines[k]).map((s, i) => (
                   <input
@@ -594,12 +606,12 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
                   />
                 ))}
               </div>
-            </div>
+            </details>
           ))}
           <p className="pp-hint">每套最多 {POKE_MAX} 句，每句 {POKE_LEN} 个字以内，TA 每次戳会随机挑一句；一套都留空就用默认台词（灰字）。睡觉时用「睡觉时」，玩耍和放空沿用「在家时」。想先看看效果：点上面小屋的 A 键，连点 3 下就是「被戳烦了」。</p>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'touch'}>
           <div className="pp-h">今天的 3 个互动按钮 <small>TA 点了以后，{name}会根据场景回应</small></div>
           <div className="pp-edits">
             {draft.buttons.map((b, i) => (
@@ -612,7 +624,7 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           <p className="pp-hint">图标或文字留空，保存时会换回默认的。</p>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec !== 'sched'}>
           <div className="pp-h">下班结算 <small>{settleNote}</small></div>
           <p className="pp-hint" style={{ margin: '0 0 8px' }}>下班后打开小屋，会自动结算当天的工资，每天一次。按现在的作息：上 {income.hours} 小时班 = ¥{income.base}，心情不低于 70 再加 ¥{income.bonus}。</p>
           <div className="pp-chips"><button type="button" className="pp-chip" onClick={onReplay}>🎬 回放下班庆祝（不发钱）</button></div>
@@ -826,6 +838,15 @@ export default function PixelPals({ onExit }) {
     say(`墙纸只在家里看得到，预览时间先拨到 ${fmtHour(h)}`)
   }
 
+  // 清空日记：服务端删掉和我有关的所有记录，删完重新读一遍
+  const onClearLog = async () => {
+    if (!window.confirm('清空小人日记？\n会删掉你的小人的日记，以及你对 TA 的小人做过的事（包括悄悄话），清了就找不回来了。')) return
+    const { error } = await palLogClear()
+    if (error) { say(error); return }
+    await log.reload()
+    say('日记已清空')
+  }
+
   // 回放下班庆祝：不发钱，只是看看动画
   const onReplay = () => {
     if (!myConsole.current) return
@@ -858,7 +879,7 @@ export default function PixelPals({ onExit }) {
 
       {tab === 'mine' ? (
         <>
-          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} />
+          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} />
           <Planner
             name={myName}
             slot={mySlot}
@@ -924,6 +945,7 @@ export default function PixelPals({ onExit }) {
           mySlot={mySlot}
           taName={taName}
           taSlot={taSlot}
+          onClear={onClearLog}
         />
       )}
     </main>

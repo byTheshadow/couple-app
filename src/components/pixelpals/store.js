@@ -148,6 +148,8 @@ export const palNote = (owner, body) => rpc('pal_note', { p_owner: owner, p_body
 // line = 被戳的小人说的那句话（客户端按 TA 自己写的被戳反应挑好，服务端存进日记）；annoyed = 是不是被连戳烦了
 export const palPoke = (owner, line, annoyed) => rpc('pal_poke', { p_owner: owner, p_line: line || null, p_annoyed: !!annoyed })
 export const palChat = (owner, q, a) => rpc('pal_chat', { p_owner: owner, p_q: q, p_a: a })
+// 清空日记（第六轮 SQL：pixelpals-round6.sql）：删掉和我有关的所有记录
+export const palLogClear = () => rpc('pal_log_clear', {})
 
 /**
  * 我的预设：{ items, loading, missing, save }

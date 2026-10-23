@@ -14,7 +14,7 @@
 
 /* 日记 */
 .pp-filter { margin-bottom: 4px; }
-.pp-log { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow: auto; }
+.pp-log { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow: auto; }
 .pp-log li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start; padding: 10px 2px; border-top: 1px solid var(--line); }
 .pp-log li:first-child { border-top: 0; }
 .pp-ava { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
@@ -24,6 +24,9 @@
 .pp-txt { font-size: 13px; line-height: 1.5; word-break: break-word; }
 .pp-t { font-family: var(--mono); font-size: 11px; color: var(--ink2); white-space: nowrap; }
 .pp-secret { display: inline-block; margin-top: 3px; padding: 2px 9px; border-radius: 8px; background: var(--chip); border: 1px dashed var(--line); font-size: 12px; }
+.pp-logbar { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.pp-logbar:empty { display: none; }
+.pp-logbar .pp-chip { padding: 5px 11px; font-size: 12px; }
 .pp-empty { display: block !important; color: var(--ink2); font-size: 13px; }
 
 /* 第三轮：预设 + 下班结算横幅 */

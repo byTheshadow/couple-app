@@ -61,8 +61,8 @@
 .pp-lead { margin: 0 0 6px; font-size: 13px; color: var(--ink2); line-height: 1.5; }
 .pp-blk { padding: 12px 0; border-top: 1px solid var(--line); }
 .pp-blk:first-of-type { border-top: 0; }
-.pp-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
-.pp-h small { font-weight: 400; color: var(--ink2); font-size: 12px; text-align: right; }
+.pp-h { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 8px; margin-bottom: 8px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.pp-h small { font-weight: 400; color: var(--ink2); font-size: 12px; text-align: right; white-space: normal; flex: 1; min-width: 8em; }
 .pp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .pp-chip { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 999px; padding: 7px 13px; font: inherit; font-size: 13px; cursor: pointer; }
 .pp-chip.on { background: var(--btn); color: var(--btnInk); border-color: transparent; }
@@ -82,6 +82,24 @@
 .pp-actions { display: flex; gap: 10px; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--line); }
 
 .pp-page button:focus-visible, .pp-page input:focus-visible, .pp-page select:focus-visible { outline: 2px solid var(--btn); outline-offset: 2px; }
+
+/* 第六轮：安排面板分页签 + 被戳反应折叠 */
+.pp-tabs { display: flex; gap: 4px; padding: 3px; margin: 8px 0 4px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); }
+.pp-tabs button { flex: 1; min-width: 0; border: none; background: transparent; color: var(--ink2); border-radius: 9px; padding: 8px 4px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-tabs button.on { background: var(--btn); color: var(--btnInk); }
+.pp-blk[hidden] { display: none; }
+.pp-fold { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; }
+.pp-fold summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; list-style: none; font-size: 13px; }
+.pp-fold summary::-webkit-details-marker { display: none; }
+.pp-fold summary::before { content: '▸'; color: var(--ink2); font-size: 11px; transition: transform .15s; }
+.pp-fold[open] summary::before { transform: rotate(90deg); }
+.pp-fold summary b { font-weight: 600; white-space: nowrap; }
+.pp-fold summary small { flex: 1; min-width: 0; color: var(--ink2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-fold summary i { font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--ink2); }
+.pp-fold .pp-edits { padding: 0 10px 10px; }
+.pp-wf { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pp-wf span { flex: 1 1 220px; }
+.pp-wf .pp-chip { padding: 5px 11px; font-size: 12px; }
 
 /* 悬浮小窗：屏幕滚出视野后浮在页面上方，可以拖动 */
 .pp-mini { position: fixed; z-index: 40; top: calc(env(safe-area-inset-top) + 10px); right: 12px; width: min(44vw, 200px); padding: 6px; border-radius: 12px;
