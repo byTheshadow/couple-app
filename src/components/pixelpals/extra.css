@@ -29,6 +29,12 @@
 /* 第三轮：预设 + 下班结算横幅 */
 .pp-sub { margin: 10px 0 6px; font-size: 12px; color: var(--ink2); }
 .pp-sub:first-of-type { margin-top: 0; }
+.pp-sub small { margin-left: 6px; font-size: 11px; opacity: .8; }
+.pp-cp { display: inline-flex; align-items: stretch; }
+.pp-cp .pp-chip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.pp-x { border: 1px solid var(--line); border-left: 0; background: var(--chip); color: var(--ink2); padding: 0 10px; border-radius: 0 999px 999px 0; font: inherit; font-size: 15px; cursor: pointer; }
+.pp-mk { margin-top: 10px; }
+.pp-mk .pp-in.c { flex: 0 0 54px; }
 
 .pp-banner { position: absolute; z-index: 3; left: 50%; top: 13%; transform: translateX(-50%); width: max-content; max-width: 86%;
   display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px 9px; text-align: center; pointer-events: none;

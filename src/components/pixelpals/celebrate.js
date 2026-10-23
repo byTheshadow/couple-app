@@ -11,7 +11,7 @@ const rand = (a, b) => a + Math.random() * (b - a)
 const R = (ctx, c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h) }
 
 // 和服务端 pal_settle 同一条规则，只用来「回放动画」时估个数；真正发多少钱以服务端为准
-export const INCOME = { base: 20, hourly: 2, maxHours: 12, moodBonus: 10 }
+export const INCOME = { base: 20, hourly: 5, maxHours: 12, moodBonus: 15 }
 export function estimateIncome(settings, mood = 70) {
   const hours = Math.max(1, Math.min(INCOME.maxHours, settings.off_h - settings.work_h))
   const base = INCOME.base + INCOME.hourly * hours
@@ -128,7 +128,8 @@ export function celebrateEvent(slot, res, replay = false) {
     react: 2.2,
     hearts: 6,
     dur: 4.6,
-    text: coin ? (r.late ? '昨天的工资补上啦～' : '下班啦！发工资咯～') : (r.late ? 'BUILD SUCCESS。……昨天的。' : 'BUILD SUCCESS。下班。'),
+    // 打工小人（黑发 · 摇滚高冷）说话冷冷的；代码小人（白发 · 软萌）说话软软的
+    text: coin ? (r.late ? '昨天的工资……补上了。' : '……发工资了。今晚去买琴弦。') : (r.late ? 'BUILD SUCCESS～昨天的也补上啦！' : 'BUILD SUCCESS！下班啦～'),
     celebrate: coin ? 'coins' : 'build',
     banner: coin
       ? { cls: 'coin', head: '★ 今日结算 ★', title: '今日结算', amount: r.coins || 0, note }
@@ -141,8 +142,8 @@ export function settleLine(ownerSlot, data) {
   const x = data || {}
   const amount = money(x.coins == null ? '?' : x.coins)
   const when = x.late ? '昨天' : '今天'
-  if (ownerSlot === 'u2') return `${when}的工钱到手：${amount}！今日结算完成～`
-  return `${when}的班下完了。BUILD SUCCESS，工时折算 ${amount}。`
+  if (ownerSlot === 'u2') return `${when}的工钱到手：${amount}。……还行。`
+  return `${when}的班下完啦～BUILD SUCCESS！工时换成了 ${amount}～`
 }
 
 /** 钱包旁边的小字：今天结算过没有 */

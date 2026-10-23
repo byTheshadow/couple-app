@@ -7,6 +7,8 @@
    这个文件不碰界面也不碰服务器。
    =========================================================================== */
 
+import { normalizeSettings, checkSchedule, cleanEmoji, cleanLabel } from './art'
+
 export const DAILY_PRESETS = [
   { id: 'std', e: '🏢', n: '标准班', d: '7 点上班 · 17 点下班', set: { work_scene: 'office', wake_h: 6, work_h: 7, off_h: 17, sleep_h: 23 } },
   { id: 'early', e: '🌅', n: '早鸟', d: '6 点上班 · 15 点下班', set: { work_scene: 'office', wake_h: 5, work_h: 6, off_h: 15, sleep_h: 22 } },
@@ -48,15 +50,47 @@ export const SPECIAL_PRESETS = [
 
 export const ALL_PRESETS = [...DAILY_PRESETS, ...SPECIAL_PRESETS]
 
+/* ---------- 我的预设（存在服务器上，两台设备都能用，只有自己看得到） ---------- */
+
+export const MAX_PRESETS = 8
+const SCENE_NAME = { office: '办公室', cafe: '咖啡馆' }
+const THEME_NAME = { cream: '奶油', mint: '薄荷', night: '星空' }
+
+const describe = (s) => `${SCENE_NAME[s.work_scene] || ''} · ${THEME_NAME[s.home_theme] || ''}墙纸 · ${s.work_h}点上班 ${s.off_h}点下班`
+
+/** 把当前草稿存成一套预设。id 不给就新生成一个 */
+export function makeCustomPreset(draft, emoji, name, id) {
+  const set = {
+    work_scene: draft.work_scene, home_theme: draft.home_theme,
+    wake_h: draft.wake_h, work_h: draft.work_h, off_h: draft.off_h, sleep_h: draft.sleep_h,
+    buttons: draft.buttons.map(({ e, t }) => ({ e, t })),
+  }
+  return { id: id || `u${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`, e: emoji, n: name, d: describe(set), set, mine: true }
+}
+
+/** 服务器里的一项（扁平的）→ 界面用的预设；内容不合规就返回 null（直接跳过） */
+export function presetFromRow(row, slot) {
+  if (!row || typeof row !== 'object') return null
+  const n = cleanLabel(row.n)
+  const e = cleanEmoji(row.e)
+  if (!n || !e || typeof row.id !== 'string') return null
+  const t = normalizeSettings(row, slot)
+  if (checkSchedule(t)) return null
+  return makeCustomPreset(t, e, n, row.id)
+}
+
+/** 界面用的预设 → 服务器里的一项（扁平的） */
+export const presetToRow = (p) => ({ id: p.id, n: p.n, e: p.e, ...p.set })
+
 /** 把预设套到草稿上，返回新草稿（预设里没写的项保持原样） */
 export function applyPreset(draft, preset) {
   return { ...draft, ...preset.set, buttons: preset.set.buttons ? preset.set.buttons.map((b) => ({ ...b })) : draft.buttons }
 }
 
-/** 草稿现在正好是哪个预设（用来高亮）；对不上就返回 null */
-export function activePreset(draft) {
+/** 草稿现在正好是哪个预设（用来高亮）；对不上就返回 null。list 是要比对的预设（默认只比内置的） */
+export function activePreset(draft, list = ALL_PRESETS) {
   if (!draft) return null
-  return ALL_PRESETS.find((p) => Object.keys(p.set).every((k) => {
+  return list.find((p) => Object.keys(p.set).every((k) => {
     if (k === 'buttons') return JSON.stringify(p.set.buttons) === JSON.stringify(draft.buttons.map(({ e, t }) => ({ e, t })))
     return draft[k] === p.set[k]
   })) || null

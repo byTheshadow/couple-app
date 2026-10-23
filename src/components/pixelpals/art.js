@@ -2,7 +2,8 @@
    像素小屋 · 数据 + 画面
    这个文件不碰界面也不碰服务器：只放常量、默认值、整理数据的小函数，和把小人/场景画到 canvas 上的代码。
    画布固定 160×120（像素风，CSS 里放大）。地面线 FLOOR = 98。
-   user1 = 代码小人（白发少年）；user2 = 打工小人（黑发少年）。
+   user1 = 代码小人（白发少年，软萌可爱、蓝眼睛）；user2 = 打工小人（黑发少年，摇滚乐手、高冷）。
+   「是谁」决定职业和庆祝动画（代码小人 / 打工小人），「什么性格」决定互动按钮、台词（见 voice.js）。
    =========================================================================== */
 
 export const W = 160
@@ -51,8 +52,8 @@ export const CHARS = {
 }
 
 export const DEFAULT_BUTTONS = {
-  u1: [{ e: '🤘', t: '碰个拳' }, { e: '☕', t: '递杯咖啡' }, { e: '🎸', t: '弹一段' }],
-  u2: [{ e: '🫳', t: '摸摸头' }, { e: '🍬', t: '给颗糖' }, { e: '📣', t: '喊加油' }],
+  u1: [{ e: '🫳', t: '摸摸头' }, { e: '🍬', t: '给颗糖' }, { e: '📣', t: '喊加油' }], // 白发 · 软萌
+  u2: [{ e: '🤘', t: '碰个拳' }, { e: '☕', t: '递杯咖啡' }, { e: '🎸', t: '弹一段' }], // 黑发 · 摇滚
 }
 
 export const DEFAULT_SETTINGS = {
@@ -152,7 +153,7 @@ const SPR_CODER = [
   '..HHHSHHHSHHHH..',
   '..HHSSSSSSSSHH..',
   '..HHSESSSSESHH..',
-  '..HHSESSSSESHH..',
+  '..HHSFSSSSFSHH..',
   '..HHSbSSSSbSHH..',
   '..HHSSSmmSSSHH..',
   '..HHHsSSSSsHHH..',
@@ -171,7 +172,7 @@ const SPR_CODER = [
 ]
 // 白发少年
 const PAL_CODER = {
-  H: '#f3f5fb', h: '#c7cfe2', S: '#f6d5bd', s: '#e2b497', E: '#0b0b10', F: '#0b0b10', b: '#f0a3a3', m: '#b0645f',
+  H: '#f3f5fb', h: '#c7cfe2', S: '#f6d5bd', s: '#e2b497', E: '#8fc4ff', F: '#2f6fe0', b: '#f0a3a3', m: '#b0645f',
   J: '#23232d', j: '#41414f', R: '#e5384f', M: '#d9dbe5', P: '#2b3049', B: '#0e0e14',
 }
 const SPR_WORKER = [
@@ -201,7 +202,7 @@ const SPR_WORKER = [
 ]
 // 黑发少年
 const PAL_WORKER = {
-  H: '#17171f', h: '#3d3d55', S: '#fde3d2', s: '#efc5ad', E: '#8fc4ff', F: '#2f6fe0', b: '#ffaec0', m: '#d0848e',
+  H: '#17171f', h: '#3d3d55', S: '#fde3d2', s: '#efc5ad', E: '#4a4560', F: '#14121c', b: '#ffaec0', m: '#d0848e',
   C: '#a9d5ff', c: '#ffffff', P: '#dfe5f2', O: '#7f97c6',
 }
 const SPRITES = {
@@ -484,11 +485,11 @@ export function renderFrame(ctx, a, m, hr, t) {
 
 export const LINES = {
   u1: {
-    poke: ['干嘛。', '别戳了。……再戳一下也行。', '嗯？'],
-    wave: ['哟。', '来了啊。', '嗯，看见你了。'],
-  },
-  u2: {
     poke: ['呀！', '嘿嘿，好痒～', '再戳我就要咬你了哦'],
     wave: ['嗨嗨～', '你来看我啦！', '欢迎光临～'],
+  },
+  u2: {
+    poke: ['干嘛。', '别戳了。……再戳一下也行。', '嗯？'],
+    wave: ['哟。', '来了啊。', '嗯，看见你了。'],
   },
 }

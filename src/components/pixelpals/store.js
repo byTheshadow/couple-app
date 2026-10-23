@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { normalizeSettings, normalizeState } from './art'
+import { presetFromRow, presetToRow } from './presets'
 
 const mapError = (e) => {
   const m = e?.message || ''
@@ -26,6 +27,8 @@ const mapError = (e) => {
   if (m.includes('bad food') || m.includes('bad gift')) return '这个东西服务端不认识'
   if (m.includes('self interaction')) return '只能对 TA 的小人做这个'
   if (m.includes('not logged in')) return '登录状态过期了，刷新一下再试'
+  if (m.includes('too many presets')) return '预设最多存 8 套，先删掉一个'
+  if (m.includes('bad preset')) return '这套预设里有一项不合规矩（名字 8 个字以内、时间要按顺序），改一下再存'
   return `像素小屋出错：${m || '未知原因'}`
 }
 
@@ -123,6 +126,45 @@ export const palGift = (owner, gift) => rpc('pal_gift', { p_owner: owner, p_gift
 export const palNote = (owner, body) => rpc('pal_note', { p_owner: owner, p_body: body })
 export const palPoke = (owner) => rpc('pal_poke', { p_owner: owner })
 export const palChat = (owner, q, a) => rpc('pal_chat', { p_owner: owner, p_q: q, p_a: a })
+
+/**
+ * 我的预设：{ items, loading, missing, save }
+ * - items: 界面用的预设（见 presets.js），只有自己看得到
+ * - missing: 服务端还没有 pal_presets 表（第三轮 SQL 没跑），界面上提示一句，其他功能不受影响
+ * - save(nextItems): 整个数组一起存（服务端检查合不合规矩），成功后才更新 items；返回 { error }
+ */
+export function usePresets(userId, slot) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+
+  useEffect(() => {
+    if (!supabase || !userId) { setLoading(false); return undefined }
+    let alive = true
+    ;(async () => {
+      const { data, error } = await supabase.from('pal_presets').select('items').eq('user_id', userId).maybeSingle()
+      if (!alive) return
+      if (error) {
+        setMissing(error.code === '42P01' || error.code === 'PGRST205' || /could not find the table|does not exist/i.test(error.message || ''))
+      } else {
+        const rows = data && Array.isArray(data.items) ? data.items : []
+        setItems(rows.map((r) => presetFromRow(r, slot)).filter(Boolean))
+      }
+      setLoading(false)
+    })()
+    return () => { alive = false }
+  }, [userId, slot])
+
+  const save = useCallback(async (next) => {
+    if (!supabase) return { error: '还没有连上服务器' }
+    const { error } = await supabase.rpc('pal_presets_save', { p_items: next.map(presetToRow) })
+    if (error) return { error: mapError(error) }
+    setItems(next)
+    return { error: null }
+  }, [])
+
+  return { items, loading, missing, save }
+}
 
 /**
  * 下班结算：问服务端「我今天的班结算过了吗」。每天只会发一次钱，由服务端判断，重复问也没事。

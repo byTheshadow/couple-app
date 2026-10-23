@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, saveSettings, palPoke, palSettle } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, saveSettings, palPoke, palSettle } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_ICON, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
@@ -11,7 +11,7 @@ import {
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, localDay, INCOME } from './pixelpals/celebrate'
-import { DAILY_PRESETS, SPECIAL_PRESETS, applyPreset, activePreset, homeHour } from './pixelpals/presets'
+import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
 import './pixelpals.css'
@@ -243,9 +243,18 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income }) {
+function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
-  const active = activePreset(draft)
+  const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
+  const [pn, setPn] = useState('')
+  const [pBusy, setPBusy] = useState(false)
+  const active = activePreset(draft, [...DAILY_PRESETS, ...SPECIAL_PRESETS, ...mine.items])
+  const savePreset = async () => {
+    setPBusy(true)
+    const ok = await onSavePreset(pe, pn)
+    setPBusy(false)
+    if (ok) setPn('')
+  }
   const presetBtn = (p) => (
     <button key={p.id} type="button" className={`pp-chip${active && active.id === p.id ? ' on' : ''}`} onClick={() => onPreset(p)} title={p.d}>{p.e} {p.n}</button>
   )
@@ -272,7 +281,28 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
           <div className="pp-chips">{DAILY_PRESETS.map(presetBtn)}</div>
           <div className="pp-sub">特殊日 / 纪念日</div>
           <div className="pp-chips">{SPECIAL_PRESETS.map(presetBtn)}</div>
-          <p className="pp-hint">{active ? `${active.e} ${active.n}：${active.d}` : '日常预设只换上班地点和作息；特殊日整套都换，连墙纸和 3 个互动按钮一起。套错了点最下面的「还原」。'}</p>
+          <div className="pp-sub">我的预设 <small>存的是你现在看到的这一整套：地点、墙纸、作息、3 个按钮</small></div>
+          {mine.missing ? (
+            <p className="pp-hint" style={{ margin: 0 }}>服务端还没有存预设的表，把第三轮的 SQL（pixelpals-round3.sql）整段再跑一遍就能用了。</p>
+          ) : (
+            <>
+              <div className="pp-chips">
+                {mine.items.map((p) => (
+                  <span className="pp-cp" key={p.id}>
+                    {presetBtn(p)}
+                    <button type="button" className="pp-x" onClick={() => onDeletePreset(p)} aria-label={`删除预设 ${p.n}`}>×</button>
+                  </span>
+                ))}
+                {!mine.items.length && <span className="pp-hint" style={{ margin: 0 }}>{mine.loading ? '读取中…' : '还没有。把上面的安排调好，在下面起个名字存起来。'}</span>}
+              </div>
+              <div className="pp-inrow pp-mk">
+                <input className="pp-in c" type="text" value={pe} onChange={(e) => setPe(cleanEmoji(e.target.value))} aria-label="预设的图标" />
+                <input className="pp-in" type="text" value={pn} onChange={(e) => setPn(cleanLabel(e.target.value))} placeholder="给这套起个名字（8 个字以内）" aria-label="预设的名字" />
+                <button type="button" className="btn" disabled={pBusy || !pn.trim()} onClick={savePreset}>{pBusy ? '…' : '存起来'}</button>
+              </div>
+            </>
+          )}
+          <p className="pp-hint">{active ? `${active.e} ${active.n}：${active.d}` : '日常预设只换上班地点和作息；特殊日和「我的预设」整套都换，连墙纸和 3 个互动按钮一起。套错了点最下面的「还原」。同名再存一次就是覆盖。'}</p>
         </div>
 
         <div className="pp-blk">
@@ -353,6 +383,7 @@ export default function PixelPals({ onExit }) {
   const taName = (partner && partner.display_name) || 'TA'
 
   const myPal = usePal(me && me.id, mySlot, true)
+  const presets = usePresets(me && me.id, mySlot)
   const taPal = usePal(partner && partner.id, taSlot, false)
 
   const [tab, setTab] = useState('mine')
@@ -474,6 +505,29 @@ export default function PixelPals({ onExit }) {
     say(`套上了「${p.n}」，看看预览，满意就保存`)
   }
 
+  // 把现在看到的整套（含还没保存的草稿）存成「我的预设」
+  const onSavePreset = async (emoji, rawName) => {
+    const name = cleanLabel(rawName)
+    if (!name) { say('先给这套起个名字（8 个字以内）'); return false }
+    const clean = { ...shownDraft, buttons: normalizeButtons(shownDraft.buttons, mySlot) }
+    const bad = checkSchedule(clean)
+    if (bad) { say(bad); return false }
+    const list = presets.items
+    const old = list.find((p) => p.n === name)
+    if (!old && list.length >= MAX_PRESETS) { say(`最多存 ${MAX_PRESETS} 套，先删掉一个`); return false }
+    const p = makeCustomPreset(clean, cleanEmoji(emoji) || '⭐', name, old ? old.id : undefined)
+    const { error } = await presets.save(old ? list.map((x) => (x.id === old.id ? p : x)) : [...list, p])
+    if (error) { say(error); return false }
+    say(old ? `「${name}」已经覆盖` : `存好了：「${name}」`)
+    return true
+  }
+
+  const onDeletePreset = async (p) => {
+    if (!window.confirm(`删掉预设「${p.n}」？`)) return
+    const { error } = await presets.save(presets.items.filter((x) => x.id !== p.id))
+    say(error || `已删掉「${p.n}」`)
+  }
+
   // 换墙纸：墙纸只画在「家里」，上班时间选了什么都看不到，所以把预览时间拨到家里的时段
   const onTheme = (k) => {
     const next = { ...(draft || myPal.settings), home_theme: k }
@@ -530,6 +584,9 @@ export default function PixelPals({ onExit }) {
             setSim={setSim}
             hr={hr}
             onPreset={onPreset}
+            mine={presets}
+            onSavePreset={onSavePreset}
+            onDeletePreset={onDeletePreset}
             onTheme={onTheme}
             onReplay={onReplay}
             settleNote={settleNote}
