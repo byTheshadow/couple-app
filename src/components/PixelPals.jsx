@@ -1,20 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, saveSettings } from './pixelpals/store'
+import { usePal, usePalLog, saveSettings, palPoke } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_ICON, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
-  normalizeButtons, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick,
+  normalizeButtons, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
 } from './pixelpals/art'
+import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
+import { PLAY_KINDS, reactionFor } from './pixelpals/voice'
+import Visitor from './pixelpals/Visitor'
+import Diary from './pixelpals/Diary'
 import './pixelpals.css'
 
 /* ===========================================================================
    像素小屋：两个人各有一台像素游戏机，互相能看到对方的小人在干嘛，但只能改自己的。
-   这是第一轮：自己的安排面板（上班地点 / 墙纸 / 作息 / 三个互动按钮）+ 看 TA 的小屋。
-   第二轮：投喂、送礼、悄悄话、互动按钮、日记；第三轮：下班结算、预设、心情衰减。
-   - 画面和数据整理在 pixelpals/art.js，服务器读写在 pixelpals/store.js，这个文件只管界面
+   第一轮：自己的安排面板（上班地点 / 墙纸 / 作息 / 三个互动按钮）+ 看 TA 的小屋。
+   第二轮：去看 TA（互动按钮 / 投喂 / 送礼 / 悄悄话 / 聊天 / 戳一戳）+ 小人日记。
+   第三轮：下班结算、预设、心情衰减。
+   - 画面和数据整理在 pixelpals/art.js，掉落动画在 fx.js，台词在 voice.js，服务器读写在 store.js，
+     「去看 TA」在 Visitor.jsx，日记在 Diary.jsx，这个文件只管把它们拼成页面
    - user1 = 代码小人（白发），user2 = 打工小人（黑发），由登录账号的 slot 决定
    用法：<PixelPals onExit={(message) => ...} />
    =========================================================================== */
@@ -50,7 +56,7 @@ const hourOptions = () => Array.from({ length: 24 }, (_, i) => <option key={i} v
 
 /* ---------- 一台游戏机 ---------- */
 
-function Console({ slot, name, settings, state, hr, mine, preview }) {
+const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA }, ref) {
   const canvasRef = useRef(null)
   const actorRef = useRef(null)
   const bubbleRef = useRef(null)
@@ -68,6 +74,21 @@ function Console({ slot, name, settings, state, hr, mine, preview }) {
     el.classList.add('on')
     bubbleT.current = dur
   }, [])
+
+  // 父组件用这个让小人当场做出反应（互动成功 / 收到 TA 的互动）：东西先掉下来，落到头顶才反应
+  const play = useCallback((ev) => {
+    const a = actorRef.current
+    if (!a || !ev) return
+    const land = () => {
+      if (ev.react) a.react = ev.react
+      if (ev.blush) a.blushT = ev.blush
+      if (ev.hearts) hearts(a, ev.hearts)
+      if (ev.text) say(ev.text, ev.dur || 3.6)
+    }
+    if (ev.drop) dropItem(a, ev.drop, land)
+    else land()
+  }, [say])
+  useImperativeHandle(ref, () => ({ play, say }), [play, say])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -92,7 +113,9 @@ function Console({ slot, name, settings, state, hr, mine, preview }) {
       const cur = live.current
       const mood = moodNow(cur.state)
       stepActor(actor, cur.settings, cur.hr, dt, mood)
+      stepDrops(actor, dt)
       renderFrame(ctx, actor, { slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood }, cur.hr, now / 1000)
+      drawDrops(ctx, actor)
 
       const label = actor.state === 'work' ? `上班中 · ${SCENES[cur.settings.work_scene]}` : actor.state === 'home' ? '在家' : '睡觉中'
       const key = `${fmtHour(cur.hr)}|${label}`
@@ -122,6 +145,7 @@ function Console({ slot, name, settings, state, hr, mine, preview }) {
   }, [slot])
 
   const poke = () => {
+    if (onA) { onA(); return } // 去戳 TA：交给父组件走服务端，成功后小人才有反应
     const a = actorRef.current
     if (!a) return
     a.react = 0.6
@@ -165,7 +189,7 @@ function Console({ slot, name, settings, state, hr, mine, preview }) {
           <span className="pp-gifts">{gifts}</span>
           <span className="pp-wallet">¥ {state.coins}</span>
         </div>
-        {mine && (
+        {(mine || onA) && (
           <div className="pp-pad">
             <div className="pp-dpad" aria-hidden="true"><i /><i /></div>
             <div className="pp-ab">
@@ -176,9 +200,10 @@ function Console({ slot, name, settings, state, hr, mine, preview }) {
         )}
       </div>
       {mine && <footer className="wf"><span>A 戳一戳 · B 打招呼（只有你自己看得到）</span></footer>}
+      {!mine && onA && <footer className="wf"><span>A 戳一戳（会写进 TA 的日记）· B 打招呼</span></footer>}
     </section>
   )
-}
+})
 
 /* ---------- 自己的安排面板 ---------- */
 
@@ -281,8 +306,13 @@ export default function PixelPals({ onExit }) {
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
+  const [busy, setBusy] = useState(false) // 正在等服务端结算一次互动：期间互动按钮都点不了，避免连点
+  const busyRef = useRef(false)
   const baseRef = useRef(null)
   const toastT = useRef(0)
+  const myConsole = useRef(null)
+  const taConsole = useRef(null)
+  const live = useRef({}) // 给回调用的「最新值」，免得回调里拿到旧的
 
   useEffect(() => {
     const id = setInterval(() => setReal(realHour()), 20000)
@@ -308,6 +338,33 @@ export default function PixelPals({ onExit }) {
   const hr = sim == null ? real : sim
   const shownDraft = draft || myPal.settings
   const dirty = !!draft && !same(draft, myPal.settings)
+  live.current = { tab, hr, mySlot, taSlot, myId: me && me.id, mySettings: myPal.settings, taSettings: taPal.settings }
+
+  // TA 对我的小人做了什么：我正好在看自己的小屋，小人就当场反应；不在看就只进日记
+  const onLogInsert = useCallback((row) => {
+    const L = live.current
+    if (!PLAY_KINDS.includes(row.kind)) return
+    if (row.owner_id !== L.myId || row.actor_id === L.myId) return
+    if (L.tab !== 'mine' || !myConsole.current) return
+    myConsole.current.play(reactionFor(L.mySlot, stateOf(L.mySettings, L.hr), row.kind, row.data))
+  }, [])
+  const log = usePalLog(me && me.id, partner && partner.id, onLogInsert)
+
+  // 我对 TA 的小人做一件事：先让服务端结算（扣钱、加心情、写日记），成功了 TA 的小人才当场反应
+  const onAct = async (kind, call, data) => {
+    if (busyRef.current) return false
+    busyRef.current = true
+    setBusy(true)
+    const { error } = await call()
+    busyRef.current = false
+    setBusy(false)
+    if (error) { say(error); return false }
+    const L = live.current
+    if (taConsole.current) taConsole.current.play(reactionFor(L.taSlot, stateOf(L.taSettings, L.hr), kind, data))
+    myPal.reload()
+    taPal.reload()
+    return true
+  }
 
   const onSave = async () => {
     if (!me || !draft) return
@@ -352,7 +409,7 @@ export default function PixelPals({ onExit }) {
 
       {tab === 'mine' ? (
         <>
-          <Console key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} />
+          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} />
           <Planner
             name={myName}
             draft={shownDraft}
@@ -368,24 +425,47 @@ export default function PixelPals({ onExit }) {
         </>
       ) : partner ? (
         <>
-          <Console key={`ta-${taSlot}`} slot={taSlot} name={taName} settings={taPal.settings} state={taPal.state} hr={hr} mine={false} preview={false} />
-          <section className="win">
-            <header className="tb">
-              <Svg name="heart" size={14} />
-              <b>{taName}今天准备的互动.txt</b>
-              <span className="grow" />
-              <span className="ctl"><i>–</i><i>□</i><i>×</i></span>
-            </header>
-            <div className="wb">
-              <div className="pp-chips">
-                {taPal.settings.buttons.map((b, i) => <span key={i} className="pp-chip ghost">{b.e} {b.t}</span>)}
-              </div>
-              <p className="pp-hint">这是 TA 今天为小人准备的三个互动。你只能看，不能改 TA 的小屋。点按钮、投喂、送礼物、悄悄话都在下一轮开放。</p>
-            </div>
-          </section>
+          <Console
+            ref={taConsole}
+            key={`ta-${taSlot}`}
+            slot={taSlot}
+            name={taName}
+            settings={taPal.settings}
+            state={taPal.state}
+            hr={hr}
+            mine={false}
+            preview={false}
+            onA={() => onAct('poke', () => palPoke(partner.id), {})}
+          />
+          <Visitor
+            ownerId={partner.id}
+            name={taName}
+            slot={taSlot}
+            st={stateOf(taPal.settings, hr)}
+            buttons={taPal.settings.buttons}
+            coins={myPal.state.coins}
+            gifts={taPal.state.gifts}
+            busy={busy}
+            onAct={onAct}
+            consoleRef={taConsole}
+            say={say}
+          />
         </>
       ) : (
         <section className="win"><div className="wb"><p className="pp-lead">还没有另一半的账号，等 TA 加入就能互相看到小屋了。</p></div></section>
+      )}
+
+      {me && (
+        <Diary
+          items={log.items}
+          notes={log.notes}
+          loading={log.loading}
+          myId={me.id}
+          myName={myName}
+          mySlot={mySlot}
+          taName={taName}
+          taSlot={taSlot}
+        />
       )}
     </main>
   )

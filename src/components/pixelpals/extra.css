@@ -1,0 +1,29 @@
+/* 像素小屋第二轮：去看 TA（互动按钮 / 投喂 / 送礼 / 悄悄话 / 聊天）和小人日记。
+   和 pixelpals.css 放在一起用同一套 pp- 前缀与主题变量，亮暗主题自动适配。 */
+
+.pp-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pp-act { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 16px; padding: 12px 6px; font: inherit; font-size: 13px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; transition: transform .1s; }
+.pp-act span { font-size: 22px; line-height: 1; }
+.pp-act:active { transform: scale(.96); }
+.pp-act:disabled, .pp-chip:disabled { opacity: .45; cursor: default; }
+.pp-price { font-style: normal; font-family: var(--mono); font-size: 11px; opacity: .6; margin-left: 5px; }
+.pp-inrow { display: flex; gap: 6px; }
+.pp-inrow .pp-in { flex: 1; min-width: 0; }
+.pp-inrow .btn { height: 38px; padding: 0 16px; font-size: 14px; white-space: nowrap; }
+
+/* 日记 */
+.pp-filter { margin-bottom: 4px; }
+.pp-log { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow: auto; }
+.pp-log li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: start; padding: 10px 2px; border-top: 1px solid var(--line); }
+.pp-log li:first-child { border-top: 0; }
+.pp-ava { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+.pp-ava.u1 { background: #2a2a36; color: #fff; box-shadow: inset 0 -4px 0 #e5384f; }
+.pp-ava.u2 { background: #9fc9ff; color: #1c1a2b; box-shadow: inset 0 -4px 0 #fff; }
+.pp-who { font-size: 12px; color: var(--ink2); }
+.pp-txt { font-size: 13px; line-height: 1.5; word-break: break-word; }
+.pp-t { font-family: var(--mono); font-size: 11px; color: var(--ink2); white-space: nowrap; }
+.pp-secret { display: inline-block; margin-top: 3px; padding: 2px 9px; border-radius: 8px; background: var(--chip); border: 1px dashed var(--line); font-size: 12px; }
+.pp-empty { display: block !important; color: var(--ink2); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) { .pp-act { transition: none; } }

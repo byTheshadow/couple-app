@@ -1,0 +1,155 @@
+/* ===========================================================================
+   像素小屋 · 小人的台词
+   - 互动回应（投喂 / 按钮 / 礼物 / 悄悄话 / 戳一戳）按小人当时在上班、在家还是在睡觉，说不同的话
+   - 日记：每条记录在服务器里只存「谁、做了什么、几个参数」，句子在这里按小人自己的口吻拼出来
+   - 聊天：预览阶段用预设台词；以后接 AI 时只需要换掉 chatReply
+   这个文件不碰界面也不碰服务器。
+   =========================================================================== */
+import { GIFTS, pick } from './art'
+
+export const FOODS = [
+  { k: 'bread', e: '🍞', n: '面包', full: '一片面包', cost: 5, d: 8 },
+  { k: 'coffee', e: '☕', n: '咖啡', full: '一杯咖啡', cost: 8, d: 6 },
+  { k: 'cake', e: '🍰', n: '草莓蛋糕', full: '一块草莓蛋糕', cost: 20, d: 15 },
+]
+
+// 会让小人当场做出反应的几种记录（其余是小人自己改安排的记录，只进日记）
+export const PLAY_KINDS = ['button', 'feed', 'gift', 'note', 'poke', 'chat']
+
+const V = {
+  u1: {
+    button: {
+      work: (l) => `「${l}」？……上班呢。不过，谢了。`,
+      home: (l) => `回家了还要「${l}」……行吧，过来。`,
+      sleep: (l) => `唔……（被「${l}」吵醒，又翻身睡了）`,
+    },
+    feed: {
+      work: (f) => `${f}？正好饿了。……别告诉别人。`,
+      home: (f) => `${f}啊。还行，挺好吃的。`,
+      sleep: (f) => `（闻到${f}的味道，梦里咂了咂嘴）`,
+    },
+    gift: (g) => `${g}……我会好好放着的。`,
+    note: () => '……（看完纸条，耳朵红了）',
+    poke: ['干嘛。', '别戳了。……再戳一下也行。', '嗯？'],
+    d: {
+      button: (u, l) => `${u} 对我用了「${l}」。表面很淡定，其实还挺高兴的。`,
+      feed: (u, f, d) => `${u} 投喂了${f}。吃完继续敲代码，心情 +${d}。`,
+      gift: (u, g) => `${u} 送了我${g}，已经摆进房间了。`,
+      note: (u) => `${u} 塞给我一张小纸条。`,
+      poke: (u) => `被 ${u} 戳了一下。`,
+      chat: (u, q, a) => `${u}：“${q}”　我：“${a}”`,
+      scene: (s) => `被安排去${s}写代码。行。`,
+      theme: (t) => `房间换成了${t}墙纸。还不错。`,
+      btns: (l) => `今天准备的互动是：${l}。`,
+      sched: (w, o) => `作息改成 ${w}:00 上班、${o}:00 下班。`,
+    },
+    fb: {
+      work: ['嗯，在写代码。等我跑完这个测试。', '你说的我听到了。……没在摸鱼。', '这个 bug 很顽固，但我更顽固。'],
+      home: ['回来了。今天的键盘手感不错。', '你今天怎么样？……随便问问。', '要不要一起听歌。'],
+    },
+    zzz: 'Zzz……嗯……明天再说……',
+  },
+  u2: {
+    button: {
+      work: (l) => `收到「${l}」！上班都有干劲了✨`,
+      home: (l) => `「${l}」！最喜欢这个了～`,
+      sleep: (l) => `唔……（被「${l}」弄醒，揉揉眼睛笑了）`,
+    },
+    feed: {
+      work: (f) => `是${f}！趁店长不在偷偷吃～`,
+      home: (f) => `${f}！好幸福～`,
+      sleep: (f) => `（梦里好像吃到了${f}……）`,
+    },
+    gift: (g) => `哇！${g}！我要放在最显眼的地方！`,
+    note: () => '（打开纸条……脸一下子红了）',
+    poke: ['呀！', '嘿嘿，好痒～', '再戳我就要咬你了哦'],
+    d: {
+      button: (u, l) => `${u} 对我「${l}」了！开心到转圈圈～`,
+      feed: (u, f, d) => `${u} 喂了我${f}，好好吃！心情 +${d}`,
+      gift: (u, g) => `收到 ${u} 送的${g}！马上摆进房间啦`,
+      note: (u) => `${u} 给我塞了一张小纸条，偷偷看了好几遍。`,
+      poke: (u) => `被 ${u} 戳了一下脸！`,
+      chat: (u, q, a) => `${u}：“${q}”　我：“${a}”`,
+      scene: (s) => `今天要去${s}打工啦！`,
+      theme: (t) => `房间换了${t}墙纸，好可爱！`,
+      btns: (l) => `主人帮我准备了今天的互动：${l}～`,
+      sched: (w, o) => `作息改成 ${w}:00 上班、${o}:00 下班啦。`,
+    },
+    fb: {
+      work: ['我刚拉了一个超好看的拉花！', '今天客人好多，但我很开心～', '你要不要来店里坐坐？'],
+      home: ['终于下班啦～你今天开心吗？', '我在家，在想晚饭吃什么～', '我们一起看星星吧！'],
+    },
+    zzz: 'Zzz……（迷迷糊糊地笑了）唔嗯……',
+  },
+}
+
+// [匹配的词, 代码小人怎么回, 打工小人怎么回]
+const RULES = [
+  [/累|困|辛苦|烦/, '累了就歇会儿。……我陪你。', '抱抱！累了就靠一下我吧～'],
+  [/想你|想我|喜欢/, '……嗯。我也是。别说出去。', '我也想你！！超级想！'],
+  [/吃|饿|饭/, '刚吃了泡面。别管我。', '我想吃草莓蛋糕～你请客吗？'],
+  [/加油|努力/, '嗯。今天的 bug 我会全杀掉。', '嗯嗯！我会加油打工的！'],
+  [/晚安|睡/, '晚安。别熬夜，不要学我。', '晚安～梦里见哦 ⭐'],
+  [/你好|嗨|在吗|hi|hello/i, '哟。在。', '嗨嗨！你来看我啦！'],
+]
+
+const voice = (slot) => V[slot] || V.u1
+const stKey = (st) => (st === 'work' || st === 'sleep' ? st : 'home')
+const giftOf = (k) => GIFTS.find((g) => g.k === k)
+const foodOf = (k) => FOODS.find((f) => f.k === k)
+
+/** 聊天回复。st = 小人此刻在 'work' / 'home' / 'sleep' */
+export function chatReply(slot, st, q) {
+  const v = voice(slot)
+  if (st === 'sleep') return v.zzz
+  const idx = slot === 'u2' ? 2 : 1
+  for (const r of RULES) if (r[0].test(q)) return r[idx]
+  return pick(v.fb[stKey(st)])
+}
+
+/**
+ * 一次互动之后，这个小人应该怎么反应：
+ * { drop: 掉下来的东西（可选）, react: 蹦跳时长, blush: 脸红时长, hearts: 爱心个数, text: 气泡里的话, dur: 气泡停留秒数 }
+ * kind / data 和服务器日记里存的一样：
+ *   button { e, t }  feed { food }  gift { gift }  note {}  poke {}  chat { q, a }
+ */
+export function reactionFor(slot, st, kind, data) {
+  const v = voice(slot)
+  const s = stKey(st)
+  const d = data || {}
+  if (kind === 'button') return { react: 1, hearts: 4, text: v.button[s](`${d.e || ''}${d.t || ''}`) }
+  if (kind === 'feed') {
+    const f = foodOf(d.food)
+    return { drop: d.food === 'bread' ? 'bread' : 'box', react: 0.9, hearts: 5, text: v.feed[s](f ? f.full : '点心') }
+  }
+  if (kind === 'gift') {
+    const g = giftOf(d.gift)
+    return { drop: 'box', react: 1.2, hearts: 8, text: v.gift(g ? g.n : '礼物') }
+  }
+  if (kind === 'note') return { drop: 'note', react: 0.6, blush: 3, hearts: 3, text: v.note() }
+  if (kind === 'poke') return { react: 0.6, blush: 1.5, hearts: 2, text: pick(v.poke) }
+  if (kind === 'chat') return { react: 0.3, text: String(d.a || ''), dur: 4.5 }
+  return null
+}
+
+/**
+ * 日记里的一句话。owner = 这是谁的小人的日记（决定口吻），actorName = 做这件事的人叫什么
+ * 认不出来的记录返回空字符串（界面上直接跳过）
+ */
+export function logLine(entry, ownerSlot, actorName) {
+  const d = voice(ownerSlot).d
+  const x = entry.data || {}
+  switch (entry.kind) {
+    case 'button': return d.button(actorName, `${x.e || ''}${x.t || ''}`)
+    case 'feed': { const f = foodOf(x.food); return d.feed(actorName, f ? f.full : '点心', x.gain == null ? '' : x.gain) }
+    case 'gift': { const g = giftOf(x.gift); return d.gift(actorName, g ? g.n : '礼物') }
+    case 'note': return d.note(actorName)
+    case 'poke': return d.poke(actorName)
+    case 'chat': return d.chat(actorName, String(x.q || ''), String(x.a || ''))
+    case 'scene': return d.scene(x.scene === 'cafe' ? '咖啡馆' : '办公室')
+    case 'theme': return d.theme({ cream: '奶油', mint: '薄荷', night: '星空' }[x.theme] || '新')
+    case 'btns': return d.btns(Array.isArray(x.buttons) ? x.buttons.map((b) => `${b.e || ''}${b.t || ''}`).join('、') : '')
+    case 'sched': return d.sched(String(x.work == null ? '' : x.work).padStart(2, '0'), String(x.off == null ? '' : x.off).padStart(2, '0'))
+    default: return ''
+  }
+}
