@@ -82,13 +82,16 @@ export function usePal(userId, slot, isMine) {
   return { settings, state, raw: stateRow, loading, error, reload }
 }
 
-/** 保存自己的安排（整行 upsert）。draft 是 normalizeSettings 整理过的那种对象 */
+/**
+ * 保存自己的安排。自己的那一行在打开小屋时已经由 pal_ensure 补好了，所以这里用「更新」而不是「插入或更新」：
+ * 后者除了更新权限，还要求有「插入」权限，缺一个就会整个存不上。
+ * draft 是 normalizeSettings 整理过的那种对象
+ */
 export async function saveSettings(userId, draft) {
   if (!supabase) return { error: '还没有连上服务器' }
   const { data, error } = await supabase
     .from('pal_settings')
-    .upsert({
-      user_id: userId,
+    .update({
       work_scene: draft.work_scene,
       home_theme: draft.home_theme,
       wake_h: draft.wake_h,
@@ -98,10 +101,11 @@ export async function saveSettings(userId, draft) {
       buttons: draft.buttons,
       updated_at: new Date().toISOString(),
     })
+    .eq('user_id', userId)
     .select('user_id')
-    .single()
+    .maybeSingle()
   if (error) return { error: mapError(error) }
-  if (!data) return { error: '没存上，刷新一下再试' }
+  if (!data) return { error: '没存上：服务端没有改你这一行的权限（或这一行不存在），先把第三轮 SQL 再跑一遍' }
   return { error: null }
 }
 
