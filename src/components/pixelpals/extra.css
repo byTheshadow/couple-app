@@ -26,4 +26,23 @@
 .pp-secret { display: inline-block; margin-top: 3px; padding: 2px 9px; border-radius: 8px; background: var(--chip); border: 1px dashed var(--line); font-size: 12px; }
 .pp-empty { display: block !important; color: var(--ink2); font-size: 13px; }
 
-@media (prefers-reduced-motion: reduce) { .pp-act { transition: none; } }
+/* 第三轮：预设 + 下班结算横幅 */
+.pp-sub { margin: 10px 0 6px; font-size: 12px; color: var(--ink2); }
+.pp-sub:first-of-type { margin-top: 0; }
+
+.pp-banner { position: absolute; z-index: 3; left: 50%; top: 13%; transform: translateX(-50%); width: max-content; max-width: 86%;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px 9px; text-align: center; pointer-events: none;
+  animation: pp-pop .4s steps(5) both, pp-bye .5s ease-in 4.7s both; }
+.pp-banner small { font-size: clamp(9px, 2.5vw, 11px); opacity: .75; letter-spacing: 1px; }
+.pp-banner b { font-weight: 700; font-size: clamp(15px, 4.6vw, 20px); line-height: 1.15; }
+.pp-banner span { font-family: Silkscreen, var(--mono), monospace; font-size: clamp(14px, 4.2vw, 18px); }
+.pp-banner em { font-style: normal; font-size: clamp(9px, 2.5vw, 11px); opacity: .75; }
+.pp-banner.coin { background: #fff6c9; color: #5a3a00; border: 2px solid #5a3a00; box-shadow: 3px 3px 0 rgba(0,0,0,.4); font-family: DotGothic16, var(--font), sans-serif; }
+.pp-banner.coin span { color: #b8741a; }
+.pp-banner.build { background: #07140c; color: #4dff8a; border: 2px solid #4dff8a; box-shadow: 0 0 14px rgba(77,255,138,.55), 3px 3px 0 rgba(0,0,0,.45); font-family: Silkscreen, DotGothic16, var(--mono), monospace; }
+.pp-banner.build b { letter-spacing: 1px; text-shadow: 0 0 8px rgba(77,255,138,.8); }
+.pp-banner.build span { color: #e8e8e8; }
+@keyframes pp-pop { from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(.6); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+@keyframes pp-bye { to { opacity: 0; transform: translateX(-50%) translateY(-8px); } }
+
+@media (prefers-reduced-motion: reduce) { .pp-act { transition: none; } .pp-banner { animation: none; } }

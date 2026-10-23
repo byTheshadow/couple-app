@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Svg } from '../Icon'
 import { fmtTime } from '../../lib/hooks'
 import { logLine } from './voice'
+import { settleLine } from './celebrate'
 import './extra.css'
 
 /* ===========================================================================
@@ -19,7 +20,9 @@ export default function Diary({ items, notes, loading, myId, myName, mySlot, taN
       const ownerSlot = mine ? mySlot : taSlot
       const ownerName = mine ? myName : taName
       const actorName = e.actor_id === myId ? myName : taName
-      return { e, mine, ownerSlot, ownerName, text: logLine(e, ownerSlot, actorName) }
+      // 下班结算是第三轮加的记录类型，句子在 celebrate.js 里拼；其余都走 voice.js
+      const text = e.kind === 'settle' ? settleLine(ownerSlot, e.data) : logLine(e, ownerSlot, actorName)
+      return { e, mine, ownerSlot, ownerName, text }
     })
     .filter((r) => r.text && (filter === 'all' || (filter === 'mine' ? r.mine : !r.mine)))
 

@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, saveSettings, palPoke } from './pixelpals/store'
+import { usePal, usePalLog, saveSettings, palPoke, palSettle } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_ICON, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
@@ -10,6 +10,8 @@ import {
 } from './pixelpals/art'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor } from './pixelpals/voice'
+import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, localDay, INCOME } from './pixelpals/celebrate'
+import { DAILY_PRESETS, SPECIAL_PRESETS, applyPreset, activePreset, homeHour } from './pixelpals/presets'
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
 import './pixelpals.css'
@@ -18,7 +20,7 @@ import './pixelpals.css'
    像素小屋：两个人各有一台像素游戏机，互相能看到对方的小人在干嘛，但只能改自己的。
    第一轮：自己的安排面板（上班地点 / 墙纸 / 作息 / 三个互动按钮）+ 看 TA 的小屋。
    第二轮：去看 TA（互动按钮 / 投喂 / 送礼 / 悄悄话 / 聊天 / 戳一戳）+ 小人日记。
-   第三轮：下班结算、预设、心情衰减。
+   第三轮：下班结算（服务端每天发一次工资 + 庆祝动画）、一键预设、墙纸预览、重置时一并清空。
    - 画面和数据整理在 pixelpals/art.js，掉落动画在 fx.js，台词在 voice.js，服务器读写在 store.js，
      「去看 TA」在 Visitor.jsx，日记在 Diary.jsx，这个文件只管把它们拼成页面
    - user1 = 代码小人（白发），user2 = 打工小人（黑发），由登录账号的 slot 决定
@@ -56,7 +58,24 @@ const hourOptions = () => Array.from({ length: 24 }, (_, i) => <option key={i} v
 
 /* ---------- 一台游戏机 ---------- */
 
+// 结算横幅里的数字：从 0 跳到工资，有点「叮叮叮」的感觉
+function CountUp({ to }) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    const t0 = performance.now()
+    const id = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / 1200)
+      setN(Math.round(to * k))
+      if (k >= 1) clearInterval(id)
+    }, 40)
+    return () => clearInterval(id)
+  }, [to])
+  return <>{n}</>
+}
+
 const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA }, ref) {
+  const [banner, setBanner] = useState(null)
+  const bannerT = useRef(0)
   const canvasRef = useRef(null)
   const actorRef = useRef(null)
   const bubbleRef = useRef(null)
@@ -80,6 +99,12 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
     const a = actorRef.current
     if (!a || !ev) return
     const land = () => {
+      if (ev.celebrate) startCelebration(a, ev.celebrate)
+      if (ev.banner) {
+        setBanner({ ...ev.banner, k: Date.now() })
+        clearTimeout(bannerT.current)
+        bannerT.current = setTimeout(() => setBanner(null), 5200)
+      }
       if (ev.react) a.react = ev.react
       if (ev.blush) a.blushT = ev.blush
       if (ev.hearts) hearts(a, ev.hearts)
@@ -89,6 +114,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
     else land()
   }, [say])
   useImperativeHandle(ref, () => ({ play, say }), [play, say])
+  useEffect(() => () => clearTimeout(bannerT.current), [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -114,8 +140,10 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       const mood = moodNow(cur.state)
       stepActor(actor, cur.settings, cur.hr, dt, mood)
       stepDrops(actor, dt)
+      stepCelebration(actor, dt)
       renderFrame(ctx, actor, { slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood }, cur.hr, now / 1000)
       drawDrops(ctx, actor)
+      drawCelebration(ctx, actor)
 
       const label = actor.state === 'work' ? `上班中 · ${SCENES[cur.settings.work_scene]}` : actor.state === 'home' ? '在家' : '睡觉中'
       const key = `${fmtHour(cur.hr)}|${label}`
@@ -182,6 +210,14 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
             <canvas ref={canvasRef} width={W} height={H} />
             <div className="pp-hud"><span ref={clockRef} /><span ref={whereRef} className="where" /></div>
             <div ref={bubbleRef} className="pp-bubble" />
+            {banner && (
+              <div key={banner.k} className={`pp-banner ${banner.cls}`} role="status">
+                <small>{banner.head}</small>
+                <b>{banner.title}</b>
+                <span>+¥<CountUp to={banner.amount} /></span>
+                {banner.note && <em>{banner.note}</em>}
+              </div>
+            )}
           </div>
         </div>
         <div className="pp-status">
@@ -207,8 +243,12 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr }) {
+function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
+  const active = activePreset(draft)
+  const presetBtn = (p) => (
+    <button key={p.id} type="button" className={`pp-chip${active && active.id === p.id ? ' on' : ''}`} onClick={() => onPreset(p)} title={p.d}>{p.e} {p.n}</button>
+  )
   const setBtn = (i, f, v) => setDraft((d) => ({
     ...d,
     buttons: d.buttons.map((b, j) => (j === i ? { ...b, [f]: f === 'e' ? cleanEmoji(v) : cleanLabel(v) } : b)),
@@ -227,6 +267,15 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
         <p className="pp-lead">只有你能改{name}。TA 来看小屋时，看到的就是你保存的这一份。</p>
 
         <div className="pp-blk">
+          <div className="pp-h">一键预设 <small>套上去只是预览，保存了才算数</small></div>
+          <div className="pp-sub">日常</div>
+          <div className="pp-chips">{DAILY_PRESETS.map(presetBtn)}</div>
+          <div className="pp-sub">特殊日 / 纪念日</div>
+          <div className="pp-chips">{SPECIAL_PRESETS.map(presetBtn)}</div>
+          <p className="pp-hint">{active ? `${active.e} ${active.n}：${active.d}` : '日常预设只换上班地点和作息；特殊日整套都换，连墙纸和 3 个互动按钮一起。套错了点最下面的「还原」。'}</p>
+        </div>
+
+        <div className="pp-blk">
           <div className="pp-h">上班地点</div>
           <div className="pp-chips">
             {Object.entries(SCENES).map(([k, n]) => (
@@ -236,10 +285,10 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
         </div>
 
         <div className="pp-blk">
-          <div className="pp-h">家里的墙纸</div>
+          <div className="pp-h">家里的墙纸 <small>只有在家的时候看得到</small></div>
           <div className="pp-chips">
             {Object.entries(THEMES).map(([k, t]) => (
-              <button key={k} type="button" className={`pp-chip${draft.home_theme === k ? ' on' : ''}`} onClick={() => set('home_theme', k)}>{t.n}</button>
+              <button key={k} type="button" className={`pp-chip${draft.home_theme === k ? ' on' : ''}`} onClick={() => onTheme(k)}>{t.n}</button>
             ))}
           </div>
         </div>
@@ -265,6 +314,12 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
             ))}
           </div>
           <p className="pp-hint">图标或文字留空，保存时会换回默认的。</p>
+        </div>
+
+        <div className="pp-blk">
+          <div className="pp-h">下班结算 <small>{settleNote}</small></div>
+          <p className="pp-hint" style={{ margin: '0 0 8px' }}>下班后打开小屋，会自动结算当天的工资，每天一次。按现在的作息：上 {income.hours} 小时班 = ¥{income.base}，心情不低于 70 再加 ¥{income.bonus}。</p>
+          <div className="pp-chips"><button type="button" className="pp-chip" onClick={onReplay}>🎬 回放下班庆祝（不发钱）</button></div>
         </div>
 
         <div className="pp-blk">
@@ -312,6 +367,9 @@ export default function PixelPals({ onExit }) {
   const toastT = useRef(0)
   const myConsole = useRef(null)
   const taConsole = useRef(null)
+  const settledRef = useRef(false) // 这次打开页面已经问过服务端结算了
+  const pendingRef = useRef(null) // 刚结算到的工资，等「我的小屋」在屏幕上了就放庆祝
+  const [celebTick, setCelebTick] = useState(0)
   const live = useRef({}) // 给回调用的「最新值」，免得回调里拿到旧的
 
   useEffect(() => {
@@ -335,9 +393,36 @@ export default function PixelPals({ onExit }) {
     setDraft((d) => (d == null || same(d, old) ? myPal.settings : d))
   }, [myPal.settings, myPal.loading])
 
+  // 下班结算：打开页面时问一次服务端。每天只发一次钱由服务端判断，这里重复问也不会多发
+  useEffect(() => {
+    if (!me || myPal.loading || myPal.error || settledRef.current) return
+    settledRef.current = true
+    ;(async () => {
+      const { error, res } = await palSettle()
+      if (error) { say(error); return }
+      if (!res || !res.settled) return
+      await myPal.reload()
+      pendingRef.current = res
+      if (live.current.tab !== 'mine') say(`下班结算：钱包 +¥${res.coins}`)
+      setCelebTick((n) => n + 1)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, myPal.loading, myPal.error])
+
+  // 庆祝要在「我的小屋」的屏幕上放：不在这个页签就等切回来
+  useEffect(() => {
+    const res = pendingRef.current
+    if (!res || tab !== 'mine' || !myConsole.current) return
+    pendingRef.current = null
+    myConsole.current.play(celebrateEvent(mySlot, res))
+  }, [tab, celebTick, mySlot])
+
   const hr = sim == null ? real : sim
   const shownDraft = draft || myPal.settings
   const dirty = !!draft && !same(draft, myPal.settings)
+  const est = estimateIncome(shownDraft, 0)
+  const settledToday = !!(myPal.raw && myPal.raw.settled_day === localDay())
+  const settleNote = settledToday ? '今天已结算 ✓' : real >= myPal.settings.off_h ? '今天还没结算' : '下班后自动结算'
   live.current = { tab, hr, mySlot, taSlot, myId: me && me.id, mySettings: myPal.settings, taSettings: taPal.settings }
 
   // TA 对我的小人做了什么：我正好在看自己的小屋，小人就当场反应；不在看就只进日记
@@ -383,6 +468,29 @@ export default function PixelPals({ onExit }) {
 
   const onReset = () => setDraft(myPal.settings)
 
+  // 套预设：只改草稿，小人马上预览，保存了才算数
+  const onPreset = (p) => {
+    setDraft((d) => applyPreset(d || myPal.settings, p))
+    say(`套上了「${p.n}」，看看预览，满意就保存`)
+  }
+
+  // 换墙纸：墙纸只画在「家里」，上班时间选了什么都看不到，所以把预览时间拨到家里的时段
+  const onTheme = (k) => {
+    const next = { ...(draft || myPal.settings), home_theme: k }
+    setDraft(next)
+    if (stateOf(next, hr) === 'home') return
+    const h = homeHour(next)
+    if (h == null) return
+    setSim(h)
+    say(`墙纸只在家里看得到，预览时间先拨到 ${fmtHour(h)}`)
+  }
+
+  // 回放下班庆祝：不发钱，只是看看动画
+  const onReplay = () => {
+    if (!myConsole.current) return
+    myConsole.current.play(celebrateEvent(mySlot, estimateIncome(shownDraft, moodNow(myPal.state)), true))
+  }
+
   const err = tab === 'mine' ? myPal.error : taPal.error
 
   return (
@@ -421,6 +529,11 @@ export default function PixelPals({ onExit }) {
             sim={sim}
             setSim={setSim}
             hr={hr}
+            onPreset={onPreset}
+            onTheme={onTheme}
+            onReplay={onReplay}
+            settleNote={settleNote}
+            income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
           />
         </>
       ) : partner ? (

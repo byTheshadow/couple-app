@@ -25,6 +25,7 @@ const mapError = (e) => {
   if (m.includes('note too long')) return '纸条太长了，40 个字以内'
   if (m.includes('bad food') || m.includes('bad gift')) return '这个东西服务端不认识'
   if (m.includes('self interaction')) return '只能对 TA 的小人做这个'
+  if (m.includes('not logged in')) return '登录状态过期了，刷新一下再试'
   return `像素小屋出错：${m || '未知原因'}`
 }
 
@@ -77,7 +78,8 @@ export function usePal(userId, slot, isMine) {
   const settings = useMemo(() => normalizeSettings(settingsRow, slot), [settingsRow, slot])
   const state = useMemo(() => normalizeState(stateRow), [stateRow])
 
-  return { settings, state, loading, error, reload }
+  // raw 是服务器返回的原样那一行（里面有 settled_day 之类 art.js 不整理的字段）
+  return { settings, state, raw: stateRow, loading, error, reload }
 }
 
 /** 保存自己的安排（整行 upsert）。draft 是 normalizeSettings 整理过的那种对象 */
@@ -117,6 +119,23 @@ export const palGift = (owner, gift) => rpc('pal_gift', { p_owner: owner, p_gift
 export const palNote = (owner, body) => rpc('pal_note', { p_owner: owner, p_body: body })
 export const palPoke = (owner) => rpc('pal_poke', { p_owner: owner })
 export const palChat = (owner, q, a) => rpc('pal_chat', { p_owner: owner, p_q: q, p_a: a })
+
+/**
+ * 下班结算：问服务端「我今天的班结算过了吗」。每天只会发一次钱，由服务端判断，重复问也没事。
+ * 返回 { error, res }；res = { settled, coins, hours, base, bonus, late, day, reason }
+ * 服务端还没跑第三轮 SQL 的话，静悄悄跳过（不弹错误），等 SQL 跑了就自动生效。
+ */
+export async function palSettle() {
+  if (!supabase) return { error: null, res: null }
+  let tz = ''
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { /* 取不到时区就让服务端用默认的 */ }
+  const { data, error } = await supabase.rpc('pal_settle', { p_tz: tz })
+  if (error) {
+    if (error.code === 'PGRST202' || /could not find the function/i.test(error.message || '')) return { error: null, res: null }
+    return { error: mapError(error), res: null }
+  }
+  return { error: null, res: data || null }
+}
 
 /* ---------- 小人日记 ---------- */
 
