@@ -4,10 +4,10 @@ import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
 import { usePal, usePalLog, usePresets, saveSettings, palPoke, palSettle } from './pixelpals/store'
 import {
-  W, H, CHARS, SCENES, SCENE_ICON, THEMES, GIFTS, LINES,
+  W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
   normalizeButtons, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
-  isHomeLike, compactPokeLines, clipLine, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
+  placeOf, atHome, compactPokeLines, clipLine, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes } from './pixelpals/voice'
@@ -24,6 +24,8 @@ import './pixelpals.css'
    第三轮：下班结算（服务端每天发一次工资 + 庆祝动画）、一键预设、墙纸预览、重置时一并清空。
    第四轮：自定义被戳反应（上班 / 在家 / 睡觉 / 被戳烦了，连戳 3 下起换「被戳烦了」，可跟预设一起存）、
           在家时间里可选的「玩耍」「放空」两段时间。
+   第五轮：新场景（便利店 / 图书馆 / 海边 / 星空，上班和放空都能选；放空选了场景，整个画面就换成那里）、
+          新礼物（五件，价格和心情加成放在服务端的 pal_gift_catalog 表）、点「重置全部数据」时一并清空像素小屋。
    - 画面和数据整理在 pixelpals/art.js，掉落动画在 fx.js，台词在 voice.js，服务器读写在 store.js，
      「去看 TA」在 Visitor.jsx，日记在 Diary.jsx，这个文件只管把它们拼成页面
    - user1 = 代码小人（白发），user2 = 打工小人（黑发），由登录账号的 slot 决定
@@ -56,7 +58,7 @@ const canon = (d) => (d ? { ...d, poke_lines: compactPokeLines(d.poke_lines) } :
 
 // 被戳反应的 4 套：键和服务端 / art.js 的 POKE_KEYS 一一对应
 const POKE_SETS = [
-  { k: 'work', n: '上班时', hint: '在办公室 / 咖啡馆时被戳' },
+  { k: 'work', n: '上班时', hint: '上班时被戳（不管在哪个上班地点）' },
   { k: 'home', n: '在家时', hint: '在家、玩耍、放空时被戳' },
   { k: 'sleep', n: '睡觉时', hint: '睡着时被戳' },
   { k: 'annoyed', n: `被戳烦了（连戳 ${POKE_STREAK} 下起）`, hint: '同一个人 60 秒内连着戳' },
@@ -168,9 +170,10 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
 
-      const label = actor.state === 'work' ? `上班中 · ${SCENES[cur.settings.work_scene]}`
+      const place = placeOf(cur.settings, actor.state) // 在哪个场景（在家 = null）
+      const label = actor.state === 'work' ? `上班中 · ${SCENES[place]}`
         : actor.state === 'play' ? '在家 · 玩耍中'
-          : actor.state === 'idle' ? '在家 · 放空中'
+          : actor.state === 'idle' ? (place ? `放空中 · ${SCENES[place]}` : '在家 · 放空中')
             : actor.state === 'home' ? '在家' : '睡觉中'
       const key = `${fmtHour(cur.hr)}|${label}`
       if (key !== hudKey) {
@@ -299,6 +302,14 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
     return next
   })
 
+  // 放空去哪：选了就把预览时间拨到放空的时段里，马上能看到画面换成那里
+  const setIdleScene = (k) => {
+    set('idle_scene', k)
+    if (!k || draft.idle_from == null || draft.idle_to == null) return
+    if (hr >= draft.idle_from && hr < draft.idle_to) return
+    setSim((draft.idle_from + draft.idle_to) / 2)
+  }
+
   // 被戳反应：每套 4 个输入框，改的是草稿（带空位），存之前才整理
   const setPoke = (k, i, v) => setDraft((d) => {
     const cur = pad4(d.poke_lines && d.poke_lines[k])
@@ -364,8 +375,8 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
         <div className="pp-blk">
           <div className="pp-h">上班地点</div>
           <div className="pp-chips">
-            {Object.entries(SCENES).map(([k, n]) => (
-              <button key={k} type="button" className={`pp-chip${draft.work_scene === k ? ' on' : ''}`} onClick={() => set('work_scene', k)}>{SCENE_ICON[k]} {n}</button>
+            {SCENE_LIST.map(({ k, n, e }) => (
+              <button key={k} type="button" className={`pp-chip${draft.work_scene === k ? ' on' : ''}`} onClick={() => set('work_scene', k)}>{e} {n}</button>
             ))}
           </div>
         </div>
@@ -397,7 +408,14 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
               <label>到 <select className="pp-sel" value={draft[`${k}_to`] == null ? '' : draft[`${k}_to`]} onChange={(ev) => setWin(k, 'to', ev.target.value)} aria-label={`${n}的结束时间`}>{winOptions()}</select></label>
             </div>
           ))}
-          <p className="pp-hint">不设就是没有。时间要完整落在「起床后到上班前」或「下班后到睡觉前」里，两段不能重叠。玩耍时小人{slot === 'u2' ? '弹吉他' : '玩掌机'}，放空时站在窗前发呆；拖下面的「预览时间」就能看到。</p>
+          <div className="pp-sub">放空时去哪儿 <small>{draft.idle_from == null ? '先在上面设一段放空时间，才会去那里' : '放空的那段时间里，画面会换成这个地方'}</small></div>
+          <div className="pp-chips">
+            <button type="button" className={`pp-chip${!draft.idle_scene ? ' on' : ''}`} onClick={() => setIdleScene(null)}>🏠 在家窗前</button>
+            {SCENE_LIST.map(({ k, n, e }) => (
+              <button key={k} type="button" className={`pp-chip${draft.idle_scene === k ? ' on' : ''}`} onClick={() => setIdleScene(k)}>{e} {n}</button>
+            ))}
+          </div>
+          <p className="pp-hint">不设就是没有。时间要完整落在「起床后到上班前」或「下班后到睡觉前」里，两段不能重叠。玩耍时小人{slot === 'u2' ? '弹吉他' : '玩掌机'}；放空时站着发呆（在家就在窗前，选了别的地方就去那里）；拖下面的「预览时间」就能看到。</p>
         </div>
 
         <div className="pp-blk">
@@ -610,8 +628,8 @@ export default function PixelPals({ onExit }) {
     const base = draft || myPal.settings
     const next = applyPreset(base, p, mySlot)
     setDraft(next)
-    const winChanged = ['play_from', 'play_to', 'idle_from', 'idle_to'].some((k) => base[k] !== next[k])
-    say(winChanged ? `套上了「${p.n}」（玩耍/放空时段跟着变了），看看预览，满意就保存` : `套上了「${p.n}」，看看预览，满意就保存`)
+    const winChanged = ['play_from', 'play_to', 'idle_from', 'idle_to', 'idle_scene'].some((k) => base[k] !== next[k])
+    say(winChanged ? `套上了「${p.n}」（玩耍/放空跟着变了），看看预览，满意就保存` : `套上了「${p.n}」，看看预览，满意就保存`)
   }
 
   // 把现在看到的整套（含还没保存的草稿）存成「我的预设」
@@ -641,7 +659,7 @@ export default function PixelPals({ onExit }) {
   const onTheme = (k) => {
     const next = { ...(draft || myPal.settings), home_theme: k }
     setDraft(next)
-    if (isHomeLike(stateOf(next, hr))) return // 在家 / 玩耍 / 放空时都看得到墙纸
+    if (atHome(next, stateOf(next, hr))) return // 在家 / 玩耍 / 在家放空时都看得到墙纸（放空去了别的场景的不算）
     const h = homeHour(next)
     if (h == null) return
     setSim(h)

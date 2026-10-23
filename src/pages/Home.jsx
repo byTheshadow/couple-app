@@ -186,8 +186,10 @@ export default function Home() {
     }
     const { error } = await supabase.rpc('reset_all_data')
     if (error) { setResetErr(`重置失败：${error.message}`); setResetBusy(false); return }
+    // 像素小屋也一并清空（心情、钱包、礼物、日记、设置、预设）；清不掉不影响前面已经完成的重置，只提醒一句
+    const { error: palErr } = await supabase.rpc('pal_reset_all')
     setResetOpen(false); setResetPwd(''); setResetBusy(false)
-    say('已全部重置')
+    say(palErr ? '已全部重置（像素小屋没清掉，可以稍后再试）' : '已全部重置')
     setTimeout(() => window.location.reload(), 900)
   }
 

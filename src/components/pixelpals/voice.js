@@ -5,7 +5,7 @@
    - 聊天：预览阶段用预设台词；以后接 AI 时只需要换掉 chatReply
    这个文件不碰界面也不碰服务器。
    =========================================================================== */
-import { GIFTS, pick } from './art'
+import { GIFTS, SCENES, pick } from './art'
 
 export const FOODS = [
   { k: 'bread', e: '🍞', n: '面包', full: '一片面包', cost: 5, d: 8 },
@@ -177,7 +177,7 @@ export function logLine(entry, ownerSlot, actorName) {
     case 'note': return d.note(actorName)
     case 'poke': return d.poke(actorName, x.line ? String(x.line) : '', !!x.annoyed)
     case 'chat': return d.chat(actorName, String(x.q || ''), String(x.a || ''))
-    case 'scene': return d.scene(x.scene === 'cafe' ? '咖啡馆' : '办公室')
+    case 'scene': return d.scene(SCENES[x.scene] || '新的地方')
     case 'theme': return d.theme({ cream: '奶油', mint: '薄荷', night: '星空' }[x.theme] || '新')
     case 'btns': return d.btns(Array.isArray(x.buttons) ? x.buttons.map((b) => `${b.e || ''}${b.t || ''}`).join('、') : '')
     case 'sched': return d.sched(String(x.work == null ? '' : x.work).padStart(2, '0'), String(x.off == null ? '' : x.off).padStart(2, '0'))

@@ -10,6 +10,10 @@ export const W = 160
 export const H = 120
 export const FLOOR = 98
 
+// 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
+import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
+export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
+
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
 const rand = (a, b) => a + Math.random() * (b - a)
 export const pick = (a) => a[Math.floor(Math.random() * a.length)]
@@ -30,21 +34,11 @@ function pat(ctx, rows, map, x, y) {
 
 /* ---------- 数据 ---------- */
 
-export const SCENES = { office: '办公室', cafe: '咖啡馆' }
-export const SCENE_ICON = { office: '🏢', cafe: '☕' }
-
 export const THEMES = {
   cream: { n: '奶油', wall: '#f4e7d4', dot: '#ead5ba', base: '#e2d2bd', blanket: '#ff9fb6', rug: '#f3bccb' },
   mint: { n: '薄荷', wall: '#d4efe1', dot: '#bde2cf', base: '#b9dcc9', blanket: '#73c9a8', rug: '#a6dac3' },
   night: { n: '星空', wall: '#2d345f', dot: '#55609a', base: '#222849', blanket: '#7c6cff', rug: '#5b4f9e' },
 }
-
-// 礼物（第二轮开始送；这一轮只负责把已经有的摆进房间）
-export const GIFTS = [
-  { k: 'plant', e: '🪴', n: '盆栽', cost: 30 },
-  { k: 'lamp', e: '💡', n: '小台灯', cost: 40 },
-  { k: 'cat', e: '🐱', n: '猫猫玩偶', cost: 50 },
-]
 
 export const CHARS = {
   u1: { job: 'coder', jobName: '代码小人' },
@@ -58,6 +52,7 @@ export const DEFAULT_BUTTONS = {
 
 export const DEFAULT_SETTINGS = {
   work_scene: 'office',
+  idle_scene: null, // 第五轮：放空时去哪（null = 在家窗前，和以前一样；也可以是任何一个场景）
   home_theme: 'cream',
   wake_h: 6,
   work_h: 7,
@@ -149,6 +144,7 @@ export function normalizeSettings(row, slot) {
   const [xf, xt] = normWin(r.idle_from, r.idle_to)
   return {
     work_scene: has(SCENES, r.work_scene) ? r.work_scene : d.work_scene,
+    idle_scene: has(SCENES, r.idle_scene) ? r.idle_scene : null,
     home_theme: has(THEMES, r.home_theme) ? r.home_theme : d.home_theme,
     wake_h: clampH(r.wake_h, d.wake_h),
     work_h: clampH(r.work_h, d.work_h),
@@ -224,8 +220,18 @@ export function stateOf(s, h) {
   return 'home'
 }
 
-/** 在家的几种状态（在家 / 玩耍 / 放空）都画家里的房间、都看得到墙纸 */
+/** 在家的几种状态（在家 / 玩耍 / 放空）都画家里的房间、都看得到墙纸（放空去了别的场景的除外，见 atHome） */
 export const isHomeLike = (st) => st === 'home' || st === 'play' || st === 'idle'
+
+/** 小人此刻在哪个场景：上班 = 上班地点；放空且选了「放空去哪」= 那个场景；其余都在家，返回 null */
+export function placeOf(settings, st) {
+  if (st === 'work') return settings.work_scene
+  if (st === 'idle' && settings.idle_scene) return settings.idle_scene
+  return null
+}
+
+/** 此刻是不是真的在家里（画家里的房间、看得到墙纸、晚上有暖色滤镜）：放空去了海边之类的就不是 */
+export const atHome = (settings, st) => isHomeLike(st) && !placeOf(settings, st)
 
 export function moodNow(state, now = Date.now()) {
   if (!state) return DEFAULT_STATE.mood
@@ -311,9 +317,6 @@ const CLOUD = ['..GGG...', '.GGGGGG.', 'GGGGGGGG', '.GGGGGG.']
 const NOTE = ['.XXX', '.X.X', '.X..', 'XX..', 'XX..'] // 玩耍时冒出来的音符（打工小人弹吉他）
 const SPARK = ['.X.', 'XXX', '.X.'] // 玩耍时冒出来的小星星（代码小人玩掌机）
 const PLANT = ['..g.g..', '.gGgGg.', 'gGgGgGg', '..gGg..', '.PPPPP.', '.PPPPP.', '..PPP..']
-const LAMP = ['.YYYYY.', 'YYYYYYY', '...B...', '...B...', '..BBB..']
-const CAT = ['K...K.', 'KK.KK.', 'KKKKKK', 'KEKKEK', 'KKpKKK', '.KKKK.']
-const MOON = ['.MMM.', 'MMMM.', 'MMM..', 'MMMM.', '.MMM.']
 
 function drawSprite(ctx, spr, pal, x, y, o = {}) {
   const r0 = o.rows ? o.rows[0] : 0
@@ -333,42 +336,6 @@ function drawSprite(ctx, spr, pal, x, y, o = {}) {
 }
 
 /* ---------- 场景 ---------- */
-
-function drawWindow(ctx, x, y, w, h, hr, t) {
-  let top, bot, mode
-  if (hr < 5.5 || hr >= 19.5) { top = '#10163a'; bot = '#26306a'; mode = 'night' }
-  else if (hr < 7) { top = '#7b7cc4'; bot = '#ffbe9e'; mode = 'dawn' }
-  else if (hr < 16.5) { top = '#6cbaff'; bot = '#c4e8ff'; mode = 'day' }
-  else { top = '#6a55a6'; bot = '#ffa07a'; mode = 'dusk' }
-  ctx.save()
-  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
-  R(ctx, top, x, y, w, h)
-  const sp = y + Math.floor(h * 0.6)
-  R(ctx, bot, x, sp, w, h)
-  for (let i = 0; i < w; i += 2) R(ctx, bot, x + i, sp - 1, 1, 1)
-  if (mode === 'night') {
-    for (let i = 0; i < 12; i++) {
-      const sx = x + (i * 53) % w
-      const sy = y + (i * 29) % (h - 6)
-      if (Math.floor(t * 2 + i) % 5) R(ctx, '#fff', sx, sy, 1, 1)
-    }
-    pat(ctx, MOON, { M: '#fff3c4' }, x + w - 9, y + 3)
-  }
-  if (mode === 'day') {
-    R(ctx, '#ffe066', x + w - 11, y + 3, 6, 6)
-    R(ctx, '#fff6b8', x + w - 10, y + 4, 2, 2)
-    const cx = x + ((t * 3) % (w + 24)) - 16
-    R(ctx, '#fff', cx, y + h * 0.36, 12, 3)
-    R(ctx, '#fff', cx + 3, y + h * 0.36 - 2, 6, 2)
-  }
-  if (mode === 'dusk' || mode === 'dawn') R(ctx, '#ff7a4f', x + 5, y + h - 9, 7, 7)
-  ctx.restore()
-  const f = '#fbfbff'
-  R(ctx, f, x - 2, y - 2, w + 4, 2); R(ctx, f, x - 2, y + h, w + 4, 2)
-  R(ctx, f, x - 2, y, 2, h); R(ctx, f, x + w, y, 2, h)
-  R(ctx, f, x + Math.floor(w / 2) - 1, y, 2, h); R(ctx, f, x, y + Math.floor(h / 2) - 1, w, 1)
-  R(ctx, '#d6d6e6', x - 4, y + h + 2, w + 8, 2)
-}
 
 function monitor(ctx, job, x, y, w, h, t) {
   if (job === 'coder') {
@@ -478,9 +445,7 @@ function drawHome(ctx, m, a, hr, t) {
   const bx = sleeping ? 8 : 22
   const bw = sleeping ? 52 : 38
   R(ctx, th.blanket, bx, 76, bw, 10); R(ctx, 'rgba(255,255,255,.35)', bx, 76, bw, 1); R(ctx, 'rgba(0,0,0,.12)', bx, 85, bw, 1)
-  if (m.gifts.includes('lamp')) pat(ctx, LAMP, { Y: '#ffd77a', B: '#6b5a4a' }, 114, 43)
-  if (m.gifts.includes('plant')) pat(ctx, PLANT, { g: '#62c46e', G: '#3f9a4f', P: '#c56a4a' }, 142, FLOOR - 7)
-  if (m.gifts.includes('cat')) pat(ctx, CAT, { K: '#f2f2f2', E: '#333', p: '#ff9fb6' }, 46, 72)
+  drawGifts(ctx, m.gifts, t) // 收到的礼物按 scenes.js 里的数据摆进房间
 }
 
 /* ---------- 小人 ---------- */
@@ -491,6 +456,7 @@ export function createActor(slot) {
     slot, sp,
     x: 96, tx: 96, pause: 0, react: 0, blushT: 0, blink: 0, blinkT: 2, walking: false,
     state: null, zT: 0, nT: 0, particles: [],
+    scene: null, // 此刻站在哪个数据场景里（null = 家里 / 办公室 / 咖啡馆），换地方时用来让小人直接出现在起点
   }
 }
 
@@ -507,10 +473,20 @@ export function hearts(a, n) {
 export function stepActor(a, settings, hr, dt, mood) {
   const st = stateOf(settings, hr)
   const was = a.state
+  const place = placeOf(settings, st)
+  const spot = place ? sceneSpot(place) : null // 数据场景里：能走的范围 + 放空站的位置（办公室、咖啡馆、家里没有，用下面的老位置）
+  const walk = spot ? spot.walk : [80, 92]
+  const stand = spot ? spot.stand : IDLE_X
   // 刚下班 / 刚起床回到家：先站到家里的中间；从在家切到玩耍/放空：直接走向各自的位置
-  if (was && was !== st && isHomeLike(st) && (was === 'work' || was === 'sleep')) { a.x = 90; a.tx = 90 }
+  if (was && was !== st && isHomeLike(st) && !spot && (was === 'work' || was === 'sleep')) { a.x = 90; a.tx = 90 }
+  // 进出数据场景（整个画面换了）：小人直接出现在那里的起点，不从上一个画面的位置滑过去
+  const key = spot ? place : null
+  if (a.scene !== key) {
+    a.scene = key
+    if (spot) { a.x = st === 'idle' ? stand : (walk[0] + walk[1]) / 2; a.tx = a.x } else if (was) { a.x = 90; a.tx = 90 }
+  }
   if (was !== st) {
-    if (st === 'idle') a.tx = IDLE_X
+    if (st === 'idle') a.tx = stand
     else if (st === 'play') a.tx = rand(PLAY_X[0], PLAY_X[1])
   }
   a.state = st
@@ -520,10 +496,10 @@ export function stepActor(a, settings, hr, dt, mood) {
   } else if (Math.abs(a.x - a.tx) < 0.5) {
     a.walking = false; a.pause -= dt
     if (a.pause <= 0) {
-      if (st === 'idle') { a.tx = IDLE_X; a.pause = 2 } // 放空：站在窗前不动
+      if (st === 'idle') { a.tx = stand; a.pause = 2 } // 放空：站在窗前（或放空去的那个场景里）不动
       else if (st === 'play') { a.tx = rand(PLAY_X[0], PLAY_X[1]); a.pause = rand(2.5, 5) }
       else {
-        a.tx = st === 'work' ? rand(80, 92) : rand(66, 132)
+        a.tx = st === 'work' ? rand(walk[0], walk[1]) : rand(66, 132)
         a.pause = st === 'work' ? rand(3, 6) : rand(1.5, 4)
       }
     }
@@ -616,19 +592,18 @@ function drawParticles(ctx, a) {
 /** 画一帧。m = { slot, sp, settings, gifts, mood } */
 export function renderFrame(ctx, a, m, hr, t) {
   const job = (CHARS[m.slot] || CHARS.u1).job
-  if (a.state === 'work') (m.settings.work_scene === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t)
+  const place = placeOf(m.settings, a.state) // 在哪个场景（在家 = null）
+  const data = place && isDataScene(place)
+  const o = { job, working: a.state === 'work', hr, t }
+  if (data) drawScene(ctx, place, 'back', o)
+  else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
   else drawHome(ctx, m, a, hr, t)
   if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t)
+  if (data) drawScene(ctx, place, 'front', o)
   if (a.state === 'sleep') {
     R(ctx, 'rgba(8,10,34,.55)', 0, 0, W, H)
-    if (m.gifts.includes('lamp')) {
-      const g = ctx.createRadialGradient(117, 45, 2, 117, 45, 34)
-      g.addColorStop(0, 'rgba(255,214,130,.45)')
-      g.addColorStop(1, 'rgba(255,214,130,0)')
-      ctx.fillStyle = g
-      ctx.fillRect(0, 0, W, H)
-    }
-  } else if (isHomeLike(a.state) && (hr >= 19 || hr < 6.5)) {
+    drawGiftGlows(ctx, m.gifts) // 台灯、蜡烛关灯后还亮着
+  } else if (atHome(m.settings, a.state) && (hr >= 19 || hr < 6.5)) {
     R(ctx, 'rgba(255,170,90,.08)', 0, 0, W, H)
   }
   drawParticles(ctx, a)

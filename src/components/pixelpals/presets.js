@@ -2,13 +2,13 @@
    像素小屋 · 预设：一键套用一整套安排
    - 日常预设：只改「上班地点 + 作息」，不动你的墙纸、互动按钮和被戳反应（那些是你自己编辑过的）
    - 特殊日 / 纪念日：整套都换（上班地点、墙纸、作息、3 个互动按钮、被戳反应，有的还带玩耍/放空时段）
-   - 我的预设：存的是你当时看到的整套，包括被戳反应和玩耍/放空时段（第四轮之前存的老预设没有这两项，套用时不会动它们）
+   - 我的预设：存的是你当时看到的整套，包括被戳反应、玩耍/放空时段和「放空去哪」（老预设没有的项，套用时不会动你现在的）
    套用只是把整套值放进「草稿」，小人马上预览，还没保存；不喜欢点「还原」就回去了。
    所有作息都满足：起床 ≤ 上班 < 下班 ≤ 睡觉（见 art.js 的 checkSchedule）。
    这个文件不碰界面也不碰服务器。
    =========================================================================== */
 
-import { normalizeSettings, checkSchedule, fitWindows, compactPokeLines, cleanEmoji, cleanLabel } from './art'
+import { normalizeSettings, checkSchedule, fitWindows, compactPokeLines, cleanEmoji, cleanLabel, SCENES } from './art'
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
 const WIN_KEYS = ['play_from', 'play_to', 'idle_from', 'idle_to']
@@ -91,11 +91,12 @@ export const SPECIAL_PRESETS = [
     },
   },
   {
-    id: 'lazy', e: '🛋️', n: '躺平日', d: '薄荷墙纸 · 只上 2 小时班 · 下班后先放空再玩',
+    id: 'lazy', e: '🛋️', n: '躺平日', d: '薄荷墙纸 · 只上 2 小时班 · 下班后先去海边放空再玩',
     set: {
       work_scene: 'cafe', home_theme: 'mint', wake_h: 10, work_h: 13, off_h: 15, sleep_h: 23,
       buttons: [{ e: '🛋️', t: '一起躺' }, { e: '🍿', t: '递爆米花' }, { e: '😴', t: '陪睡觉' }],
       idle_from: 15, idle_to: 17, play_from: 17, play_to: 20,
+      idle_scene: 'beach', // 放空的时候整个画面换成海边
     },
     pokes: {
       u1: {
@@ -119,7 +120,7 @@ export const ALL_PRESETS = [...DAILY_PRESETS, ...SPECIAL_PRESETS]
 /* ---------- 我的预设（存在服务器上，两台设备都能用，只有自己看得到） ---------- */
 
 export const MAX_PRESETS = 8
-const SCENE_NAME = { office: '办公室', cafe: '咖啡馆' }
+const SCENE_NAME = SCENES
 const THEME_NAME = { cream: '奶油', mint: '薄荷', night: '星空' }
 
 const describe = (s) => `${SCENE_NAME[s.work_scene] || ''} · ${THEME_NAME[s.home_theme] || ''}墙纸 · ${s.work_h}点上班 ${s.off_h}点下班`
@@ -128,6 +129,7 @@ const describe = (s) => `${SCENE_NAME[s.work_scene] || ''} · ${THEME_NAME[s.hom
 export function makeCustomPreset(draft, emoji, name, id) {
   const set = {
     work_scene: draft.work_scene, home_theme: draft.home_theme,
+    idle_scene: draft.idle_scene || null,
     wake_h: draft.wake_h, work_h: draft.work_h, off_h: draft.off_h, sleep_h: draft.sleep_h,
     buttons: draft.buttons.map(({ e, t }) => ({ e, t })),
     play_from: draft.play_from == null ? null : draft.play_from,
@@ -151,6 +153,8 @@ export function presetFromRow(row, slot) {
   // 第四轮之前存的老预设没有这两项：套用时不去动你现在的被戳反应和玩耍/放空时段
   if (!has(row, 'poke_lines')) delete p.set.poke_lines
   if (!WIN_KEYS.some((k) => has(row, k))) WIN_KEYS.forEach((k) => { delete p.set[k] })
+  // 第五轮之前存的老预设没有「放空去哪」：套用时不去动你现在选的
+  if (!has(row, 'idle_scene')) delete p.set.idle_scene
   return p
 }
 
