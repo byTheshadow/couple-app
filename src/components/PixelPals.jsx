@@ -7,11 +7,11 @@ import { usePal, usePalLog, usePresets, saveSettings, palPoke, palSettle, palLog
 import {
   W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
-  normalizeButtons, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
+  normalizeButtons, compactBtnLines, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
   placeOf, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
-import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes } from './pixelpals/voice'
+import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, shiftDay, INCOME } from './pixelpals/celebrate'
 import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
 import Visitor from './pixelpals/Visitor'
@@ -57,7 +57,7 @@ const realHour = () => {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
 // 草稿里的被戳反应输入框允许带空位（['你好','','','']），比较「有没有改动」之前先整理成存进服务器的样子
-const canon = (d) => (d ? { ...d, poke_lines: compactPokeLines(d.poke_lines) } : d)
+const canon = (d) => (d ? { ...d, poke_lines: compactPokeLines(d.poke_lines), btn_lines: compactBtnLines(d.btn_lines) } : d)
 
 // 被戳反应的 4 套：键和服务端 / art.js 的 POKE_KEYS 一一对应
 const POKE_SETS = [
@@ -66,6 +66,9 @@ const POKE_SETS = [
   { k: 'sleep', n: '睡觉时', hint: '睡着时被戳' },
   { k: 'annoyed', n: `被戳烦了（连戳 ${POKE_STREAK} 下起）`, hint: '同一个人 60 秒内连着戳' },
 ]
+
+// 互动按钮「点了以后说什么」的 3 种状态：键和 art.js 的 BTN_STATES 一一对应（玩耍和放空沿用「在家时」）
+const BTN_SETS = [['work', '上班时'], ['home', '在家时'], ['sleep', '睡觉时']]
 
 const pad4 = (arr) => {
   const a = Array.isArray(arr) ? arr.slice(0, POKE_MAX) : []
@@ -405,7 +408,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset, say }) {
+function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, onSavePreset, onDeletePreset, say }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
   const [sec, setSec] = useState('preset') // 当前翻到哪一页：预设 / 场景 / 作息 / 互动
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
@@ -491,6 +494,13 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
     ...d,
     buttons: d.buttons.map((b, j) => (j === i ? { ...b, [f]: f === 'e' ? cleanEmoji(v) : cleanLabel(v) } : b)),
   }))
+
+  // 按钮「点了以后说什么」：每个按钮 3 个输入框，改的是草稿（带空位），存之前才整理
+  const setBtnLine = (i, k, v) => setDraft((d) => {
+    const cur = [0, 1, 2].map((j) => ({ ...((d.btn_lines && d.btn_lines[j]) || {}) }))
+    cur[i][k] = clipLine(v)
+    return { ...d, btn_lines: cur }
+  })
 
   return (
     <section className="win">
@@ -613,15 +623,41 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
 
         <div className="pp-blk" hidden={sec !== 'touch'}>
           <div className="pp-h">今天的 3 个互动按钮 <small>TA 点了以后，{name}会根据场景回应</small></div>
-          <div className="pp-edits">
-            {draft.buttons.map((b, i) => (
-              <div className="pp-edit" key={i}>
-                <input className="pp-in c" type="text" value={b.e} onChange={(e) => setBtn(i, 'e', e.target.value)} aria-label={`第 ${i + 1} 个按钮的图标`} />
-                <input className="pp-in" type="text" value={b.t} onChange={(e) => setBtn(i, 't', e.target.value)} placeholder="按钮文字（8 个字以内）" aria-label={`第 ${i + 1} 个按钮的文字`} />
+          {draft.buttons.map((b, i) => {
+            const nb = normalizeButtons(draft.buttons, slot)[i]
+            const defs = defaultBtnLines(slot, nb.e, nb.t)
+            const mineLines = (draft.btn_lines && draft.btn_lines[i]) || {}
+            const filled = BTN_SETS.filter(([k]) => String(mineLines[k] || '').trim()).length
+            return (
+              <div key={i} style={{ marginBottom: 10 }}>
+                <div className="pp-edit">
+                  <input className="pp-in c" type="text" value={b.e} onChange={(e) => setBtn(i, 'e', e.target.value)} aria-label={`第 ${i + 1} 个按钮的图标`} />
+                  <input className="pp-in" type="text" value={b.t} onChange={(e) => setBtn(i, 't', e.target.value)} placeholder="按钮文字（8 个字以内）" aria-label={`第 ${i + 1} 个按钮的文字`} />
+                </div>
+                <details className="pp-fold" style={{ marginTop: 6, marginBottom: 0 }}>
+                  <summary><b>点了以后{name}说</b><small>留空 = 用默认台词</small><i>{filled}/3</i></summary>
+                  <div className="pp-edits" style={{ gridTemplateColumns: '1fr' }}>
+                    {BTN_SETS.map(([k, n]) => (
+                      <div className="pp-edit" key={k}>
+                        <small style={{ alignSelf: 'center', color: 'var(--ink2)', fontSize: 12 }}>{n}</small>
+                        <input
+                          className="pp-in"
+                          type="text"
+                          maxLength={POKE_LEN}
+                          value={mineLines[k] || ''}
+                          placeholder={`默认：${defs[k]}`}
+                          onChange={(e) => setBtnLine(i, k, e.target.value)}
+                          aria-label={`第 ${i + 1} 个按钮，${n}说的话`}
+                        />
+                      </div>
+                    ))}
+                    <div className="pp-chips"><button type="button" className="pp-chip" onClick={() => onTryButton(i)}>▶ 在上面的小屋里试一下</button></div>
+                  </div>
+                </details>
               </div>
-            ))}
-          </div>
-          <p className="pp-hint">图标或文字留空，保存时会换回默认的。</p>
+            )
+          })}
+          <p className="pp-hint">图标或文字留空，保存时会换回默认的。每句 {POKE_LEN} 个字以内；睡觉时用「睡觉时」，玩耍和放空沿用「在家时」。「试一下」按现在的预览时间处在上班 / 在家 / 睡觉来挑那一句，拖下面的「预览时间」可以换。改了按钮的图标或文字，写好的话还跟着这一格；套用预设如果换了按钮，这些话会清掉（点「还原」能找回）。</p>
         </div>
 
         <div className="pp-blk" hidden={sec !== 'sched'}>
@@ -744,7 +780,7 @@ export default function PixelPals({ onExit }) {
     if (!PLAY_KINDS.includes(row.kind)) return
     if (row.owner_id !== L.myId || row.actor_id === L.myId) return
     if (L.tab !== 'mine' || !myConsole.current) return
-    myConsole.current.play(reactionFor(L.mySlot, stateOf(L.mySettings, L.hr), row.kind, row.data))
+    myConsole.current.play(reactionFor(L.mySlot, stateOf(L.mySettings, L.hr), row.kind, row.data, L.mySettings))
   }, [])
   const log = usePalLog(me && me.id, partner && partner.id, onLogInsert)
 
@@ -758,7 +794,7 @@ export default function PixelPals({ onExit }) {
     setBusy(false)
     if (error) { say(error); return false }
     const L = live.current
-    if (taConsole.current) taConsole.current.play(reactionFor(L.taSlot, stateOf(L.taSettings, L.hr), kind, data))
+    if (taConsole.current) taConsole.current.play(reactionFor(L.taSlot, stateOf(L.taSettings, L.hr), kind, data, L.taSettings))
     myPal.reload()
     taPal.reload()
     return true
@@ -780,7 +816,7 @@ export default function PixelPals({ onExit }) {
 
   const onSave = async () => {
     if (!me || !draft) return
-    const clean = { ...draft, buttons: normalizeButtons(draft.buttons, mySlot), poke_lines: compactPokeLines(draft.poke_lines) }
+    const clean = { ...draft, buttons: normalizeButtons(draft.buttons, mySlot), poke_lines: compactPokeLines(draft.poke_lines), btn_lines: compactBtnLines(draft.btn_lines) }
     const bad = checkSchedule(clean)
     if (bad) { say(bad); return }
     setSaving(true)
@@ -808,7 +844,7 @@ export default function PixelPals({ onExit }) {
   const onSavePreset = async (emoji, rawName) => {
     const name = cleanLabel(rawName)
     if (!name) { say('先给这套起个名字（8 个字以内）'); return false }
-    const clean = { ...shownDraft, buttons: normalizeButtons(shownDraft.buttons, mySlot), poke_lines: compactPokeLines(shownDraft.poke_lines) }
+    const clean = { ...shownDraft, buttons: normalizeButtons(shownDraft.buttons, mySlot), poke_lines: compactPokeLines(shownDraft.poke_lines), btn_lines: compactBtnLines(shownDraft.btn_lines) }
     const bad = checkSchedule(clean)
     if (bad) { say(bad); return false }
     const list = presets.items
@@ -845,6 +881,13 @@ export default function PixelPals({ onExit }) {
     if (error) { say(error); return }
     await log.reload()
     say('日记已清空')
+  }
+
+  // 试一下某个按钮「点了以后说什么」：用你现在看到的（含没保存的草稿）和预览时间对应的状态，在上面的小屋里演一遍
+  const onTryButton = (i) => {
+    if (!myConsole.current) { say('先回到上面的「我的小屋」再试'); return }
+    const nb = normalizeButtons(shownDraft.buttons, mySlot)[i]
+    myConsole.current.play(reactionFor(mySlot, stateOf(shownDraft, hr), 'button', { e: nb.e, t: nb.t }, { ...shownDraft, buttons: normalizeButtons(shownDraft.buttons, mySlot), btn_lines: compactBtnLines(shownDraft.btn_lines) }))
   }
 
   // 回放下班庆祝：不发钱，只是看看动画
@@ -898,6 +941,7 @@ export default function PixelPals({ onExit }) {
             onDeletePreset={onDeletePreset}
             onTheme={onTheme}
             onReplay={onReplay}
+            onTryButton={onTryButton}
             say={say}
             settleNote={settleNote}
             income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
@@ -945,6 +989,8 @@ export default function PixelPals({ onExit }) {
           mySlot={mySlot}
           taName={taName}
           taSlot={taSlot}
+          mySettings={myPal.settings}
+          taSettings={taPal.settings}
           onClear={onClearLog}
         />
       )}

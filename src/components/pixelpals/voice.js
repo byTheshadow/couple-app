@@ -5,7 +5,7 @@
    - 聊天：预览阶段用预设台词；以后接 AI 时只需要换掉 chatReply
    这个文件不碰界面也不碰服务器。
    =========================================================================== */
-import { GIFTS, SCENES, pick, hourText } from './art'
+import { GIFTS, SCENES, pick, hourText, stateOf } from './art'
 
 export const FOODS = [
   { k: 'bread', e: '🍞', n: '面包', full: '一片面包', cost: 5, d: 8 },
@@ -122,6 +122,25 @@ export function pokeLine(slot, st, annoyed, lines) {
   if (st === 'sleep') return pick(v.pokeZ)
   return pick(annoyed ? v.annoyed : v.poke)
 }
+/** 互动按钮的默认回应（编辑区的灰色提示用）：{ work, home, sleep } */
+export function defaultBtnLines(slot, e, t) {
+  const v = voice(slot)
+  const label = `${e || ''}${t || ''}`
+  return { work: v.button.work(label), home: v.button.home(label), sleep: v.button.sleep(label) }
+}
+
+/**
+ * 这个按钮、这个状态下，主人自己写的回应（没写返回空字符串）。
+ * settings = 小人主人的设定（buttons + btn_lines）；st = 小人此刻的状态
+ */
+export function buttonLine(settings, st, e, t) {
+  if (!settings || !Array.isArray(settings.buttons) || !Array.isArray(settings.btn_lines)) return ''
+  const i = settings.buttons.findIndex((b) => b && b.e === e && b.t === t)
+  const o = i >= 0 ? settings.btn_lines[i] : null
+  const v = o && typeof o[stKey(st)] === 'string' ? o[stKey(st)].trim() : ''
+  return v
+}
+
 // 日记里的时间点：服务端存的是数字（24 以上 = 次日）
 const hh = (v) => (v == null || v === '' || !Number.isFinite(+v) ? '' : hourText(+v))
 const giftOf = (k) => GIFTS.find((g) => g.k === k)
@@ -137,16 +156,20 @@ export function chatReply(slot, st, q) {
 }
 
 /**
+ * settings（可选）= 这个小人主人的设定：按钮有没有自己写的回应，有就用，没有用默认模板
  * 一次互动之后，这个小人应该怎么反应：
  * { drop: 掉下来的东西（可选）, react: 蹦跳时长, blush: 脸红时长, hearts: 爱心个数, text: 气泡里的话, dur: 气泡停留秒数 }
  * kind / data 和服务器日记里存的一样：
  *   button { e, t }  feed { food }  gift { gift }  note {}  poke {}  chat { q, a }
  */
-export function reactionFor(slot, st, kind, data) {
+export function reactionFor(slot, st, kind, data, settings) {
   const v = voice(slot)
   const s = stKey(st)
   const d = data || {}
-  if (kind === 'button') return { react: 1, hearts: 4, text: v.button[s](`${d.e || ''}${d.t || ''}`) }
+  if (kind === 'button') {
+    const mine = buttonLine(settings, st, d.e, d.t)
+    return { react: 1, hearts: 4, text: mine || v.button[s](`${d.e || ''}${d.t || ''}`), dur: mine ? 4.2 : undefined }
+  }
   if (kind === 'feed') {
     const f = foodOf(d.food)
     return { drop: d.food === 'bread' ? 'bread' : 'box', react: 0.9, hearts: 5, text: v.feed[s](f ? f.full : '点心') }
@@ -169,11 +192,18 @@ export function reactionFor(slot, st, kind, data) {
  * 日记里的一句话。owner = 这是谁的小人的日记（决定口吻），actorName = 做这件事的人叫什么
  * 认不出来的记录返回空字符串（界面上直接跳过）
  */
-export function logLine(entry, ownerSlot, actorName) {
+export function logLine(entry, ownerSlot, actorName, settings) {
   const d = voice(ownerSlot).d
   const x = entry.data || {}
   switch (entry.kind) {
-    case 'button': return d.button(actorName, `${x.e || ''}${x.t || ''}`)
+    case 'button': {
+      const base = d.button(actorName, `${x.e || ''}${x.t || ''}`)
+      // 服务端只记了「点了哪个按钮」，当时小人在干嘛按记录的时间用现在的作息推一下；推不出来 / 没写就不加
+      const t = entry.created_at ? new Date(entry.created_at) : null
+      if (!settings || !t || Number.isNaN(t.getTime())) return base
+      const mine = buttonLine(settings, stateOf(settings, t.getHours() + t.getMinutes() / 60), x.e, x.t)
+      return mine ? `${base}我说：“${mine}”` : base
+    }
     case 'feed': { const f = foodOf(x.food); return d.feed(actorName, f ? f.full : '点心', x.gain == null ? '' : x.gain) }
     case 'gift': { const g = giftOf(x.gift); return d.gift(actorName, g ? g.n : '礼物') }
     case 'note': return d.note(actorName)

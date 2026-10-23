@@ -65,6 +65,8 @@ export const DEFAULT_SETTINGS = {
   idle_to: null,
   // 第四轮：被戳反应。{ work: [], home: [], sleep: [], annoyed: [] }，没写的那套用 voice.js 里的默认台词
   poke_lines: {},
+  // 第七轮：每个互动按钮点了以后说什么。3 个按钮各一项 { work, home, sleep }，没写的用 voice.js 里的默认台词
+  btn_lines: [{}, {}, {}],
 }
 
 export const DEFAULT_STATE = { mood: 70, coins: 100, gifts: [], mood_at: null }
@@ -120,6 +122,47 @@ export function compactPokeLines(raw) {
   return out
 }
 
+/* ---------- 互动按钮的回应：每个按钮 3 句（上班时 / 在家时 / 睡觉时），每句 ≤ 20 字 ---------- */
+
+export const BTN_STATES = ['work', 'home', 'sleep']
+/** 服务端里按「图标|文字」存（不依赖按钮的位置）；界面里按位置排（改了按钮文字，回应还跟着这一格） */
+export const btnKey = (b) => `${b.e}|${b.t}`
+
+/**
+ * 整理成「3 个按钮各一项」的样子：每项只留写了字的那几句，键的顺序固定（方便比较「有没有改动」）。
+ * 输入框里的草稿允许带空句，存之前都走这里
+ */
+export function compactBtnLines(raw) {
+  const arr = Array.isArray(raw) ? raw : []
+  return [0, 1, 2].map((i) => {
+    const o = arr[i] && typeof arr[i] === 'object' ? arr[i] : {}
+    const out = {}
+    for (const k of BTN_STATES) {
+      const v = clipLine(String(o[k] == null ? '' : o[k]).trim())
+      if (v) out[k] = v
+    }
+    return out
+  })
+}
+
+/** 服务器里的 { "🌹|送一朵花": { work, home, sleep } } → 按 3 个按钮的位置排好 */
+export function btnLinesFromRow(raw, buttons) {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  return compactBtnLines(buttons.map((b) => {
+    const k = btnKey(b)
+    return Object.prototype.hasOwnProperty.call(r, k) ? r[k] : {}
+  }))
+}
+
+/** 界面里的 3 项 → 存进服务器的样子：只留写了字的，没有就是 {} */
+export function btnLinesToRow(buttons, lines) {
+  const out = {}
+  compactBtnLines(lines).forEach((o, i) => {
+    if (Object.keys(o).length && buttons[i]) out[btnKey(buttons[i])] = o
+  })
+  return out
+}
+
 /* ---------- 玩耍 / 放空：在家的时间里的两段可选时间 [from, to)，to 不含 ---------- */
 
 const hourOrNull = (v) => {
@@ -143,6 +186,7 @@ export function normalizeSettings(row, slot) {
   const d = DEFAULT_SETTINGS
   const [pf, pt] = normWin(r.play_from, r.play_to)
   const [xf, xt] = normWin(r.idle_from, r.idle_to)
+  const buttons = normalizeButtons(r.buttons, slot)
   return {
     work_scene: has(SCENES, r.work_scene) ? r.work_scene : d.work_scene,
     idle_scene: has(SCENES, r.idle_scene) ? r.idle_scene : null,
@@ -151,12 +195,13 @@ export function normalizeSettings(row, slot) {
     work_h: clampH(r.work_h, d.work_h, 47),
     off_h: clampH(r.off_h, d.off_h, 47),
     sleep_h: clampH(r.sleep_h, d.sleep_h, 47),
-    buttons: normalizeButtons(r.buttons, slot),
+    buttons,
     play_from: pf,
     play_to: pt,
     idle_from: xf,
     idle_to: xt,
     poke_lines: compactPokeLines(r.poke_lines),
+    btn_lines: btnLinesFromRow(r.button_lines, buttons),
   }
 }
 

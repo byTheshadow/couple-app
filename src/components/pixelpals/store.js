@@ -9,7 +9,7 @@
    =========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { normalizeSettings, normalizeState } from './art'
+import { normalizeSettings, normalizeState, btnLinesToRow } from './art'
 import { presetFromRow, presetToRow } from './presets'
 
 const mapError = (e) => {
@@ -26,6 +26,8 @@ const mapError = (e) => {
   if (/pal_settings_work_scene_check|pal_settings_idle_scene_check/.test(m)) return '服务端还不认识这个场景，先把第五轮的 SQL（pixelpals-round5.sql）跑一下'
   if (/pal_settings_(work|off|sleep)_h_check|pal_settings_check/.test(m)) return '服务端还不认识「次日」的时间，先把第五轮半的 SQL（pixelpals-round5b.sql）跑一下；或者检查一下：起床 ≤ 上班 < 下班 ≤ 睡觉'
   if (/pal_settings_play_idle_check/.test(m)) return '玩耍/放空要完整落在在家的时间里，而且两段不能重叠'
+  if (/button_lines/.test(m) && /column|schema cache/i.test(m)) return '服务端还没有「按钮回应」这一列，先把第七轮的 SQL（pixelpals-round7a.sql）跑一下'
+  if (/pal_settings_button_lines_check/.test(m)) return '按钮回应有一句不合规矩：每句 1~20 个字'
   if (/pal_settings_poke_lines_check/.test(m)) return '被戳反应有一句不合规矩：每句 1~20 个字，每套最多 4 句'
   if (e?.code === '23514' || /check constraint/i.test(m)) return '有一项超出范围了，检查一下时间和按钮文字'
   if (m.includes('not enough coins')) return '钱包不够啦'
@@ -117,6 +119,8 @@ export async function saveSettings(userId, draft) {
       off_h: draft.off_h,
       sleep_h: draft.sleep_h,
       buttons: draft.buttons,
+      // 第七轮新增：每个按钮「点了以后说什么」，按「图标|文字」存
+      button_lines: btnLinesToRow(draft.buttons, draft.btn_lines),
       // 第四轮新增：玩耍/放空时段（null = 不设）、被戳反应（已整理成每套最多 4 句）
       play_from: draft.play_from == null ? null : draft.play_from,
       play_to: draft.play_to == null ? null : draft.play_to,

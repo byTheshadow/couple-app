@@ -13,7 +13,7 @@ import './extra.css'
 
 const SHOW = 6 // 默认只显示最新几条，其余点「展开」
 
-export default function Diary({ items, notes, loading, myId, myName, mySlot, taName, taSlot, onClear }) {
+export default function Diary({ items, notes, loading, myId, myName, mySlot, taName, taSlot, mySettings, taSettings, onClear }) {
   const [filter, setFilter] = useState('all')
   const [all, setAll] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -25,7 +25,7 @@ export default function Diary({ items, notes, loading, myId, myName, mySlot, taN
       const ownerName = mine ? myName : taName
       const actorName = e.actor_id === myId ? myName : taName
       // 下班结算是第三轮加的记录类型，句子在 celebrate.js 里拼；其余都走 voice.js
-      const text = e.kind === 'settle' ? settleLine(ownerSlot, e.data) : logLine(e, ownerSlot, actorName)
+      const text = e.kind === 'settle' ? settleLine(ownerSlot, e.data) : logLine(e, ownerSlot, actorName, mine ? mySettings : taSettings)
       return { e, mine, ownerSlot, ownerName, text }
     })
     .filter((r) => r.text && (filter === 'all' || (filter === 'mine' ? r.mine : !r.mine)))

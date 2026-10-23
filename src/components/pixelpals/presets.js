@@ -173,10 +173,14 @@ const resolveSet = (preset, slot) => {
  */
 export function applyPreset(draft, preset, slot) {
   const set = resolveSet(preset, slot)
+  const buttons = set.buttons ? set.buttons.map((b) => ({ ...b })) : draft.buttons
+  // 按钮换成了别的，原来写的「点了说什么」就对不上了，清掉；按钮没变就保留
+  const sameBtns = JSON.stringify(buttons.map(({ e, t }) => ({ e, t }))) === JSON.stringify(draft.buttons.map(({ e, t }) => ({ e, t })))
   const next = {
     ...draft,
     ...set,
-    buttons: set.buttons ? set.buttons.map((b) => ({ ...b })) : draft.buttons,
+    buttons,
+    btn_lines: sameBtns ? (draft.btn_lines || [{}, {}, {}]) : [{}, {}, {}],
     poke_lines: set.poke_lines ? compactPokeLines(set.poke_lines) : draft.poke_lines,
   }
   return fitWindows(next)
