@@ -10,6 +10,7 @@ import './toys.css'
 // 奶茶店带着 three.js，单独拆成一个懒加载块：不进奶茶店就不会下载它
 const MilkTea = lazy(() => import('../components/MilkTea'))
 const Crystal = lazy(() => import('../components/Crystal'))
+const PixelPals = lazy(() => import('../components/PixelPals'))
 
 /* ===========================================================================
    小物：一个小抽屉柜。点抽屉前脸拉开，再点里面的东西拿出来。
@@ -77,10 +78,30 @@ function ArtCrystal() {
   )
 }
 
+function ArtPixel() {
+  return (
+    <svg className="il" viewBox="0 0 132 92" {...ART}>
+      <rect x="30" y="6" width="72" height="84" rx="9" style={PAPER} />
+      <rect x="38" y="14" width="56" height="38" rx="3" style={{ fill: '#17171c' }} />
+      <g stroke="none">
+        <rect x="58" y="24" width="16" height="4" style={{ fill: '#fbfbff' }} />
+        <rect x="56" y="28" width="20" height="10" style={{ fill: '#fbfbff' }} />
+        <rect x="60" y="31" width="3" height="3" style={{ fill: '#17171c' }} />
+        <rect x="69" y="31" width="3" height="3" style={{ fill: '#17171c' }} />
+        <rect x="60" y="38" width="12" height="8" style={{ fill: '#e5484d' }} />
+      </g>
+      <path d="M49 66v12M43 72h12" strokeWidth="4" />
+      <circle cx="80" cy="76" r="4.5" style={{ fill: '#f2c94c' }} />
+      <circle cx="91" cy="69" r="4.5" style={{ fill: '#ef7fb0' }} />
+    </svg>
+  )
+}
+
 const DRAWERS = [
   { id: 'doodle', no: '01', name: '涂鸦小纸条', cap: '画一张，寄给 TA', go: '拿出来', Art: ArtDoodle, ready: true },
   { id: 'milktea', no: '02', name: '奶茶店', cap: '做一杯，寄张小票给 TA', go: '拿出来', Art: ArtMilkTea, ready: true },
   { id: 'crystal', no: '03', name: '水晶球', cap: '摇一摇，看看今天', go: '拿出来', Art: ArtCrystal, ready: true },
+  { id: 'pixel', no: '04', name: '像素小屋', cap: '看看 TA 的小人在干嘛', go: '拿出来', Art: ArtPixel, ready: true },
 ]
 
 // 涂鸦草稿：只要本机存着草稿，抽屉前脸就挂一个「有草稿」
@@ -94,8 +115,9 @@ export default function Toys() {
   const location = useLocation()
   const sub = new URLSearchParams(location.search).get('p')
   const inDoodle = sub === 'doodle'
-   const inMilkTea = sub === 'milktea'
+  const inMilkTea = sub === 'milktea'
   const inCrystal = sub === 'crystal'
+  const inPixel = sub === 'pixel'
 
   const [open, setOpen] = useState(null) // 当前拉开的抽屉 id，一次只开一个
   const [touched, setTouched] = useState(false) // 动过抽屉之后，第一格就不再做「提示一下」的小动画
@@ -131,6 +153,7 @@ export default function Toys() {
     if (d.id === 'doodle') navigate({ pathname: '/toys', search: '?p=doodle' }, { state: { fromHub: true } })
     else if (d.id === 'milktea') navigate({ pathname: '/toys', search: '?p=milktea' }, { state: { fromHub: true } })
     else if (d.id === 'crystal') navigate({ pathname: '/toys', search: '?p=crystal' }, { state: { fromHub: true } })
+    else if (d.id === 'pixel') navigate({ pathname: '/toys', search: '?p=pixel' }, { state: { fromHub: true } })
   }
 
   // 离开涂鸦页：如果是从抽屉柜点进来的，就退一步（历史记录里不留重复的一条）；直接打开链接进来的，就换成抽屉柜
@@ -161,6 +184,10 @@ export default function Toys() {
       ) : inCrystal ? (
         <Suspense fallback={<div className="page center"><div className="h-sub">正在擦亮…</div></div>}>
           <Crystal onExit={exitDoodle} incoming={location.state && location.state.crystal} />
+        </Suspense>
+      ) : inPixel ? (
+        <Suspense fallback={<div className="page center"><div className="h-sub">正在开机…</div></div>}>
+          <PixelPals onExit={exitDoodle} />
         </Suspense>
       ) : (
         <main className="page">
@@ -219,7 +246,7 @@ export default function Toys() {
         </main>
       )}
 
-      <TabBar hidden={inDoodle || inMilkTea || inCrystal} />
+      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel} />
     </div>
   )
 }
