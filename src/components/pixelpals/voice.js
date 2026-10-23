@@ -5,7 +5,7 @@
    - 聊天：预览阶段用预设台词；以后接 AI 时只需要换掉 chatReply
    这个文件不碰界面也不碰服务器。
    =========================================================================== */
-import { GIFTS, SCENES, pick } from './art'
+import { GIFTS, SCENES, pick, hourText } from './art'
 
 export const FOODS = [
   { k: 'bread', e: '🍞', n: '面包', full: '一片面包', cost: 5, d: 8 },
@@ -45,7 +45,7 @@ const V = {
       scene: (s) => `今天要去${s}写代码啦，加油～`,
       theme: (t) => `房间换成了${t}墙纸，好可爱！`,
       btns: (l) => `今天准备的互动是：${l}，快来找我玩～`,
-      sched: (w, o) => `作息改成 ${w}:00 上班、${o}:00 下班啦。`,
+      sched: (w, o) => `作息改成 ${w} 上班、${o} 下班啦。`,
     },
     fb: {
       work: ['在写代码呀～你呢你呢？', '这个 bug 有点凶……但我不怕！', '你来看我啦，好开心～'],
@@ -80,7 +80,7 @@ const V = {
       scene: (s) => `被安排去${s}打工。行。`,
       theme: (t) => `房间换成了${t}墙纸。……还不错。`,
       btns: (l) => `今天准备的互动是：${l}。`,
-      sched: (w, o) => `作息改成 ${w}:00 上班、${o}:00 下班。`,
+      sched: (w, o) => `作息改成 ${w} 上班、${o} 下班。`,
     },
     fb: {
       work: ['在上班。别烦我。……晚点再聊。', '今天店里很吵，没我的鼓点吵。', '你来看我了？……嗯。'],
@@ -122,6 +122,8 @@ export function pokeLine(slot, st, annoyed, lines) {
   if (st === 'sleep') return pick(v.pokeZ)
   return pick(annoyed ? v.annoyed : v.poke)
 }
+// 日记里的时间点：服务端存的是数字（24 以上 = 次日）
+const hh = (v) => (v == null || v === '' || !Number.isFinite(+v) ? '' : hourText(+v))
 const giftOf = (k) => GIFTS.find((g) => g.k === k)
 const foodOf = (k) => FOODS.find((f) => f.k === k)
 
@@ -180,7 +182,7 @@ export function logLine(entry, ownerSlot, actorName) {
     case 'scene': return d.scene(SCENES[x.scene] || '新的地方')
     case 'theme': return d.theme({ cream: '奶油', mint: '薄荷', night: '星空' }[x.theme] || '新')
     case 'btns': return d.btns(Array.isArray(x.buttons) ? x.buttons.map((b) => `${b.e || ''}${b.t || ''}`).join('、') : '')
-    case 'sched': return d.sched(String(x.work == null ? '' : x.work).padStart(2, '0'), String(x.off == null ? '' : x.off).padStart(2, '0'))
+    case 'sched': return d.sched(hh(x.work), hh(x.off))
     default: return ''
   }
 }

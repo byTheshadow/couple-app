@@ -146,6 +146,15 @@ export function settleLine(ownerSlot, data) {
   return `${when}的班下完啦～BUILD SUCCESS！工时换成了 ${amount}～`
 }
 
+/**
+ * 「刚下班的那一班」是哪一天的班（服务端 settled_day 记的就是它）：
+ * 白班 = 今天；下班时间在次日的夜班 = 上班那天，也就是昨天
+ */
+export function shiftDay(settings, d = new Date()) {
+  const y = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (settings && settings.off_h >= 24 ? 1 : 0))
+  return localDay(y)
+}
+
 /** 钱包旁边的小字：今天结算过没有 */
 export function localDay(d = new Date()) {
   const p = (n) => String(n).padStart(2, '0')

@@ -4,11 +4,11 @@
    - 特殊日 / 纪念日：整套都换（上班地点、墙纸、作息、3 个互动按钮、被戳反应，有的还带玩耍/放空时段）
    - 我的预设：存的是你当时看到的整套，包括被戳反应、玩耍/放空时段和「放空去哪」（老预设没有的项，套用时不会动你现在的）
    套用只是把整套值放进「草稿」，小人马上预览，还没保存；不喜欢点「还原」就回去了。
-   所有作息都满足：起床 ≤ 上班 < 下班 ≤ 睡觉（见 art.js 的 checkSchedule）。
+   所有作息都满足：起床 ≤ 上班 < 下班 ≤ 睡觉 ≤ 起床+23（24 以上 = 次日，见 art.js 的 checkSchedule）。
    这个文件不碰界面也不碰服务器。
    =========================================================================== */
 
-import { normalizeSettings, checkSchedule, fitWindows, compactPokeLines, cleanEmoji, cleanLabel, SCENES } from './art'
+import { normalizeSettings, checkSchedule, fitWindows, compactPokeLines, cleanEmoji, cleanLabel, SCENES, pointText } from './art'
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
 const WIN_KEYS = ['play_from', 'play_to', 'idle_from', 'idle_to']
@@ -123,7 +123,7 @@ export const MAX_PRESETS = 8
 const SCENE_NAME = SCENES
 const THEME_NAME = { cream: '奶油', mint: '薄荷', night: '星空' }
 
-const describe = (s) => `${SCENE_NAME[s.work_scene] || ''} · ${THEME_NAME[s.home_theme] || ''}墙纸 · ${s.work_h}点上班 ${s.off_h}点下班`
+const describe = (s) => `${SCENE_NAME[s.work_scene] || ''} · ${THEME_NAME[s.home_theme] || ''}墙纸 · ${pointText(s.work_h)}上班 ${pointText(s.off_h)}下班`
 
 /** 把当前草稿存成一套预设。id 不给就新生成一个 */
 export function makeCustomPreset(draft, emoji, name, id) {
@@ -196,9 +196,10 @@ export function activePreset(draft, list = ALL_PRESETS, slot = 'u1') {
   }) || null
 }
 
-/** 换墙纸的时候，墙纸只在「家里」看得到：给一个落在家里的预览时间，没有就返回 null */
+/** 换墙纸的时候，墙纸只在「家里」看得到：给一个落在家里的预览时间（钟点 0~24），没有就返回 null */
 export function homeHour(s) {
-  if (s.sleep_h > s.off_h) return (s.off_h + s.sleep_h) / 2 // 下班后到睡觉前
-  if (s.work_h > s.wake_h) return (s.wake_h + s.work_h) / 2 // 起床后到上班前
+  const mid = (f, t) => (((f + t) / 2) % 24)
+  if (s.sleep_h > s.off_h) return mid(s.off_h, s.sleep_h) // 下班后到睡觉前（可能已经过了午夜）
+  if (s.work_h > s.wake_h) return mid(s.wake_h, s.work_h) // 起床后到上班前
   return null
 }

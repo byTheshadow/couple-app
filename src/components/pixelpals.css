@@ -16,6 +16,10 @@
 .pp-con-top { display: flex; align-items: center; gap: 8px; margin: 0 2px 10px; font-size: 15px; }
 .pp-led { width: 8px; height: 8px; border-radius: 50%; background: #5dff9a; box-shadow: 0 0 8px #5dff9a; flex-shrink: 0; }
 .pp-tag { margin-left: auto; font-family: var(--mono); font-size: 11px; padding: 2px 9px; border-radius: 999px; background: var(--btn); color: var(--btnInk); }
+.pp-tags { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.pp-tags .pp-tag { margin-left: 0; }
+.pp-tagbtn { border: 1px solid transparent; cursor: pointer; }
+.pp-tagbtn.off { background: var(--chip); color: var(--ink2); border-color: var(--line); }
 
 .pp-bezel { background: #17171c; border-radius: 16px; padding: 11px; box-shadow: inset 0 3px 10px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07); }
 .pp-screen { position: relative; aspect-ratio: 4 / 3; border-radius: 6px; overflow: hidden; background: #000; }
@@ -66,10 +70,11 @@
 .pp-sched { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; font-size: 13px; color: var(--ink2); }
 .pp-sched label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pp-sel, .pp-in { font: inherit; font-size: 14px; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; min-width: 0; }
-.pp-sel { width: 96px; }
+.pp-sel { width: 118px; }
 .pp-edits { display: grid; gap: 6px; }
 .pp-edit { display: grid; grid-template-columns: 54px 1fr; gap: 6px; }
 .pp-in.c { text-align: center; font-size: 18px; padding: 5px 4px; }
+.pp-warn { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; border: 1.5px dashed var(--bd); font-size: 12px; line-height: 1.5; }
 .pp-hint { margin: 10px 0 0; font-size: 12px; color: var(--ink2); line-height: 1.5; }
 .pp-time { display: flex; align-items: center; gap: 10px; }
 .pp-time input[type='range'] { flex: 1; min-width: 0; accent-color: var(--btn); }
@@ -78,6 +83,25 @@
 
 .pp-page button:focus-visible, .pp-page input:focus-visible, .pp-page select:focus-visible { outline: 2px solid var(--btn); outline-offset: 2px; }
 
+/* 悬浮小窗：屏幕滚出视野后浮在页面上方，可以拖动 */
+.pp-mini { position: fixed; z-index: 40; top: calc(env(safe-area-inset-top) + 10px); right: 12px; width: min(44vw, 200px); padding: 6px; border-radius: 12px;
+  background: #17171c; box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.1); animation: pp-mini-in .18s ease-out; }
+@keyframes pp-mini-in { from { opacity: 0; transform: translateY(-6px) scale(.96); } to { opacity: 1; transform: none; } }
+.pp-mini-screen { position: relative; aspect-ratio: 4 / 3; border-radius: 4px; overflow: hidden; background: #000; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.pp-mini-screen:active { cursor: grabbing; }
+.pp-mini-screen canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; pointer-events: none; }
+.pp-mini-clock { position: absolute; top: 3px; left: 5px; z-index: 1; font-family: Silkscreen, DotGothic16, var(--mono), monospace; font-size: 9px; color: #fff; text-shadow: 1px 1px 0 rgba(0,0,0,.8); pointer-events: none; }
+.pp-mini .pp-mini-bubble { z-index: 2; max-width: 90%; padding: 3px 5px; border-width: 1.5px; box-shadow: 2px 2px 0 rgba(0,0,0,.35); font-size: 10px; line-height: 1.3; }
+.pp-mini-bar { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: #e8e8ee; font-size: 11px; }
+.pp-mini-bar b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.pp-mini-ab { display: flex; gap: 6px; }
+.pp-mini-bar button { width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer; background: #f5f5f7; color: #101012; font-family: Silkscreen, var(--mono), monospace; font-size: 10px; padding: 0;
+  box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.pp-mini-bar button:active { transform: translateY(2px); box-shadow: none; }
+.pp-mini-bar .b { opacity: .8; }
+.pp-mini-bar .x { background: rgba(255,255,255,.14); color: #e8e8ee; font-family: inherit; font-size: 15px; box-shadow: none; }
+
 @media (prefers-reduced-motion: reduce) {
+  .pp-mini { animation: none; }
   .pp-seg button, .pp-bubble, .pp-ab button { transition: none; }
 }

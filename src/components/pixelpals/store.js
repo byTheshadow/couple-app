@@ -24,6 +24,7 @@ const mapError = (e) => {
   if (e?.code === 'PGRST202' || /could not find the function/i.test(m)) return '服务端没找到像素小屋的函数，先把像素小屋的 SQL 跑一下（第二轮、第四轮那段也要跑）'
   if (e?.code === '42501' || /row-level security|permission denied/i.test(m)) return '没有权限，检查一下像素小屋表的行级权限（RLS）策略'
   if (/pal_settings_work_scene_check|pal_settings_idle_scene_check/.test(m)) return '服务端还不认识这个场景，先把第五轮的 SQL（pixelpals-round5.sql）跑一下'
+  if (/pal_settings_(work|off|sleep)_h_check|pal_settings_check/.test(m)) return '服务端还不认识「次日」的时间，先把第五轮半的 SQL（pixelpals-round5b.sql）跑一下；或者检查一下：起床 ≤ 上班 < 下班 ≤ 睡觉'
   if (/pal_settings_play_idle_check/.test(m)) return '玩耍/放空要完整落在在家的时间里，而且两段不能重叠'
   if (/pal_settings_poke_lines_check/.test(m)) return '被戳反应有一句不合规矩：每句 1~20 个字，每套最多 4 句'
   if (e?.code === '23514' || /check constraint/i.test(m)) return '有一项超出范围了，检查一下时间和按钮文字'
@@ -39,6 +40,7 @@ const mapError = (e) => {
   if (m.includes('presets too long')) return '预设内容太多了，先删掉一两套再存'
   if (m.includes('bad preset scene')) return '这套预设里的场景服务端还不认识，先把第五轮的 SQL（pixelpals-round5.sql）跑一下'
   if (m.includes('bad preset pokes')) return '这套预设里的被戳反应有一句不合规矩（每句 1~20 个字，每套最多 4 句）'
+  if (m.includes('bad preset hour')) return '这套预设里的时间不合规矩（起床 ≤ 上班 < 下班 ≤ 睡觉）；如果用了「次日」，先把第五轮半的 SQL（pixelpals-round5b.sql）跑一下'
   if (m.includes('bad preset windows')) return '这套预设里玩耍/放空的时间要完整落在在家的时间里，两段也不能重叠'
   if (m.includes('bad preset')) return '这套预设里有一项不合规矩（名字 8 个字以内、时间要按顺序），改一下再存'
   return `像素小屋出错：${m || '未知原因'}`

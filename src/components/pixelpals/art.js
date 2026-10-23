@@ -74,9 +74,10 @@ export const MOOD_DECAY_PER_HOUR = 2
 
 /* ---------- 整理数据（服务器返回的、用户输入的，都过一遍） ---------- */
 
-const clampH = (v, d) => {
+// 小时：起床 0~23；上班 / 下班 / 睡觉 / 玩耍 / 放空可以写到 24~47（= 次日的 0~23 点，用来跨午夜）
+const clampH = (v, d, max = 23) => {
   const n = Math.round(Number(v))
-  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : d
+  return Number.isFinite(n) && n >= 0 && n <= max ? n : d
 }
 
 export const cleanEmoji = (s) => Array.from(String(s == null ? '' : s).trim()).slice(0, 2).join('')
@@ -124,7 +125,7 @@ export function compactPokeLines(raw) {
 const hourOrNull = (v) => {
   if (v == null || v === '') return null
   const n = Math.round(Number(v))
-  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : null
+  return Number.isFinite(n) && n >= 0 && n <= 47 ? n : null
 }
 const normWin = (a, b) => {
   const f = hourOrNull(a)
@@ -147,9 +148,9 @@ export function normalizeSettings(row, slot) {
     idle_scene: has(SCENES, r.idle_scene) ? r.idle_scene : null,
     home_theme: has(THEMES, r.home_theme) ? r.home_theme : d.home_theme,
     wake_h: clampH(r.wake_h, d.wake_h),
-    work_h: clampH(r.work_h, d.work_h),
-    off_h: clampH(r.off_h, d.off_h),
-    sleep_h: clampH(r.sleep_h, d.sleep_h),
+    work_h: clampH(r.work_h, d.work_h, 47),
+    off_h: clampH(r.off_h, d.off_h, 47),
+    sleep_h: clampH(r.sleep_h, d.sleep_h, 47),
     buttons: normalizeButtons(r.buttons, slot),
     play_from: pf,
     play_to: pt,
@@ -171,6 +172,40 @@ export function normalizeState(row) {
   }
 }
 
+/* ---------- 跨午夜：作息里的小时是「从起床那天 0 点数起」的，24 以上 = 次日 ---------- */
+
+/** 一个时间点怎么念：7 → 07:00，30 → 次日06:00 */
+export const hourText = (h) => (h >= 24 ? `次日${pad2(h - 24)}:00` : `${pad2(h)}:00`)
+/** 一个时间点怎么念（短）：7 → 7点，30 → 次日6点 */
+export const pointText = (h) => (h >= 24 ? `次日${h - 24}点` : `${h}点`)
+
+/** 现在的钟点（0~24）换算成「从起床那天 0 点数起」的钟点：比起床还早的算次日（+24） */
+export const shiftHour = (s, hr) => (hr >= s.wake_h ? hr : hr + 24)
+
+/**
+ * 改了其中一项以后，把另外几项顺势挪到合规矩的位置（起床 ≤ 上班 < 下班 ≤ 睡觉 ≤ 起床+23）。
+ * k = 刚改的那一项。返回新的草稿
+ */
+export function reflow(s, k) {
+  const w = s.wake_h
+  const hi = w + 23
+  let a = s.work_h
+  let b = s.off_h
+  let z = s.sleep_h
+  if (k === 'wake_h') { a = Math.max(a, w); b = Math.max(b, a + 1); z = Math.max(z, b) }
+  else if (k === 'work_h') { b = Math.max(b, a + 1); z = Math.max(z, b) }
+  else if (k === 'off_h') { if (b <= a) a = b - 1; z = Math.max(z, b) }
+  else if (k === 'sleep_h') { if (z < b) b = z; if (b <= a) a = b - 1 }
+  const lim = (v, lo, up) => Math.max(lo, Math.min(up, v))
+  a = lim(a, w, hi - 1)
+  b = lim(b, a + 1, hi)
+  z = lim(z, b, hi)
+  return { ...s, work_h: a, off_h: b, sleep_h: z }
+}
+
+/** 在家的两段时间：[起床, 上班) 和 [下班, 睡觉)；玩耍 / 放空必须完整落在其中一段里 */
+export const homeSegments = (s) => [[s.wake_h, s.work_h], [s.off_h, s.sleep_h]].filter(([f, t]) => t > f)
+
 // 这一段时间要完整落在「在家」里：起床后到上班前，或者下班后到睡觉前（和服务端 pal_windows_ok 同一条规则）
 const winProblem = (s, name, f, t) => {
   if (f == null && t == null) return ''
@@ -188,6 +223,7 @@ export function checkSchedule(s) {
   if (s.work_h < s.wake_h) return '上班时间不能比起床还早'
   if (s.off_h <= s.work_h) return '下班要在上班之后'
   if (s.sleep_h < s.off_h) return '睡觉要在下班之后'
+  if (s.sleep_h > s.wake_h + 23) return '醒着的时间最长 23 小时：睡觉最晚到起床前 1 小时'
   const a = winProblem(s, '玩耍', s.play_from, s.play_to)
   if (a) return a
   const b = winProblem(s, '放空', s.idle_from, s.idle_to)
@@ -212,9 +248,10 @@ export function fitWindows(s) {
 const inWin = (h, f, t) => f != null && t != null && h >= f && h < t
 
 /** 小人此刻在哪个状态：work 上班 / sleep 睡觉 / play 玩耍 / idle 放空 / home 在家（其余时间） */
-export function stateOf(s, h) {
+export function stateOf(s, clock) {
+  const h = shiftHour(s, clock) // 比起床还早的钟点算「次日」，这样夜班、睡过午夜都对得上
   if (h >= s.work_h && h < s.off_h) return 'work'
-  if (h >= s.sleep_h || h < s.wake_h) return 'sleep'
+  if (h >= s.sleep_h) return 'sleep'
   if (inWin(h, s.play_from, s.play_to)) return 'play'
   if (inWin(h, s.idle_from, s.idle_to)) return 'idle'
   return 'home'

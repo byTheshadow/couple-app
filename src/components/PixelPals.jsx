@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
@@ -7,11 +8,11 @@ import {
   W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
   normalizeButtons, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
-  placeOf, atHome, compactPokeLines, clipLine, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
+  placeOf, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes } from './pixelpals/voice'
-import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, localDay, INCOME } from './pixelpals/celebrate'
+import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, shiftDay, INCOME } from './pixelpals/celebrate'
 import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
@@ -26,6 +27,8 @@ import './pixelpals.css'
           在家时间里可选的「玩耍」「放空」两段时间。
    第五轮：新场景（便利店 / 图书馆 / 海边 / 星空，上班和放空都能选；放空选了场景，整个画面就换成那里）、
           新礼物（五件，价格和心情加成放在服务端的 pal_gift_catalog 表）、点「重置全部数据」时一并清空像素小屋。
+   第五轮半：作息支持跨午夜（夜班 / 睡过午夜，时间里选「次日」）、作息下拉互相联动、
+          小屋画面滚出屏幕后变成一个可以拖动的悬浮小窗（带 A / B 键），一直跟着你。
    - 画面和数据整理在 pixelpals/art.js，掉落动画在 fx.js，台词在 voice.js，服务器读写在 store.js，
      「去看 TA」在 Visitor.jsx，日记在 Diary.jsx，这个文件只管把它们拼成页面
    - user1 = 代码小人（白发），user2 = 打工小人（黑发），由登录账号的 slot 决定
@@ -76,9 +79,18 @@ const slotOf = (p) => {
   return n === '2' ? 'u2' : n === '1' ? 'u1' : null
 }
 
-const hourOptions = () => Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{pad2(i)}:00</option>)
-// 玩耍 / 放空的时间选择：第一项「不设」
-const winOptions = () => [<option key="none" value="">不设</option>, ...hourOptions()]
+// 作息的时间下拉：24 以上显示成「次日 xx:00」；每一项只列出合规矩的范围（起床 ≤ 上班 < 下班 ≤ 睡觉 ≤ 起床+23）
+const hourOpts = (from, to) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => <option key={from + i} value={from + i}>{hourText(from + i)}</option>)
+// 玩耍 / 放空的时间选择：第一项「不设」，后面只列出落在「在家的时间」里的钟点
+const winOpts = (list) => [<option key="none" value="">不设</option>, ...list.map((h) => <option key={h} value={h}>{hourText(h)}</option>)]
+const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i)
+const winFromList = (s) => homeSegments(s).flatMap(([f, t]) => range(f, t - 1))
+const winToList = (s, from) => homeSegments(s).filter(([f, t]) => from == null || (from >= f && from < t)).flatMap(([f, t]) => range(Math.max(f + 1, from == null ? 0 : from + 1), t))
+const SCHED_NAMES = { wake_h: '起床', work_h: '上班', off_h: '下班', sleep_h: '睡觉' }
+const MINI_KEY = 'pp-mini'
+const MINI_POS_KEY = 'pp-mini-pos'
+const lsGet = (k) => { try { return window.localStorage.getItem(k) } catch { return null } }
+const lsSet = (k, v) => { try { window.localStorage.setItem(k, v) } catch { /* 存不了就算了，下次打开用默认的 */ } }
 
 /* ---------- 一台游戏机 ---------- */
 
@@ -109,7 +121,66 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
   const segsRef = useRef(null)
   const live = useRef({})
   const selfPokes = useRef([]) // 我自己戳自己的小人（预览被戳反应）的时间，用来算「连戳」
+  // 悬浮小窗：屏幕滚出视野以后，在页面上方浮一个小画面（镜像同一块画布），开关和位置记在这台手机上
+  const bezelRef = useRef(null)
+  const miniRef = useRef(null)
+  const miniCanvasRef = useRef(null)
+  const miniCtxRef = useRef(null)
+  const miniBubbleRef = useRef(null)
+  const miniClockRef = useRef(null)
+  const dragRef = useRef(null)
+  const [mini, setMini] = useState(() => lsGet(MINI_KEY) !== '0')
+  const [away, setAway] = useState(false)
+  const [miniPos, setMiniPos] = useState(() => {
+    try {
+      const p = JSON.parse(lsGet(MINI_POS_KEY) || 'null')
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.y >= 0 && p.x < window.innerWidth - 60 && p.y < window.innerHeight - 60) return p
+    } catch { /* 位置坏了就用默认的 */ }
+    return null
+  })
   live.current = { slot, settings, state, hr }
+
+  useEffect(() => {
+    const el = bezelRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined
+    const io = new IntersectionObserver(([e]) => {
+      // 只有「屏幕从上面滚出去了」才浮出小窗；屏幕在下面（页面还没滚到）时不用
+      setAway(e.intersectionRatio < 0.15 && e.boundingClientRect.top < 0)
+    }, { threshold: [0, 0.15, 1] })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  useEffect(() => { if (!mini || !away) miniCtxRef.current = null }, [mini, away])
+  const toggleMini = () => setMini((v) => { lsSet(MINI_KEY, v ? '0' : '1'); return !v })
+
+  // 拖动小窗：按住画面拖；松手时记住位置。拖动过程直接改样式，不重绘整个页面
+  const dragDown = (e) => {
+    if (e.target.closest('button')) return
+    const box = miniRef.current
+    if (!box) return
+    const r = box.getBoundingClientRect()
+    dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top, x: r.left, y: r.top }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const dragMove = (e) => {
+    const d = dragRef.current
+    const box = miniRef.current
+    if (!d || !box) return
+    const r = box.getBoundingClientRect()
+    d.x = Math.max(4, Math.min(window.innerWidth - r.width - 4, e.clientX - d.dx))
+    d.y = Math.max(4, Math.min(window.innerHeight - r.height - 4, e.clientY - d.dy))
+    box.style.left = `${d.x}px`
+    box.style.top = `${d.y}px`
+    box.style.right = 'auto'
+  }
+  const dragUp = () => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (!d) return
+    const p = { x: Math.round(d.x), y: Math.round(d.y) }
+    setMiniPos(p)
+    lsSet(MINI_POS_KEY, JSON.stringify(p))
+  }
 
   const say = useCallback((text, dur = 3.6) => {
     const el = bubbleRef.current
@@ -170,6 +241,16 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
 
+      // 悬浮小窗开着就把同一帧复制过去（画布是 160×120 的小图，复制几乎不费力）
+      const mc = miniCanvasRef.current
+      if (mc) {
+        let mctx = miniCtxRef.current
+        if (!mctx) { mctx = mc.getContext('2d'); mctx.imageSmoothingEnabled = false; miniCtxRef.current = mctx }
+        mctx.drawImage(canvas, 0, 0)
+        const clockText = fmtHour(cur.hr)
+        if (miniClockRef.current && miniClockRef.current.textContent !== clockText) miniClockRef.current.textContent = clockText
+      }
+
       const place = placeOf(cur.settings, actor.state) // 在哪个场景（在家 = null）
       const label = actor.state === 'work' ? `上班中 · ${SCENES[place]}`
         : actor.state === 'play' ? '在家 · 玩耍中'
@@ -194,6 +275,13 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         if (bubbleT.current > 0) {
           bubbleT.current -= dt
           if (bubbleT.current <= 0) b.classList.remove('on')
+        }
+        const mb = miniBubbleRef.current
+        if (mb) {
+          if (mb.textContent !== b.textContent) mb.textContent = b.textContent
+          mb.classList.toggle('on', b.classList.contains('on'))
+          mb.style.left = b.style.left
+          mb.style.top = b.style.top
         }
       }
     }
@@ -242,9 +330,12 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         <div className="pp-con-top">
           <span className="pp-led" />
           <b>{name}</b>
-          {preview && <span className="pp-tag">预览中 · 还没保存</span>}
+          <span className="pp-tags">
+            {preview && <span className="pp-tag">预览中 · 还没保存</span>}
+            <button type="button" className={`pp-tag pp-tagbtn${mini ? '' : ' off'}`} onClick={toggleMini} aria-pressed={mini} title="往下翻页的时候，小屋画面会变成一个悬浮小窗跟着你">悬浮窗 {mini ? '开' : '关'}</button>
+          </span>
         </div>
-        <div className="pp-bezel">
+        <div className="pp-bezel" ref={bezelRef}>
           <div className="pp-screen">
             <canvas ref={canvasRef} width={W} height={H} />
             <div className="pp-hud"><span ref={clockRef} /><span ref={whereRef} className="where" /></div>
@@ -274,6 +365,32 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
           </div>
         )}
       </div>
+      {mini && away && createPortal(
+        <div
+          ref={miniRef}
+          className="pp-mini"
+          style={miniPos ? { left: miniPos.x, top: miniPos.y, right: 'auto' } : undefined}
+          role="group"
+          aria-label="小屋悬浮窗"
+        >
+          <div className="pp-mini-screen" onPointerDown={dragDown} onPointerMove={dragMove} onPointerUp={dragUp} onPointerCancel={dragUp}>
+            <canvas ref={miniCanvasRef} width={W} height={H} />
+            <span ref={miniClockRef} className="pp-mini-clock" />
+            <div ref={miniBubbleRef} className="pp-bubble pp-mini-bubble" />
+          </div>
+          <div className="pp-mini-bar">
+            <b>{name}</b>
+            {(mine || onA) && (
+              <span className="pp-mini-ab">
+                <button type="button" className="a" onClick={poke} aria-label="戳一戳">A</button>
+                <button type="button" className="b" onClick={wave} aria-label="打招呼">B</button>
+              </span>
+            )}
+            <button type="button" className="x" onClick={toggleMini} aria-label="关掉悬浮窗">×</button>
+          </div>
+        </div>,
+        document.body,
+      )}
       {mine && <footer className="wf"><span>A 戳一戳（试试你写的被戳反应，连点 3 下看「被戳烦了」）· B 打招呼（只有你自己看得到）</span></footer>}
       {!mine && onA && <footer className="wf"><span>A 戳一戳（会写进 TA 的日记）· B 打招呼</span></footer>}
     </section>
@@ -282,32 +399,70 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset }) {
+function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset, say }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
   const [pn, setPn] = useState('')
   const [pBusy, setPBusy] = useState(false)
   const active = activePreset(draft, [...DAILY_PRESETS, ...SPECIAL_PRESETS, ...mine.items], slot)
+  const schedProblem = checkSchedule(draft)
   const defs = defaultPokes(slot)
 
-  // 玩耍 / 放空：选「不设」两头一起清掉；只选了一头，另一头自动补成差一小时，免得半截子
-  const setWin = (kind, which, v) => setDraft((d) => {
+  // 作息：改一项，另外几项顺势挪到合规矩的位置（起床 ≤ 上班 < 下班 ≤ 睡觉 ≤ 起床+23）；对不上的玩耍/放空时段取消，并告诉你
+  const setSched = (k, v) => {
+    const next = reflow({ ...draft, [k]: v }, k)
+    const moved = Object.keys(SCHED_NAMES).filter((x) => x !== k && next[x] !== draft[x]).map((x) => SCHED_NAMES[x])
+    const fitted = fitWindows(next)
+    const dropped = WINDOW_KINDS.filter(({ k: w }) => next[`${w}_from`] != null && fitted[`${w}_from`] == null).map(({ n }) => n)
+    setDraft(fitted)
+    const msgs = []
+    if (moved.length) msgs.push(`${moved.join('、')}也跟着挪了`)
+    if (dropped.length) msgs.push(`${dropped.join('、')}的时段落到了上班/睡觉时间里，已取消`)
+    if (msgs.length) say(msgs.join('；'))
+  }
+
+  // 玩耍 / 放空：下拉里只有「在家的时间」里的钟点；选「不设」两头一起清掉；只选了一头，另一头自动补成差一小时；两段撞在一起时取消另一段
+  const setWin = (kind, which, v) => {
     const f = `${kind}_from`
     const t = `${kind}_to`
-    if (v === '') return { ...d, [f]: null, [t]: null }
-    const n = +v
-    const next = { ...d, [which === 'from' ? f : t]: n }
-    if (next[f] == null) next[f] = Math.max(0, n - 1)
-    if (next[t] == null) next[t] = Math.min(23, n + 1)
-    return next
-  })
+    let from = draft[f]
+    let to = draft[t]
+    if (v === '') {
+      from = null
+      to = null
+    } else {
+      const n = +v
+      const segs = homeSegments(draft)
+      if (which === 'from') {
+        const seg = segs.find(([a, b]) => n >= a && n < b)
+        if (!seg) return
+        from = n
+        if (to == null || to <= n || to > seg[1]) to = n + 1
+      } else {
+        const seg = segs.find(([a, b]) => n > a && n <= b)
+        if (!seg) return
+        to = n
+        if (from == null || from < seg[0] || from >= n) from = n - 1
+      }
+    }
+    const next = { ...draft, [f]: from, [t]: to }
+    const o = kind === 'play' ? 'idle' : 'play'
+    const oName = kind === 'play' ? '放空' : '玩耍'
+    if (from != null && next[`${o}_from`] != null && !(to <= next[`${o}_from`] || next[`${o}_to`] <= from)) {
+      next[`${o}_from`] = null
+      next[`${o}_to`] = null
+      say(`和「${oName}」的时间撞上了，「${oName}」已取消`)
+    }
+    setDraft(next)
+  }
 
   // 放空去哪：选了就把预览时间拨到放空的时段里，马上能看到画面换成那里
   const setIdleScene = (k) => {
     set('idle_scene', k)
     if (!k || draft.idle_from == null || draft.idle_to == null) return
-    if (hr >= draft.idle_from && hr < draft.idle_to) return
-    setSim((draft.idle_from + draft.idle_to) / 2)
+    const h = shiftHour(draft, hr)
+    if (h >= draft.idle_from && h < draft.idle_to) return
+    setSim(((draft.idle_from + draft.idle_to) / 2) % 24)
   }
 
   // 被戳反应：每套 4 个输入框，改的是草稿（带空位），存之前才整理
@@ -393,19 +548,21 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
         <div className="pp-blk">
           <div className="pp-h">作息 <small>其余时间在家，睡觉时间之后关灯</small></div>
           <div className="pp-sched">
-            <label>起床 <select className="pp-sel" value={draft.wake_h} onChange={(e) => set('wake_h', +e.target.value)}>{hourOptions()}</select></label>
-            <label>上班 <select className="pp-sel" value={draft.work_h} onChange={(e) => set('work_h', +e.target.value)}>{hourOptions()}</select></label>
-            <label>下班 <select className="pp-sel" value={draft.off_h} onChange={(e) => set('off_h', +e.target.value)}>{hourOptions()}</select></label>
-            <label>睡觉 <select className="pp-sel" value={draft.sleep_h} onChange={(e) => set('sleep_h', +e.target.value)}>{hourOptions()}</select></label>
+            <label>起床 <select className="pp-sel" value={draft.wake_h} onChange={(e) => setSched('wake_h', +e.target.value)}>{hourOpts(0, 23)}</select></label>
+            <label>上班 <select className="pp-sel" value={draft.work_h} onChange={(e) => setSched('work_h', +e.target.value)}>{hourOpts(draft.wake_h, draft.wake_h + 22)}</select></label>
+            <label>下班 <select className="pp-sel" value={draft.off_h} onChange={(e) => setSched('off_h', +e.target.value)}>{hourOpts(draft.wake_h + 1, draft.wake_h + 23)}</select></label>
+            <label>睡觉 <select className="pp-sel" value={draft.sleep_h} onChange={(e) => setSched('sleep_h', +e.target.value)}>{hourOpts(draft.wake_h + 1, draft.wake_h + 23)}</select></label>
           </div>
+          <p className="pp-hint">夜班、睡过午夜都可以：上班 / 下班 / 睡觉能选「次日」。改其中一项，别的会自动跟着挪，不会出现顺序乱掉的情况。</p>
+          {schedProblem && <p className="pp-warn">{schedProblem}</p>}
         </div>
 
         <div className="pp-blk">
           <div className="pp-h">在家的活动 <small>可选：在家的时间里，安排一段玩耍、一段放空</small></div>
           {WINDOW_KINDS.map(({ k, n, e }) => (
             <div className="pp-sched" key={k} style={{ marginBottom: 8 }}>
-              <label>{e} {n}从 <select className="pp-sel" value={draft[`${k}_from`] == null ? '' : draft[`${k}_from`]} onChange={(ev) => setWin(k, 'from', ev.target.value)} aria-label={`${n}的开始时间`}>{winOptions()}</select></label>
-              <label>到 <select className="pp-sel" value={draft[`${k}_to`] == null ? '' : draft[`${k}_to`]} onChange={(ev) => setWin(k, 'to', ev.target.value)} aria-label={`${n}的结束时间`}>{winOptions()}</select></label>
+              <label>{e} {n}从 <select className="pp-sel" value={draft[`${k}_from`] == null ? '' : draft[`${k}_from`]} onChange={(ev) => setWin(k, 'from', ev.target.value)} aria-label={`${n}的开始时间`}>{winOpts(winFromList(draft))}</select></label>
+              <label>到 <select className="pp-sel" value={draft[`${k}_to`] == null ? '' : draft[`${k}_to`]} onChange={(ev) => setWin(k, 'to', ev.target.value)} aria-label={`${n}的结束时间`}>{winOpts(winToList(draft, draft[`${k}_from`]))}</select></label>
             </div>
           ))}
           <div className="pp-sub">放空时去哪儿 <small>{draft.idle_from == null ? '先在上面设一段放空时间，才会去那里' : '放空的那段时间里，画面会换成这个地方'}</small></div>
@@ -562,8 +719,11 @@ export default function PixelPals({ onExit }) {
   const shownDraft = draft || myPal.settings
   const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
-  const settledToday = !!(myPal.raw && myPal.raw.settled_day === localDay())
-  const settleNote = settledToday ? '今天已结算 ✓' : real >= myPal.settings.off_h ? '今天还没结算' : '下班后自动结算'
+  // 夜班（下班时间在次日）算的是「上班那天」的班：次日下班后结算的是昨天上的那一班
+  const night = myPal.settings.off_h >= 24
+  const settledToday = !!(myPal.raw && myPal.raw.settled_day === shiftDay(myPal.settings))
+  const offPassed = (night ? real + 24 : real) >= myPal.settings.off_h
+  const settleNote = settledToday ? (night ? '上一班已结算 ✓' : '今天已结算 ✓') : offPassed ? (night ? '上一班还没结算' : '今天还没结算') : '下班后自动结算'
   live.current = { tab, hr, mySlot, taSlot, myId: me && me.id, mySettings: myPal.settings, taSettings: taPal.settings }
 
   // TA 对我的小人做了什么：我正好在看自己的小屋，小人就当场反应；不在看就只进日记
@@ -717,6 +877,7 @@ export default function PixelPals({ onExit }) {
             onDeletePreset={onDeletePreset}
             onTheme={onTheme}
             onReplay={onReplay}
+            say={say}
             settleNote={settleNote}
             income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
           />
