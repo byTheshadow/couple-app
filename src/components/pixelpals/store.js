@@ -14,11 +14,17 @@ import { presetFromRow, presetToRow } from './presets'
 
 const mapError = (e) => {
   const m = e?.message || ''
+  // 新字段还没加（第四轮 SQL 没跑）：要放在「没有表」那条前面，因为报错里也带 does not exist
+  if (e?.code === 'PGRST204' || e?.code === '42703' || /could not find the '.*' column|column .* does not exist/i.test(m)) {
+    return '服务端还没有第四轮的新字段，先把第四轮的 SQL（pixelpals-round4.sql）跑一下'
+  }
   if (e?.code === '42P01' || e?.code === 'PGRST205' || /could not find the table|does not exist/i.test(m)) {
     return '服务端还没有像素小屋的表，先把像素小屋的 SQL 跑一下'
   }
-  if (e?.code === 'PGRST202' || /could not find the function/i.test(m)) return '服务端没找到像素小屋的函数，先把像素小屋的 SQL 跑一下（第二轮那段也要跑）'
+  if (e?.code === 'PGRST202' || /could not find the function/i.test(m)) return '服务端没找到像素小屋的函数，先把像素小屋的 SQL 跑一下（第二轮、第四轮那段也要跑）'
   if (e?.code === '42501' || /row-level security|permission denied/i.test(m)) return '没有权限，检查一下像素小屋表的行级权限（RLS）策略'
+  if (/pal_settings_play_idle_check/.test(m)) return '玩耍/放空要完整落在在家的时间里，而且两段不能重叠'
+  if (/pal_settings_poke_lines_check/.test(m)) return '被戳反应有一句不合规矩：每句 1~20 个字，每套最多 4 句'
   if (e?.code === '23514' || /check constraint/i.test(m)) return '有一项超出范围了，检查一下时间和按钮文字'
   if (m.includes('not enough coins')) return '钱包不够啦'
   if (m.includes('already has')) return 'TA 已经有这个礼物了'
@@ -26,8 +32,11 @@ const mapError = (e) => {
   if (m.includes('note too long')) return '纸条太长了，40 个字以内'
   if (m.includes('bad food') || m.includes('bad gift')) return '这个东西服务端不认识'
   if (m.includes('self interaction')) return '只能对 TA 的小人做这个'
-  if (m.includes('not logged in')) return '登录状态过期了，刷新一下再试'
+  if (m.includes('not logged in') || m.includes('not signed in')) return '登录状态过期了，刷新一下再试'
   if (m.includes('too many presets')) return '预设最多存 8 套，先删掉一个'
+  if (m.includes('presets too long')) return '预设内容太多了，先删掉一两套再存'
+  if (m.includes('bad preset pokes')) return '这套预设里的被戳反应有一句不合规矩（每句 1~20 个字，每套最多 4 句）'
+  if (m.includes('bad preset windows')) return '这套预设里玩耍/放空的时间要完整落在在家的时间里，两段也不能重叠'
   if (m.includes('bad preset')) return '这套预设里有一项不合规矩（名字 8 个字以内、时间要按顺序），改一下再存'
   return `像素小屋出错：${m || '未知原因'}`
 }
@@ -102,6 +111,12 @@ export async function saveSettings(userId, draft) {
       off_h: draft.off_h,
       sleep_h: draft.sleep_h,
       buttons: draft.buttons,
+      // 第四轮新增：玩耍/放空时段（null = 不设）、被戳反应（已整理成每套最多 4 句）
+      play_from: draft.play_from == null ? null : draft.play_from,
+      play_to: draft.play_to == null ? null : draft.play_to,
+      idle_from: draft.idle_from == null ? null : draft.idle_from,
+      idle_to: draft.idle_to == null ? null : draft.idle_to,
+      poke_lines: draft.poke_lines || {},
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)
@@ -124,7 +139,8 @@ export const palButton = (owner, e, t) => rpc('pal_button', { p_owner: owner, p_
 export const palFeed = (owner, food) => rpc('pal_feed', { p_owner: owner, p_food: food })
 export const palGift = (owner, gift) => rpc('pal_gift', { p_owner: owner, p_gift: gift })
 export const palNote = (owner, body) => rpc('pal_note', { p_owner: owner, p_body: body })
-export const palPoke = (owner) => rpc('pal_poke', { p_owner: owner })
+// line = 被戳的小人说的那句话（客户端按 TA 自己写的被戳反应挑好，服务端存进日记）；annoyed = 是不是被连戳烦了
+export const palPoke = (owner, line, annoyed) => rpc('pal_poke', { p_owner: owner, p_line: line || null, p_annoyed: !!annoyed })
 export const palChat = (owner, q, a) => rpc('pal_chat', { p_owner: owner, p_q: q, p_a: a })
 
 /**

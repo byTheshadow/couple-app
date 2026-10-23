@@ -63,6 +63,13 @@ export const DEFAULT_SETTINGS = {
   work_h: 7,
   off_h: 17,
   sleep_h: 23,
+  // 第四轮：在家的时间里可以各安排一段「玩耍」「放空」（都可以不设，null = 没有）
+  play_from: null,
+  play_to: null,
+  idle_from: null,
+  idle_to: null,
+  // 第四轮：被戳反应。{ work: [], home: [], sleep: [], annoyed: [] }，没写的那套用 voice.js 里的默认台词
+  poke_lines: {},
 }
 
 export const DEFAULT_STATE = { mood: 70, coins: 100, gifts: [], mood_at: null }
@@ -91,9 +98,55 @@ export function normalizeButtons(raw, slot) {
   })
 }
 
+/* ---------- 被戳反应：4 套（上班 / 在家 / 睡觉 / 被戳烦了），每套最多 4 句，每句 ≤ 20 字 ---------- */
+
+export const POKE_KEYS = ['work', 'home', 'sleep', 'annoyed']
+export const POKE_MAX = 4 // 每套最多几句
+export const POKE_LEN = 20 // 每句最多几个字
+export const POKE_STREAK = 3 // 同一个人 60 秒内戳到第几下起，换成「被戳烦了」
+export const POKE_STREAK_MS = 60000
+
+/** 输入框里边打边裁：只限制字数，不去掉首尾空格（不然打不出中间的空格） */
+export const clipLine = (s) => Array.from(String(s == null ? '' : s)).slice(0, POKE_LEN).join('')
+
+/**
+ * 整理成存进服务器的样子：去掉空句、每套最多 4 句、没有句子的那套不留。键的顺序固定，方便比较「有没有改动」。
+ * 输入框里的草稿允许带空位（['你好','','','']），存之前都走这里
+ */
+export function compactPokeLines(raw) {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  const out = {}
+  for (const k of POKE_KEYS) {
+    const arr = Array.isArray(r[k]) ? r[k] : []
+    const lines = arr.map((s) => clipLine(String(s == null ? '' : s).trim())).filter(Boolean).slice(0, POKE_MAX)
+    if (lines.length) out[k] = lines
+  }
+  return out
+}
+
+/* ---------- 玩耍 / 放空：在家的时间里的两段可选时间 [from, to)，to 不含 ---------- */
+
+const hourOrNull = (v) => {
+  if (v == null || v === '') return null
+  const n = Math.round(Number(v))
+  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : null
+}
+const normWin = (a, b) => {
+  const f = hourOrNull(a)
+  const t = hourOrNull(b)
+  return f != null && t != null && f < t ? [f, t] : [null, null]
+}
+
+export const WINDOW_KINDS = [
+  { k: 'play', n: '玩耍', e: '🎮' },
+  { k: 'idle', n: '放空', e: '☁️' },
+]
+
 export function normalizeSettings(row, slot) {
   const r = row || {}
   const d = DEFAULT_SETTINGS
+  const [pf, pt] = normWin(r.play_from, r.play_to)
+  const [xf, xt] = normWin(r.idle_from, r.idle_to)
   return {
     work_scene: has(SCENES, r.work_scene) ? r.work_scene : d.work_scene,
     home_theme: has(THEMES, r.home_theme) ? r.home_theme : d.home_theme,
@@ -102,6 +155,11 @@ export function normalizeSettings(row, slot) {
     off_h: clampH(r.off_h, d.off_h),
     sleep_h: clampH(r.sleep_h, d.sleep_h),
     buttons: normalizeButtons(r.buttons, slot),
+    play_from: pf,
+    play_to: pt,
+    idle_from: xf,
+    idle_to: xt,
+    poke_lines: compactPokeLines(r.poke_lines),
   }
 }
 
@@ -117,19 +175,57 @@ export function normalizeState(row) {
   }
 }
 
-// 起床 ≤ 上班 < 下班 ≤ 睡觉，否则一天的顺序就乱了。返回一句给人看的话，没问题返回 ''
+// 这一段时间要完整落在「在家」里：起床后到上班前，或者下班后到睡觉前（和服务端 pal_windows_ok 同一条规则）
+const winProblem = (s, name, f, t) => {
+  if (f == null && t == null) return ''
+  if (f == null || t == null) return `「${name}」要同时选开始和结束`
+  if (t <= f) return `「${name}」的结束要在开始之后`
+  const morning = f >= s.wake_h && t <= s.work_h
+  const evening = f >= s.off_h && t <= s.sleep_h
+  if (!morning && !evening) return `「${name}」要完整落在在家的时间里（起床后到上班前，或下班后到睡觉前）`
+  return ''
+}
+
+// 起床 ≤ 上班 < 下班 ≤ 睡觉，否则一天的顺序就乱了；玩耍/放空要落在在家的时间里、两段不能重叠。
+// 返回一句给人看的话，没问题返回 ''
 export function checkSchedule(s) {
   if (s.work_h < s.wake_h) return '上班时间不能比起床还早'
   if (s.off_h <= s.work_h) return '下班要在上班之后'
   if (s.sleep_h < s.off_h) return '睡觉要在下班之后'
+  const a = winProblem(s, '玩耍', s.play_from, s.play_to)
+  if (a) return a
+  const b = winProblem(s, '放空', s.idle_from, s.idle_to)
+  if (b) return b
+  if (s.play_from != null && s.idle_from != null && !(s.play_to <= s.idle_from || s.idle_to <= s.play_from)) {
+    return '「玩耍」和「放空」的时间不能重叠'
+  }
   return ''
 }
 
+/** 换了作息以后，对不上的玩耍/放空时段直接取消（套预设时用）；返回新对象 */
+export function fitWindows(s) {
+  let next = { ...s }
+  if (winProblem(next, '玩耍', next.play_from, next.play_to)) next = { ...next, play_from: null, play_to: null }
+  if (winProblem(next, '放空', next.idle_from, next.idle_to)) next = { ...next, idle_from: null, idle_to: null }
+  if (next.play_from != null && next.idle_from != null && !(next.play_to <= next.idle_from || next.idle_to <= next.play_from)) {
+    next = { ...next, idle_from: null, idle_to: null }
+  }
+  return next
+}
+
+const inWin = (h, f, t) => f != null && t != null && h >= f && h < t
+
+/** 小人此刻在哪个状态：work 上班 / sleep 睡觉 / play 玩耍 / idle 放空 / home 在家（其余时间） */
 export function stateOf(s, h) {
   if (h >= s.work_h && h < s.off_h) return 'work'
   if (h >= s.sleep_h || h < s.wake_h) return 'sleep'
+  if (inWin(h, s.play_from, s.play_to)) return 'play'
+  if (inWin(h, s.idle_from, s.idle_to)) return 'idle'
   return 'home'
 }
+
+/** 在家的几种状态（在家 / 玩耍 / 放空）都画家里的房间、都看得到墙纸 */
+export const isHomeLike = (st) => st === 'home' || st === 'play' || st === 'idle'
 
 export function moodNow(state, now = Date.now()) {
   if (!state) return DEFAULT_STATE.mood
@@ -212,6 +308,8 @@ const SPRITES = {
 
 const HEART = ['.X.X.', 'XXXXX', 'XXXXX', '.XXX.', '..X..']
 const CLOUD = ['..GGG...', '.GGGGGG.', 'GGGGGGGG', '.GGGGGG.']
+const NOTE = ['.XXX', '.X.X', '.X..', 'XX..', 'XX..'] // 玩耍时冒出来的音符（打工小人弹吉他）
+const SPARK = ['.X.', 'XXX', '.X.'] // 玩耍时冒出来的小星星（代码小人玩掌机）
 const PLANT = ['..g.g..', '.gGgGg.', 'gGgGgGg', '..gGg..', '.PPPPP.', '.PPPPP.', '..PPP..']
 const LAMP = ['.YYYYY.', 'YYYYYYY', '...B...', '...B...', '..BBB..']
 const CAT = ['K...K.', 'KK.KK.', 'KKKKKK', 'KEKKEK', 'KKpKKK', '.KKKK.']
@@ -392,9 +490,13 @@ export function createActor(slot) {
   return {
     slot, sp,
     x: 96, tx: 96, pause: 0, react: 0, blushT: 0, blink: 0, blinkT: 2, walking: false,
-    state: null, zT: 0, particles: [],
+    state: null, zT: 0, nT: 0, particles: [],
   }
 }
+
+// 放空时站在窗前；玩耍时在地毯上这一块活动
+const IDLE_X = 83
+const PLAY_X = [92, 116]
 
 export const headTop = (a) => (a.state === 'sleep' ? 64 : FLOOR - 23)
 
@@ -404,7 +506,13 @@ export function hearts(a, n) {
 
 export function stepActor(a, settings, hr, dt, mood) {
   const st = stateOf(settings, hr)
-  if (a.state && a.state !== st && st === 'home') { a.x = 90; a.tx = 90 }
+  const was = a.state
+  // 刚下班 / 刚起床回到家：先站到家里的中间；从在家切到玩耍/放空：直接走向各自的位置
+  if (was && was !== st && isHomeLike(st) && (was === 'work' || was === 'sleep')) { a.x = 90; a.tx = 90 }
+  if (was !== st) {
+    if (st === 'idle') a.tx = IDLE_X
+    else if (st === 'play') a.tx = rand(PLAY_X[0], PLAY_X[1])
+  }
   a.state = st
   if (st === 'sleep') {
     a.x = 16; a.walking = false; a.zT -= dt
@@ -412,8 +520,12 @@ export function stepActor(a, settings, hr, dt, mood) {
   } else if (Math.abs(a.x - a.tx) < 0.5) {
     a.walking = false; a.pause -= dt
     if (a.pause <= 0) {
-      a.tx = st === 'work' ? rand(80, 92) : rand(66, 132)
-      a.pause = st === 'work' ? rand(3, 6) : rand(1.5, 4)
+      if (st === 'idle') { a.tx = IDLE_X; a.pause = 2 } // 放空：站在窗前不动
+      else if (st === 'play') { a.tx = rand(PLAY_X[0], PLAY_X[1]); a.pause = rand(2.5, 5) }
+      else {
+        a.tx = st === 'work' ? rand(80, 92) : rand(66, 132)
+        a.pause = st === 'work' ? rand(3, 6) : rand(1.5, 4)
+      }
     }
   } else if (a.react <= 0) {
     a.walking = true
@@ -428,19 +540,58 @@ export function stepActor(a, settings, hr, dt, mood) {
   if (mood >= 80 && st !== 'sleep' && Math.random() < dt * 0.35) {
     a.particles.push({ k: 'heart', x: a.x + rand(-4, 2), y: headTop(a) - 2, vx: rand(-4, 4), vy: -14, life: 1.2 })
   }
+  if (st === 'play') {
+    a.nT -= dt
+    if (a.nT <= 0) {
+      a.nT = rand(0.45, 0.8)
+      // 从头的两侧冒出来往上飘（不盖在脸上）
+      a.particles.push({
+        k: a.slot === 'u2' ? 'note' : 'spark',
+        x: a.x + pick([-13, 9]) + rand(-2, 2), y: headTop(a) + rand(2, 12), vx: rand(-4, 4), vy: rand(-22, -12), life: rand(0.9, 1.3),
+        c: pick(['#ff7eb3', '#4cc3ff', '#ffcf3f', '#7c6cff']),
+      })
+    }
+  }
   for (const p of a.particles) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt }
   a.particles = a.particles.filter((p) => p.life > 0)
   return st
+}
+
+// 玩耍时手里的东西：代码小人玩粉色掌机，打工小人弹吉他（画在身体前面）
+function drawPlayProp(ctx, slot, x, y, t) {
+  if (slot === 'u2') {
+    R(ctx, '#c9803f', x + 2, y + 15, 7, 6) // 琴身
+    R(ctx, '#e5a05a', x + 2, y + 15, 7, 1)
+    R(ctx, '#3a2412', x + 5, y + 17, 2, 2) // 音孔
+    R(ctx, '#7a4a24', x + 9, y + 16, 7, 1) // 琴颈
+    R(ctx, '#3a2412', x + 16, y + 15, 2, 3) // 琴头
+    if (Math.floor(t * 8) % 2) R(ctx, '#fff5cf', x + 7, y + 17, 1, 2) // 拨弦的一闪
+  } else {
+    R(ctx, '#ff7eb3', x + 3, y + 14, 10, 6) // 机身
+    R(ctx, '#d64f86', x + 3, y + 19, 10, 1)
+    R(ctx, '#1b2a2a', x + 6, y + 15, 4, 4) // 屏幕
+    R(ctx, '#4dff8a', x + 6 + (Math.floor(t * 6) % 3), y + 15 + (Math.floor(t * 4) % 3), 1, 1) // 屏幕里跳动的小点
+    R(ctx, '#fff', x + 4, y + 17, 1, 1) // 方向键
+    R(ctx, '#ffcf3f', x + 11, y + 16, 1, 1) // 按键
+    R(ctx, '#4cc3ff', x + 10, y + 18, 1, 1)
+  }
 }
 
 function drawChar(ctx, a, mood, t) {
   let yo = 0
   if (a.react > 0) yo = -Math.round(Math.abs(Math.sin(a.react * 9)) * 4)
   else if (a.walking) yo = Math.floor(t * 8) % 2 ? -1 : 0
+  else if (a.state === 'play') yo = Math.floor(t * 5) % 2 ? -1 : 0 // 玩得起劲，一颠一颠
   const x = Math.round(a.x) - 8
   const y = FLOOR - 23 + yo
   R(ctx, 'rgba(0,0,0,.18)', x + 3, FLOOR - 1, 10, 2)
   drawSprite(ctx, a.sp.spr, a.sp.pal, x, y, { blink: a.blink > 0, blush: a.blushT > 0 })
+  if (a.state === 'play') drawPlayProp(ctx, a.slot, x, y, t)
+  if (a.state === 'idle') {
+    // 放空：头的右上方一点一点冒出三个点，斜着往上排（像想心事的气泡；不和心情低落的小乌云重叠）
+    const k = Math.floor(t * 1.5) % 4
+    for (let i = 0; i < k && i < 3; i++) R(ctx, '#8a93a8', x + 14 + i * 3, y + 6 - i * 3, 2, 2)
+  }
   if (mood < 30) {
     pat(ctx, CLOUD, { G: '#8a93a8' }, x + 4, y - 9)
     if (Math.floor(t * 3) % 2) R(ctx, '#7fb6ea', x + 7, y - 4, 1, 2)
@@ -450,6 +601,8 @@ function drawChar(ctx, a, mood, t) {
 function drawParticles(ctx, a) {
   for (const p of a.particles) {
     if (p.k === 'heart') pat(ctx, HEART, { X: '#ff5c8a' }, p.x, p.y)
+    else if (p.k === 'note') pat(ctx, NOTE, { X: p.c || '#7c6cff' }, p.x, p.y)
+    else if (p.k === 'spark') pat(ctx, SPARK, { X: p.c || '#ffcf3f' }, p.x, p.y)
     else if (p.k === 'z') {
       const s = Math.round(p.y) > 40 ? 3 : 4
       const x = Math.round(p.x)
@@ -475,7 +628,7 @@ export function renderFrame(ctx, a, m, hr, t) {
       ctx.fillStyle = g
       ctx.fillRect(0, 0, W, H)
     }
-  } else if (a.state === 'home' && (hr >= 19 || hr < 6.5)) {
+  } else if (isHomeLike(a.state) && (hr >= 19 || hr < 6.5)) {
     R(ctx, 'rgba(255,170,90,.08)', 0, 0, W, H)
   }
   drawParticles(ctx, a)

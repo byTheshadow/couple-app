@@ -7,9 +7,10 @@ import {
   W, H, CHARS, SCENES, SCENE_ICON, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, headTop, hearts,
   normalizeButtons, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
+  isHomeLike, compactPokeLines, clipLine, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
-import { PLAY_KINDS, reactionFor } from './pixelpals/voice'
+import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, localDay, INCOME } from './pixelpals/celebrate'
 import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
 import Visitor from './pixelpals/Visitor'
@@ -21,6 +22,8 @@ import './pixelpals.css'
    第一轮：自己的安排面板（上班地点 / 墙纸 / 作息 / 三个互动按钮）+ 看 TA 的小屋。
    第二轮：去看 TA（互动按钮 / 投喂 / 送礼 / 悄悄话 / 聊天 / 戳一戳）+ 小人日记。
    第三轮：下班结算（服务端每天发一次工资 + 庆祝动画）、一键预设、墙纸预览、重置时一并清空。
+   第四轮：自定义被戳反应（上班 / 在家 / 睡觉 / 被戳烦了，连戳 3 下起换「被戳烦了」，可跟预设一起存）、
+          在家时间里可选的「玩耍」「放空」两段时间。
    - 画面和数据整理在 pixelpals/art.js，掉落动画在 fx.js，台词在 voice.js，服务器读写在 store.js，
      「去看 TA」在 Visitor.jsx，日记在 Diary.jsx，这个文件只管把它们拼成页面
    - user1 = 代码小人（白发），user2 = 打工小人（黑发），由登录账号的 slot 决定
@@ -48,6 +51,23 @@ const realHour = () => {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
+// 草稿里的被戳反应输入框允许带空位（['你好','','','']），比较「有没有改动」之前先整理成存进服务器的样子
+const canon = (d) => (d ? { ...d, poke_lines: compactPokeLines(d.poke_lines) } : d)
+
+// 被戳反应的 4 套：键和服务端 / art.js 的 POKE_KEYS 一一对应
+const POKE_SETS = [
+  { k: 'work', n: '上班时', hint: '在办公室 / 咖啡馆时被戳' },
+  { k: 'home', n: '在家时', hint: '在家、玩耍、放空时被戳' },
+  { k: 'sleep', n: '睡觉时', hint: '睡着时被戳' },
+  { k: 'annoyed', n: `被戳烦了（连戳 ${POKE_STREAK} 下起）`, hint: '同一个人 60 秒内连着戳' },
+]
+
+const pad4 = (arr) => {
+  const a = Array.isArray(arr) ? arr.slice(0, POKE_MAX) : []
+  while (a.length < POKE_MAX) a.push('')
+  return a
+}
+
 // profiles.slot 可能是 'u1' / 'u2'，也可能只有数字；只认其中的数字，认不出来返回 null
 const slotOf = (p) => {
   const n = String((p && p.slot) || '').replace(/\D/g, '')
@@ -55,6 +75,8 @@ const slotOf = (p) => {
 }
 
 const hourOptions = () => Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{pad2(i)}:00</option>)
+// 玩耍 / 放空的时间选择：第一项「不设」
+const winOptions = () => [<option key="none" value="">不设</option>, ...hourOptions()]
 
 /* ---------- 一台游戏机 ---------- */
 
@@ -84,6 +106,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
   const whereRef = useRef(null)
   const segsRef = useRef(null)
   const live = useRef({})
+  const selfPokes = useRef([]) // 我自己戳自己的小人（预览被戳反应）的时间，用来算「连戳」
   live.current = { slot, settings, state, hr }
 
   const say = useCallback((text, dur = 3.6) => {
@@ -145,7 +168,10 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
 
-      const label = actor.state === 'work' ? `上班中 · ${SCENES[cur.settings.work_scene]}` : actor.state === 'home' ? '在家' : '睡觉中'
+      const label = actor.state === 'work' ? `上班中 · ${SCENES[cur.settings.work_scene]}`
+        : actor.state === 'play' ? '在家 · 玩耍中'
+          : actor.state === 'idle' ? '在家 · 放空中'
+            : actor.state === 'home' ? '在家' : '睡觉中'
       const key = `${fmtHour(cur.hr)}|${label}`
       if (key !== hudKey) {
         hudKey = key
@@ -174,12 +200,22 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
   const poke = () => {
     if (onA) { onA(); return } // 去戳 TA：交给父组件走服务端，成功后小人才有反应
+    // 戳自己的小人：只有自己看得到，用来预览自己写的被戳反应（草稿里还没保存的也算）；60 秒内连点 3 下起换「被戳烦了」
     const a = actorRef.current
     if (!a) return
-    a.react = 0.6
-    a.blushT = 1.5
-    hearts(a, 2)
-    say(pick(LINES[slot].poke))
+    const cur = live.current
+    const now = Date.now()
+    const recent = selfPokes.current.filter((t) => now - t < POKE_STREAK_MS)
+    const annoyed = recent.length >= POKE_STREAK - 1
+    selfPokes.current = [...recent, now]
+    if (annoyed) {
+      a.react = 0.9
+    } else {
+      a.react = 0.6
+      a.blushT = 1.5
+      hearts(a, 2)
+    }
+    say(pokeLine(cur.slot, a.state || stateOf(cur.settings, cur.hr), annoyed, cur.settings.poke_lines), 4.2)
   }
   const wave = () => {
     const a = actorRef.current
@@ -235,7 +271,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
           </div>
         )}
       </div>
-      {mine && <footer className="wf"><span>A 戳一戳 · B 打招呼（只有你自己看得到）</span></footer>}
+      {mine && <footer className="wf"><span>A 戳一戳（试试你写的被戳反应，连点 3 下看「被戳烦了」）· B 打招呼（只有你自己看得到）</span></footer>}
       {!mine && onA && <footer className="wf"><span>A 戳一戳（会写进 TA 的日记）· B 打招呼</span></footer>}
     </section>
   )
@@ -243,12 +279,32 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset }) {
+function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, settleNote, income, mine, onSavePreset, onDeletePreset }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
   const [pn, setPn] = useState('')
   const [pBusy, setPBusy] = useState(false)
-  const active = activePreset(draft, [...DAILY_PRESETS, ...SPECIAL_PRESETS, ...mine.items])
+  const active = activePreset(draft, [...DAILY_PRESETS, ...SPECIAL_PRESETS, ...mine.items], slot)
+  const defs = defaultPokes(slot)
+
+  // 玩耍 / 放空：选「不设」两头一起清掉；只选了一头，另一头自动补成差一小时，免得半截子
+  const setWin = (kind, which, v) => setDraft((d) => {
+    const f = `${kind}_from`
+    const t = `${kind}_to`
+    if (v === '') return { ...d, [f]: null, [t]: null }
+    const n = +v
+    const next = { ...d, [which === 'from' ? f : t]: n }
+    if (next[f] == null) next[f] = Math.max(0, n - 1)
+    if (next[t] == null) next[t] = Math.min(23, n + 1)
+    return next
+  })
+
+  // 被戳反应：每套 4 个输入框，改的是草稿（带空位），存之前才整理
+  const setPoke = (k, i, v) => setDraft((d) => {
+    const cur = pad4(d.poke_lines && d.poke_lines[k])
+    cur[i] = clipLine(v)
+    return { ...d, poke_lines: { ...(d.poke_lines || {}), [k]: cur } }
+  })
   const savePreset = async () => {
     setPBusy(true)
     const ok = await onSavePreset(pe, pn)
@@ -281,7 +337,7 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
           <div className="pp-chips">{DAILY_PRESETS.map(presetBtn)}</div>
           <div className="pp-sub">特殊日 / 纪念日</div>
           <div className="pp-chips">{SPECIAL_PRESETS.map(presetBtn)}</div>
-          <div className="pp-sub">我的预设 <small>存的是你现在看到的这一整套：地点、墙纸、作息、3 个按钮</small></div>
+          <div className="pp-sub">我的预设 <small>存的是你现在看到的这一整套：地点、墙纸、作息、玩耍/放空、3 个按钮、被戳反应</small></div>
           {mine.missing ? (
             <p className="pp-hint" style={{ margin: 0 }}>服务端还没有存预设的表，把第三轮的 SQL（pixelpals-round3.sql）整段再跑一遍就能用了。</p>
           ) : (
@@ -302,7 +358,7 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
               </div>
             </>
           )}
-          <p className="pp-hint">{active ? `${active.e} ${active.n}：${active.d}` : '日常预设只换上班地点和作息；特殊日和「我的预设」整套都换，连墙纸和 3 个互动按钮一起。套错了点最下面的「还原」。同名再存一次就是覆盖。'}</p>
+          <p className="pp-hint">{active ? `${active.e} ${active.n}：${active.d}` : '日常预设只换上班地点和作息；特殊日和「我的预设」整套都换，连墙纸、3 个互动按钮和被戳反应一起（第四轮之前存的老预设不动你的被戳反应）。套错了点最下面的「还原」。同名再存一次就是覆盖。'}</p>
         </div>
 
         <div className="pp-blk">
@@ -331,6 +387,41 @@ function Planner({ name, draft, setDraft, dirty, saving, onSave, onReset, sim, s
             <label>下班 <select className="pp-sel" value={draft.off_h} onChange={(e) => set('off_h', +e.target.value)}>{hourOptions()}</select></label>
             <label>睡觉 <select className="pp-sel" value={draft.sleep_h} onChange={(e) => set('sleep_h', +e.target.value)}>{hourOptions()}</select></label>
           </div>
+        </div>
+
+        <div className="pp-blk">
+          <div className="pp-h">在家的活动 <small>可选：在家的时间里，安排一段玩耍、一段放空</small></div>
+          {WINDOW_KINDS.map(({ k, n, e }) => (
+            <div className="pp-sched" key={k} style={{ marginBottom: 8 }}>
+              <label>{e} {n}从 <select className="pp-sel" value={draft[`${k}_from`] == null ? '' : draft[`${k}_from`]} onChange={(ev) => setWin(k, 'from', ev.target.value)} aria-label={`${n}的开始时间`}>{winOptions()}</select></label>
+              <label>到 <select className="pp-sel" value={draft[`${k}_to`] == null ? '' : draft[`${k}_to`]} onChange={(ev) => setWin(k, 'to', ev.target.value)} aria-label={`${n}的结束时间`}>{winOptions()}</select></label>
+            </div>
+          ))}
+          <p className="pp-hint">不设就是没有。时间要完整落在「起床后到上班前」或「下班后到睡觉前」里，两段不能重叠。玩耍时小人{slot === 'u2' ? '弹吉他' : '玩掌机'}，放空时站在窗前发呆；拖下面的「预览时间」就能看到。</p>
+        </div>
+
+        <div className="pp-blk">
+          <div className="pp-h">被戳反应 <small>TA 戳{name}的时候，{name}会在 TA 的屏幕上说这些话</small></div>
+          {POKE_SETS.map(({ k, n, hint }) => (
+            <div key={k}>
+              <div className="pp-sub">{n} <small>{hint}</small></div>
+              <div className="pp-edits" style={{ gridTemplateColumns: '1fr' }}>
+                {pad4(draft.poke_lines && draft.poke_lines[k]).map((s, i) => (
+                  <input
+                    key={i}
+                    className="pp-in"
+                    type="text"
+                    maxLength={POKE_LEN}
+                    value={s}
+                    placeholder={defs[k][i] ? `默认：${defs[k][i]}` : '留空 = 不用这一句'}
+                    onChange={(e) => setPoke(k, i, e.target.value)}
+                    aria-label={`${n}的第 ${i + 1} 句`}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="pp-hint">每套最多 {POKE_MAX} 句，每句 {POKE_LEN} 个字以内，TA 每次戳会随机挑一句；一套都留空就用默认台词（灰字）。睡觉时用「睡觉时」，玩耍和放空沿用「在家时」。想先看看效果：点上面小屋的 A 键，连点 3 下就是「被戳烦了」。</p>
         </div>
 
         <div className="pp-blk">
@@ -398,6 +489,7 @@ export default function PixelPals({ onExit }) {
   const toastT = useRef(0)
   const myConsole = useRef(null)
   const taConsole = useRef(null)
+  const pokeHist = useRef([]) // 我最近戳 TA 的时间（只记成功的），用来算「连戳」
   const settledRef = useRef(false) // 这次打开页面已经问过服务端结算了
   const pendingRef = useRef(null) // 刚结算到的工资，等「我的小屋」在屏幕上了就放庆祝
   const [celebTick, setCelebTick] = useState(0)
@@ -421,7 +513,7 @@ export default function PixelPals({ onExit }) {
     if (myPal.loading) return
     const old = baseRef.current
     baseRef.current = myPal.settings
-    setDraft((d) => (d == null || same(d, old) ? myPal.settings : d))
+    setDraft((d) => (d == null || same(canon(d), old) ? myPal.settings : d))
   }, [myPal.settings, myPal.loading])
 
   // 下班结算：打开页面时问一次服务端。每天只发一次钱由服务端判断，这里重复问也不会多发
@@ -450,7 +542,7 @@ export default function PixelPals({ onExit }) {
 
   const hr = sim == null ? real : sim
   const shownDraft = draft || myPal.settings
-  const dirty = !!draft && !same(draft, myPal.settings)
+  const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
   const settledToday = !!(myPal.raw && myPal.raw.settled_day === localDay())
   const settleNote = settledToday ? '今天已结算 ✓' : real >= myPal.settings.off_h ? '今天还没结算' : '下班后自动结算'
@@ -482,9 +574,23 @@ export default function PixelPals({ onExit }) {
     return true
   }
 
+  // 戳 TA：同一个人（就是我）60 秒内戳到第 3 下起，TA 的小人换成「被戳烦了」那一套。
+  // 说哪一句由这里按 TA 自己写的被戳反应挑好（没写就用默认台词），连同「是不是被连戳烦了」一起交给服务端存进日记；
+  // 服务端结算成功以后，TA 的小人才在我的屏幕上说出这句话
+  const onPokeTa = async () => {
+    if (!partner) return
+    const L = live.current
+    const now = Date.now()
+    const recent = pokeHist.current.filter((t) => now - t < POKE_STREAK_MS)
+    const annoyed = recent.length >= POKE_STREAK - 1
+    const line = pokeLine(L.taSlot, stateOf(L.taSettings, L.hr), annoyed, L.taSettings.poke_lines)
+    const ok = await onAct('poke', () => palPoke(partner.id, line, annoyed), { line, annoyed })
+    if (ok) pokeHist.current = [...recent, Date.now()]
+  }
+
   const onSave = async () => {
     if (!me || !draft) return
-    const clean = { ...draft, buttons: normalizeButtons(draft.buttons, mySlot) }
+    const clean = { ...draft, buttons: normalizeButtons(draft.buttons, mySlot), poke_lines: compactPokeLines(draft.poke_lines) }
     const bad = checkSchedule(clean)
     if (bad) { say(bad); return }
     setSaving(true)
@@ -501,15 +607,18 @@ export default function PixelPals({ onExit }) {
 
   // 套预设：只改草稿，小人马上预览，保存了才算数
   const onPreset = (p) => {
-    setDraft((d) => applyPreset(d || myPal.settings, p))
-    say(`套上了「${p.n}」，看看预览，满意就保存`)
+    const base = draft || myPal.settings
+    const next = applyPreset(base, p, mySlot)
+    setDraft(next)
+    const winChanged = ['play_from', 'play_to', 'idle_from', 'idle_to'].some((k) => base[k] !== next[k])
+    say(winChanged ? `套上了「${p.n}」（玩耍/放空时段跟着变了），看看预览，满意就保存` : `套上了「${p.n}」，看看预览，满意就保存`)
   }
 
   // 把现在看到的整套（含还没保存的草稿）存成「我的预设」
   const onSavePreset = async (emoji, rawName) => {
     const name = cleanLabel(rawName)
     if (!name) { say('先给这套起个名字（8 个字以内）'); return false }
-    const clean = { ...shownDraft, buttons: normalizeButtons(shownDraft.buttons, mySlot) }
+    const clean = { ...shownDraft, buttons: normalizeButtons(shownDraft.buttons, mySlot), poke_lines: compactPokeLines(shownDraft.poke_lines) }
     const bad = checkSchedule(clean)
     if (bad) { say(bad); return false }
     const list = presets.items
@@ -532,7 +641,7 @@ export default function PixelPals({ onExit }) {
   const onTheme = (k) => {
     const next = { ...(draft || myPal.settings), home_theme: k }
     setDraft(next)
-    if (stateOf(next, hr) === 'home') return
+    if (isHomeLike(stateOf(next, hr))) return // 在家 / 玩耍 / 放空时都看得到墙纸
     const h = homeHour(next)
     if (h == null) return
     setSim(h)
@@ -574,6 +683,7 @@ export default function PixelPals({ onExit }) {
           <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} />
           <Planner
             name={myName}
+            slot={mySlot}
             draft={shownDraft}
             setDraft={setDraft}
             dirty={dirty}
@@ -605,7 +715,7 @@ export default function PixelPals({ onExit }) {
             hr={hr}
             mine={false}
             preview={false}
-            onA={() => onAct('poke', () => palPoke(partner.id), {})}
+            onA={onPokeTa}
           />
           <Visitor
             ownerId={partner.id}

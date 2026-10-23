@@ -31,13 +31,16 @@ const V = {
     },
     gift: (g) => `哇，${g}！我要宝贝一辈子！`,
     note: () => '（偷偷展开纸条……小脸红扑扑的）',
+    // 被戳的默认台词（自己没写的时候用）：平时 / 睡着时 / 被连戳烦了
     poke: ['呀！', '嘿嘿，好痒～', '再戳我就要咬你了哦'],
+    pokeZ: ['唔……再睡五分钟～', '（梦里嘿嘿笑了一下）'],
+    annoyed: ['呜……别戳啦！我要生气啦！', '再戳我就不理你了！哼～', '戳戳戳，你是不是没事干呀'],
     d: {
       button: (u, l) => `${u} 对我用了「${l}」！开心得敲错了好几行代码～`,
       feed: (u, f, d) => `${u} 喂了我${f}，好幸福！心情 +${d}。`,
       gift: (u, g) => `${u} 送了我${g}！已经小心翼翼摆进房间啦。`,
       note: (u) => `${u} 塞给我一张小纸条，偷偷看了好几遍。`,
-      poke: (u) => `被 ${u} 戳了一下，脸红了……`,
+      poke: (u, line, annoyed) => (annoyed ? `被 ${u} 连着戳了好几下，` : `被 ${u} 戳了一下，`) + (line ? `我说：“${line}”` : annoyed ? '有点生气了！' : '脸红了……'),
       chat: (u, q, a) => `${u}：“${q}”　我：“${a}”`,
       scene: (s) => `今天要去${s}写代码啦，加油～`,
       theme: (t) => `房间换成了${t}墙纸，好可爱！`,
@@ -65,12 +68,14 @@ const V = {
     gift: (g) => `${g}。……谢了。我会放在显眼的地方。`,
     note: () => '……（看完纸条，折好塞进了琴包）',
     poke: ['干嘛。', '别戳了。……再戳一下也行。', '嗯？'],
+    pokeZ: ['……（皱眉，没醒）', '……别闹。困。'],
+    annoyed: ['……够了。', '再戳我就戴耳机了。', '说了别戳。……听不懂？'],
     d: {
       button: (u, l) => `${u} 对我用了「${l}」。表面没反应，其实记住了。`,
       feed: (u, f, d) => `${u} 投喂了${f}。没说谢谢，但吃得很干净。心情 +${d}。`,
       gift: (u, g) => `${u} 送了我${g}。摆在了最显眼的地方。`,
       note: (u) => `${u} 给我塞了一张纸条。我折好收起来了。`,
-      poke: (u) => `被 ${u} 戳了一下。……哼。`,
+      poke: (u, line, annoyed) => (annoyed ? `被 ${u} 连着戳了好几下。` : `被 ${u} 戳了一下。`) + (line ? `我说：“${line}”` : '……哼。'),
       chat: (u, q, a) => `${u}：“${q}”　我：“${a}”`,
       scene: (s) => `被安排去${s}打工。行。`,
       theme: (t) => `房间换成了${t}墙纸。……还不错。`,
@@ -96,7 +101,27 @@ const RULES = [
 ]
 
 const voice = (slot) => V[slot] || V.u1
+// 小人在 work / sleep 以外的状态（在家、玩耍、放空）说话都按「在家」的口吻
 const stKey = (st) => (st === 'work' || st === 'sleep' ? st : 'home')
+
+/** 默认的被戳台词（编辑区的灰色提示用）：{ work, home, sleep, annoyed } */
+export function defaultPokes(slot) {
+  const v = voice(slot)
+  return { work: v.poke, home: v.poke, sleep: v.pokeZ, annoyed: v.annoyed }
+}
+
+/**
+ * 被戳时说哪一句。st = 小人此刻的状态；annoyed = 是不是被连戳烦了；lines = 这个小人自己写的（可能没有）
+ * 先从自己写的那一套里随机挑一句；那套没写，就用默认台词
+ */
+export function pokeLine(slot, st, annoyed, lines) {
+  const v = voice(slot)
+  const set = annoyed ? 'annoyed' : stKey(st)
+  const mine = lines && Array.isArray(lines[set]) ? lines[set].filter((s) => typeof s === 'string' && s.trim() !== '').map((s) => s.trim()) : []
+  if (mine.length) return pick(mine)
+  if (st === 'sleep') return pick(v.pokeZ)
+  return pick(annoyed ? v.annoyed : v.poke)
+}
 const giftOf = (k) => GIFTS.find((g) => g.k === k)
 const foodOf = (k) => FOODS.find((f) => f.k === k)
 
@@ -129,7 +154,11 @@ export function reactionFor(slot, st, kind, data) {
     return { drop: 'box', react: 1.2, hearts: 8, text: v.gift(g ? g.n : '礼物') }
   }
   if (kind === 'note') return { drop: 'note', react: 0.6, blush: 3, hearts: 3, text: v.note() }
-  if (kind === 'poke') return { react: 0.6, blush: 1.5, hearts: 2, text: pick(v.poke) }
+  if (kind === 'poke') {
+    // data.line 是 TA 戳的那一刻就挑好的那句（也存进了日记），两边屏幕上说的是同一句；老记录没有就现挑一句默认的
+    const text = d.line ? String(d.line) : pokeLine(slot, st, !!d.annoyed, null)
+    return d.annoyed ? { react: 0.9, hearts: 0, text, dur: 4.2 } : { react: 0.6, blush: 1.5, hearts: 2, text, dur: 4.2 }
+  }
   if (kind === 'chat') return { react: 0.3, text: String(d.a || ''), dur: 4.5 }
   return null
 }
@@ -146,7 +175,7 @@ export function logLine(entry, ownerSlot, actorName) {
     case 'feed': { const f = foodOf(x.food); return d.feed(actorName, f ? f.full : '点心', x.gain == null ? '' : x.gain) }
     case 'gift': { const g = giftOf(x.gift); return d.gift(actorName, g ? g.n : '礼物') }
     case 'note': return d.note(actorName)
-    case 'poke': return d.poke(actorName)
+    case 'poke': return d.poke(actorName, x.line ? String(x.line) : '', !!x.annoyed)
     case 'chat': return d.chat(actorName, String(x.q || ''), String(x.a || ''))
     case 'scene': return d.scene(x.scene === 'cafe' ? '咖啡馆' : '办公室')
     case 'theme': return d.theme({ cream: '奶油', mint: '薄荷', night: '星空' }[x.theme] || '新')
