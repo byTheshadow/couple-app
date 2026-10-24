@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { BMP_W, BMP_H, BMP_CELLS, CLEAR, encodeLayer, decodeLayer, validateScene, registerUserScene, unregisterUserScene, paintCells } from './scenes'
 import { W, H, createActor, stepActor, renderFrame, normalizeSettings } from './art'
 import './studio.css'
@@ -31,6 +32,10 @@ const TOOLS = [
   ['pan', '✋', '平移（放大后用）'],
 ]
 const TIMES = [['白天', 12], ['傍晚', 18.5], ['深夜', 22.5]]
+const MINI_KEY = 'pp-se-mini'
+const MINI_POS_KEY = 'pp-se-pos'
+const lsGet = (k) => { try { return window.localStorage.getItem(k) } catch { return null } }
+const lsSet = (k, v) => { try { window.localStorage.setItem(k, v) } catch { /* 存不了就算了，下次打开用默认的 */ } }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const cleanName = (s) => Array.from(String(s == null ? '' : s).trim()).slice(0, 8).join('')
@@ -106,12 +111,23 @@ export default function SceneEditor({ initial, slot, saving, onSave, onCancel, s
   const [pmode, setPmode] = useState('work') // 预览：上班 / 放空
   const [phr, setPhr] = useState(12) // 预览的钟点
   const [exp, setExp] = useState({ char: false, url: '', file: '' })
+  const [floatOn, setFloatOn] = useState(() => lsGet(MINI_KEY) !== '0')
+  const [floatPos, setFloatPos] = useState(() => {
+    try {
+      const p = JSON.parse(lsGet(MINI_POS_KEY) || 'null')
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.y >= 0 && p.x < window.innerWidth - 60 && p.y < window.innerHeight - 60) return p
+    } catch { /* 位置坏了就用默认的 */ }
+    return null
+  })
   const [tick, bump] = useReducer((n) => n + 1, 0)
   const hist = useRef({ undo: [], redo: [] })
   const drag = useRef(null)
   const canvasRef = useRef(null)
   const prevRef = useRef(null)
   const expUrl = useRef('')
+  const floatRef = useRef(null)
+  const floatCanvasRef = useRef(null)
+  const floatDrag = useRef(null)
 
   const setPal = (p) => { palRef.current = p; setPalState(p) }
   const cur = () => (layer === 'fg' ? fgRef.current : bgRef.current)
@@ -347,6 +363,8 @@ export default function SceneEditor({ initial, slot, saving, onSave, onCancel, s
         stepActor(a, settings, phr, acc, 70)
         const cv = prevRef.current
         if (cv) renderFrame(cv.getContext('2d'), a, { slot, settings, gifts: [], mood: 70 }, phr, tt)
+        const fc = floatCanvasRef.current
+        if (fc && cv) { const fctx = fc.getContext('2d'); fctx.imageSmoothingEnabled = false; fctx.drawImage(cv, 0, 0) }
         acc = 0
       }
       raf = requestAnimationFrame(loop)
@@ -387,6 +405,38 @@ export default function SceneEditor({ initial, slot, saving, onSave, onCancel, s
       a.remove()
       say(`已导出 ${ext.toUpperCase()}（640×480）。手机上如果没有自动保存，长按下面的图片保存`)
     }, type, 0.92)
+  }
+
+  /* ---------- 悬浮预览窗：画画的时候不用滚到最下面也能看到真实效果，可以拖着挪位置 ---------- */
+  const toggleFloat = () => setFloatOn((v) => { lsSet(MINI_KEY, v ? '0' : '1'); return !v })
+  const floatDown = (e) => {
+    if (e.target.closest('button')) return
+    const box = floatRef.current
+    if (!box) return
+    const r = box.getBoundingClientRect()
+    floatDrag.current = { dx: e.clientX - r.left, dy: e.clientY - r.top }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const floatMove = (e) => {
+    const d = floatDrag.current
+    const box = floatRef.current
+    if (!d || !box) return
+    const r = box.getBoundingClientRect()
+    const x = Math.max(4, Math.min(window.innerWidth - r.width - 4, e.clientX - d.dx))
+    const y = Math.max(4, Math.min(window.innerHeight - r.height - 4, e.clientY - d.dy))
+    box.style.left = `${x}px`
+    box.style.top = `${y}px`
+    box.style.right = 'auto'
+    floatDrag.current.x = x
+    floatDrag.current.y = y
+  }
+  const floatUp = () => {
+    const d = floatDrag.current
+    floatDrag.current = null
+    if (!d || d.x == null) return
+    const p = { x: Math.round(d.x), y: Math.round(d.y) }
+    setFloatPos(p)
+    lsSet(MINI_POS_KEY, JSON.stringify(p))
   }
 
   const fgLayer = layer === 'fg'
@@ -431,7 +481,10 @@ export default function SceneEditor({ initial, slot, saving, onSave, onCancel, s
         <button type="button" className={`pp-chip${zoom === 2 ? ' on' : ''}`} onClick={() => setZoom((z) => (z === 1 ? 2 : 1))}>🔍 放大 ×2{zoom === 2 ? '（用 ✋ 平移）' : ''}</button>
         <button type="button" className={`pp-chip${grid ? ' on' : ''}`} onClick={() => setGrid((g) => !g)}>▦ 格线</button>
         <button type="button" className={`pp-chip${guides ? ' on' : ''}`} onClick={() => setGuides((g) => !g)}>📍 站位参考线</button>
-        <button type="button" className={`pp-chip${brush === 2 ? ' on' : ''}`} onClick={() => setBrush((b) => (b === 1 ? 2 : 1))}>🖌 粗笔 2×2</button>
+        <button type="button" className={`pp-chip${brush === 1 ? ' on' : ''}`} onClick={() => setBrush(1)}>✏️ 细笔</button>
+        <button type="button" className={`pp-chip${brush === 2 ? ' on' : ''}`} onClick={() => setBrush(2)}>🖌 中笔 2×2</button>
+        <button type="button" className={`pp-chip${brush === 3 ? ' on' : ''}`} onClick={() => setBrush(3)}>🖍 粗笔 3×3</button>
+        <button type="button" className={`pp-chip${floatOn ? ' on' : ''}`} onClick={toggleFloat}>🪟 悬浮预览 {floatOn ? '开' : '关'}</button>
         {fgLayer && <button type="button" className="pp-chip" onClick={clearFg}>🧽 清空前景</button>}
       </div>
 
@@ -496,6 +549,32 @@ export default function SceneEditor({ initial, slot, saving, onSave, onCancel, s
         <button type="button" className="btn ghost" disabled={saving} onClick={onCancel}>不存了，返回</button>
         <button type="button" className="btn" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存这个场景'}</button>
       </div>
+
+      {floatOn && createPortal(
+        <div
+          ref={floatRef}
+          className="se-mini"
+          style={floatPos ? { left: floatPos.x, top: floatPos.y, right: 'auto' } : undefined}
+          role="group"
+          aria-label="场景悬浮预览"
+        >
+          <div className="se-mini-screen" onPointerDown={floatDown} onPointerMove={floatMove} onPointerUp={floatUp} onPointerCancel={floatUp}>
+            <canvas ref={floatCanvasRef} width={W} height={H} />
+          </div>
+          <div className="se-mini-bar">
+            <span className="pp-chips se-mini-opts">
+              {[['work', '上班'], ['idle', '放空']].map(([k, n]) => (
+                <button key={k} type="button" className={`pp-chip${pmode === k ? ' on' : ''}`} onClick={() => setPmode(k)}>{n}</button>
+              ))}
+              {TIMES.map(([n, h]) => (
+                <button key={h} type="button" className={`pp-chip${phr === h ? ' on' : ''}`} onClick={() => setPhr(h)}>{n}</button>
+              ))}
+            </span>
+            <button type="button" className="se-mini-x" onClick={toggleFloat} aria-label="关掉悬浮预览">×</button>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

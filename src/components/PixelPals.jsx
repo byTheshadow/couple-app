@@ -17,6 +17,7 @@ import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset,
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
 import Studio from './pixelpals/Studio'
+import AiSettings from './pixelpals/AiSettings'
 import './pixelpals.css'
 
 /* ===========================================================================
@@ -965,6 +966,7 @@ export default function PixelPals({ onExit }) {
             income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
           />
           <Studio mine={myScenes} ta={taScenes} taName={taName} slot={mySlot} settings={myPal.settings} say={say} onDeleted={onSceneDeleted} />
+<AiSettings say={say} />
         </>
       ) : partner ? (
         <>
