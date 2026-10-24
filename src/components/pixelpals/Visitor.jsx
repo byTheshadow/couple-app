@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Svg } from '../Icon'
 import { GIFTS } from './art'
-import { FOODS, chatReply } from './voice'
-import { palButton, palFeed, palGift, palNote, palChat } from './store'
+import { FOODS } from './voice'
+import { palButton, palFeed, palGift, palNote } from './store'
+import AiChat from './AiChat'
 import './extra.css'
 
 /* ===========================================================================
@@ -12,9 +13,9 @@ import './extra.css'
    onAct(kind, call, data) → Promise<boolean>：call 是返回 { error } 的函数，data 是日记里要存的参数
    =========================================================================== */
 
-export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts, busy, onAct, consoleRef, say }) {
+export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts, busy, onAct, consoleRef, say, aiCtx }) {
   const [note, setNote] = useState('')
-  const [chat, setChat] = useState('')
+ 
   const [sec, setSec] = useState('act')
 
   const sendNote = async () => {
@@ -24,16 +25,7 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
     if (ok) setNote('')
   }
 
-  const sendChat = async () => {
-    const q = chat.trim()
-    if (!q || busy) return
-    setChat('')
-    const a = chatReply(slot, st, q)
-    if (consoleRef.current) consoleRef.current.say('……', 1)
-    await new Promise((r) => setTimeout(r, 700))
-    const ok = await onAct('chat', () => palChat(ownerId, q, a), { q, a })
-    if (!ok) setChat(q)
-  }
+
 
   return (
     <section className="win">
@@ -97,14 +89,8 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
           </div>
         </div>
 
-        <div className="pp-blk" hidden={sec !== 'talk'}>
-          <div className="pp-h">和{name}聊两句</div>
-          <div className="pp-inrow">
-            <input className="pp-in" type="text" maxLength={40} value={chat} placeholder="试试：今天好累 / 想你 / 晚安" aria-label="聊天"
-              onChange={(e) => setChat(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendChat() }} />
-            <button type="button" className="btn" disabled={busy} onClick={sendChat}>发送</button>
-          </div>
-          <p className="pp-hint">现在是预设台词，会按小人当时在上班、在家还是在睡觉来回答；以后可以换成 AI。</p>
+                <div className="pp-blk" hidden={sec !== 'talk'}>
+          <AiChat ownerId={ownerId} name={name} slot={slot} st={st} buttons={buttons} gifts={gifts} busy={busy} onAct={onAct} consoleRef={consoleRef} say={say} aiCtx={aiCtx} />
         </div>
       </div>
     </section>

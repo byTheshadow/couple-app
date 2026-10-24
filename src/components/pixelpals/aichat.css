@@ -1,0 +1,36 @@
+/* 第八轮 B：人设页签 + AI 聊天的样式（其余沿用 pixelpals.css 里的 .pp-*、extra.css 和 ai.css） */
+
+/* ---------- 人设页签 ---------- */
+.ai-lock { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin-top: 8px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; color: var(--ink2); }
+.ai-lock svg { flex-shrink: 0; margin-top: 2px; color: var(--ink); }
+.ai-lock b { color: var(--ink); font-weight: 600; }
+.ai-top { display: flex; justify-content: space-between; align-items: baseline; }
+.ai-count { font-style: normal; font-family: var(--mono); font-size: 11px; }
+.ai-ta { resize: none; display: block; line-height: 1.55; }
+.ai-ex { position: relative; display: grid; gap: 6px; margin-bottom: 8px; padding: 8px 34px 8px 8px; border: 1px solid var(--line); border-radius: 12px; }
+.ai-ex label { display: grid; grid-template-columns: 44px 1fr; gap: 6px; align-items: center; font-size: 11px; color: var(--ink2); }
+.ai-exx { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); border-radius: 999px; width: 22px; height: 22px; padding: 0; }
+.ai-prompt { margin: 0 12px 12px; padding: 10px 12px; border-radius: 10px; background: #17171c; color: #e6e6ea; font-family: var(--mono); font-size: 11.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
+
+/* ---------- 聊天 ---------- */
+.ai-strip { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 8px 10px; margin-bottom: 10px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line); font-size: 12px; color: var(--ink2); }
+.ai-strip b { color: var(--ink); font-weight: 600; }
+.ai-strip .ai-note { flex-basis: 100%; }
+.ai-log { display: flex; flex-direction: column; gap: 10px; max-height: 340px; overflow: auto; padding: 2px 0 4px; }
+.ai-when { align-self: center; font-family: var(--mono); font-size: 10.5px; color: var(--ink2); }
+.ai-row { display: flex; gap: 8px; align-items: flex-end; }
+.ai-row.me { justify-content: flex-end; }
+.ai-ava { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+.ai-ava.u1 { background: #2a2a36; color: #fff; box-shadow: inset 0 -4px 0 #e5384f; }
+.ai-ava.u2 { background: #9fc9ff; color: #1c1a2b; box-shadow: inset 0 -4px 0 #fff; }
+.ai-msg { max-width: 78%; padding: 9px 12px; border-radius: 16px; font-size: 13.5px; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
+.ai-msg.ta { background: var(--chip); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+.ai-msg.me { background: var(--btn); color: var(--btnInk); border-bottom-right-radius: 5px; }
+.ai-cur { display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; background: var(--ink); animation: ai-blink 1s steps(2) infinite; }
+@keyframes ai-blink { 50% { opacity: 0; } }
+.ai-err { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; border: 1.5px dashed var(--bd); font-size: 12px; line-height: 1.5; }
+.ai-err b { font-weight: 600; }
+.ai-tools { display: flex; justify-content: flex-end; margin-top: 8px; }
+.ai-tools .pp-chip { padding: 4px 10px; font-size: 11px; }
+
+@media (prefers-reduced-motion: reduce) { .ai-cur { animation: none; } }

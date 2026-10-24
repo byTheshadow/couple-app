@@ -18,6 +18,7 @@ import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
 import Studio from './pixelpals/Studio'
 import AiSettings from './pixelpals/AiSettings'
+import PersonaEditor from './pixelpals/PersonaEditor'
 import './pixelpals.css'
 
 /* ===========================================================================
@@ -91,7 +92,7 @@ const winOpts = (list) => [<option key="none" value="">不设</option>, ...list.
 const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i)
 const winFromList = (s) => homeSegments(s).flatMap(([f, t]) => range(f, t - 1))
 const winToList = (s, from) => homeSegments(s).filter(([f, t]) => from == null || (from >= f && from < t)).flatMap(([f, t]) => range(Math.max(f + 1, from == null ? 0 : from + 1), t))
-const PLAN_TABS = [['preset', '预设'], ['scene', '场景'], ['sched', '作息'], ['touch', '互动']]
+const PLAN_TABS = [['preset', '预设'], ['scene', '场景'], ['sched', '作息'], ['touch', '互动'], ['persona', '人设']]
 const SCHED_NAMES = { wake_h: '起床', work_h: '上班', off_h: '下班', sleep_h: '睡觉' }
 const MINI_KEY = 'pp-mini'
 const MINI_POS_KEY = 'pp-mini-pos'
@@ -669,13 +670,17 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           <p className="pp-hint">图标或文字留空，保存时会换回默认的。每句 {POKE_LEN} 个字以内；睡觉时用「睡觉时」，玩耍和放空沿用「在家时」。「试一下」按现在的预览时间处在上班 / 在家 / 睡觉来挑那一句，拖下面的「预览时间」可以换。改了按钮的图标或文字，写好的话还跟着这一格；套用预设如果换了按钮，这些话会清掉（点「还原」能找回）。</p>
         </div>
 
+        <div hidden={sec !== 'persona'}>
+          <PersonaEditor name={name} slot={slot} say={say} />
+        </div>
+
         <div className="pp-blk" hidden={sec !== 'sched'}>
           <div className="pp-h">下班结算 <small>{settleNote}</small></div>
           <p className="pp-hint" style={{ margin: '0 0 8px' }}>下班后打开小屋，会自动结算当天的工资，每天一次。按现在的作息：上 {income.hours} 小时班 = ¥{income.base}，心情不低于 70 再加 ¥{income.bonus}。</p>
           <div className="pp-chips"><button type="button" className="pp-chip" onClick={onReplay}>🎬 回放下班庆祝（不发钱）</button></div>
         </div>
 
-        <div className="pp-blk">
+        <div className="pp-blk" hidden={sec === 'persona'}>
           <div className="pp-h">预览时间 <small>只在你这台手机上看效果，不会保存</small></div>
           <div className="pp-time">
             <input type="range" min="0" max="23.75" step="0.25" value={sim == null ? hr : sim} onChange={(e) => setSim(+e.target.value)} aria-label="预览时间" />
@@ -684,7 +689,7 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           </div>
         </div>
 
-        <div className="pp-actions">
+        <div className="pp-actions" style={sec === 'persona' ? { display: 'none' } : undefined}>
           <button type="button" className="btn ghost" disabled={!dirty || saving} onClick={onReset}>还原</button>
           <button type="button" className="btn" disabled={!dirty || saving} onClick={onSave}>{saving ? '保存中…' : '保存安排'}</button>
         </div>
@@ -993,6 +998,7 @@ export default function PixelPals({ onExit }) {
             busy={busy}
             onAct={onAct}
             consoleRef={taConsole}
+            aiCtx={{ myName, mood: moodNow(taPal.state), coins: taPal.state.coins, settings: taPal.settings }}
             say={say}
           />
         </>
