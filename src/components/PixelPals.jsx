@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, drawAvatar, headTop, hearts,
@@ -14,7 +14,7 @@ import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, shiftDay, INCOME } from './pixelpals/celebrate'
 import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
-import { BUILTINS, SLOT_KEYS, SLOT_NAMES, resolveWorn, outfitOf, outfitMessages, parseOutfitText, splitOutfitJson, validateOutfit } from './pixelpals/outfits'
+import { BUILTINS, SLOT_KEYS, SLOT_NAMES, OUTFIT_MAX, resolveWorn, outfitOf, outfitMessages, parseOutfitText, splitOutfitJson, validateOutfit } from './pixelpals/outfits'
 import { chat, loadAi, aiReady } from './pixelpals/ai'
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
@@ -441,6 +441,7 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
   const [pick, setPick] = useState('top') // 让 AI 做哪个部位
   const [idea, setIdea] = useState('')
   const [rawJson, setRawJson] = useState('') // 粘贴导入用的
+  const [editing, setEditing] = useState(null) // { id, name }：正在改这一件，存的时候是覆盖
   const worn = draft.outfit || {}
   const mine = outfits.mine || []
   const ta = outfits.ta || []
@@ -519,7 +520,7 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
       const { name, data } = splitOutfitJson(parsed.data)
       const bad = validateOutfit(data)
       if (bad) { why = bad; continue }
-      const r = await outfitSave(null, name || cleanLabel(idea) || 'AI 做的', pick, data)
+      const r = await outfitSave(null, name || cleanLabel(idea) || 'AI 做的', data.slot, data)
       setBusy(false)
       if (r.error) { outfits.say(r.error); return }
       setIdea('')
@@ -531,6 +532,21 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
     outfits.say('AI 画得不对：' + (why || '再试一次'))
   }
 
+  // 点衣服旁边的 ✎：把那件衣服的 JSON 填进下面的框里，存的时候覆盖它
+  const editItem = (o) => {
+    setEditing({ id: o.id, name: o.name })
+    setRawJson(JSON.stringify({ name: o.name, ...o.data }, null, 2))
+    outfits.say('改好点「存进衣橱」就会覆盖这一件')
+  }
+  const stopEdit = () => { setEditing(null); setRawJson('') }
+
+  // 撤回自己发出去、对方还没回的请求
+  const cancelReq = (r) => run(async () => {
+    const res = await outfitCancel(r.id)
+    if (!res.error) { await outfits.reload(); outfits.say('撤回了') }
+    return res
+  })
+
   // 粘贴一段 JSON 导入（AI 在别处生成的、或者别人给的）
   const importJson = () => {
     const parsed = parseOutfitText(rawJson)
@@ -539,12 +555,13 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
     const bad = validateOutfit(data)
     if (bad) { outfits.say(bad); return }
     run(async () => {
-      const r = await outfitSave(null, name || '导入的衣服', data.slot, data)
-      if (!r.error) { setRawJson(''); await outfits.reload() }
+      const r = await outfitSave(editing ? editing.id : null, name || (editing && editing.name) || '导入的衣服', data.slot, data)
+      if (!r.error) { setRawJson(''); setEditing(null); await outfits.reload() }
       return r
-    }, '导进来了，点它就能穿上')
+    }, editing ? '改好了' : '导进来了，点它就能穿上')
   }
 
+  const full = mine.filter((o) => o.slot === pick).length >= OUTFIT_MAX
   const incoming = reqs.filter((r) => r.status === 'pending' && r.to_id === outfits.myId && !reqExpired(r))
   const outgoing = reqs.filter((r) => r.from_id === outfits.myId && r.to_id === outfits.taId).slice(0, 3)
 
@@ -557,6 +574,7 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
       {mine.filter((o) => o.slot === k).map((o) => (
         <span className="pp-wear-item" key={o.id}>
           <button type="button" className={`pp-chip${worn[k] === o.id ? ' on' : ''}`} onClick={() => wear(k, o.id)}>{o.name}</button>
+          <button type="button" className="pp-wear-x" onClick={() => editItem(o)} aria-label={`改 ${o.name}`}>✎</button>
           <button type="button" className="pp-wear-x" onClick={() => del(o)} aria-label={`删掉 ${o.name}`}>×</button>
         </span>
       ))}
@@ -604,7 +622,14 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
       </div>
       {!!outgoing.length && (
         <div className="pp-wear-log">
-          {outgoing.map((r) => <div key={r.id} className="pp-wear-line">{reqText(r)} · <b>{reqStatus(r)}</b></div>)}
+          {outgoing.map((r) => (
+            <div key={r.id} className="pp-wear-line">
+              {reqText(r)} · <b>{reqStatus(r)}</b>
+              {r.status === 'pending' && !reqExpired(r) && (
+                <button type="button" className="pp-wear-x" onClick={() => cancelReq(r)} disabled={busy}>撤回</button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -614,11 +639,13 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
           {SLOT_KEYS.map((k) => <option key={k} value={k}>{SLOT_NAMES[k]}</option>)}
         </select>
         <input className="pp-wear-in" value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="比如：奶白色粗针毛衣，袖口有一道橘色" aria-label="想要什么衣服" />
-        <button type="button" className="btn" disabled={busy} onClick={makeByAi}>{busy ? '…' : '生成'}</button>
+        <button type="button" className="btn" disabled={busy || full} onClick={makeByAi}>{busy ? '…' : full ? '已满' : '生成'}</button>
       </div>
+      {full && <p className="pp-hint">「{SLOT_NAMES[pick]}」已经存满 {OUTFIT_MAX} 件了，先删一件再做。</p>}
 
-      <details className="pp-fold pp-wear-fold">
-        <summary><b>粘贴一段 JSON</b><small>别处生成的衣服、或者别人给的</small></summary>
+      <details className="pp-fold pp-wear-fold" open={!!editing}>
+        <summary><b>{editing ? `改「${editing.name}」` : '粘贴一段 JSON'}</b><small>{editing ? '存进衣橱 = 覆盖原来那件' : '别处生成的衣服、或者别人给的'}</small></summary>
+        {editing && <div className="pp-wear-line">正在改：<b>{editing.name}</b>　<button type="button" className="pp-chip" onClick={stopEdit}>不改了</button></div>}
         <textarea className="pp-wear-area" rows={4} value={rawJson} onChange={(e) => setRawJson(e.target.value)} placeholder='{"name":"粗针毛衣","slot":"top","y0":12,"pal":["#c96a4a"],"rows":["................"]}' aria-label="衣服 JSON" />
         <button type="button" className="btn" disabled={busy || !rawJson.trim()} onClick={importJson}>存进衣橱</button>
       </details>

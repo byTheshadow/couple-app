@@ -392,6 +392,16 @@ export function usePalOutfits(userId) {
   useEffect(() => { reload() }, [reload])
   useEffect(() => () => { reg.current.forEach(unregisterOutfit); reg.current = [] }, [])
 
+  // TA 那边新做 / 改 / 删了衣服，这边不用刷新页面就能看到（表要加进 realtime 发布）
+  useEffect(() => {
+    if (!supabase || !userId) return
+    const ch = supabase
+      .channel(`pal-outfits-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pal_outfits', filter: `owner_id=eq.${userId}` }, () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [userId, reload])
+
   return { items, loading, missing, reload }
 }
 

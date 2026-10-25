@@ -147,3 +147,7 @@
 .pp-wear-area { width: 100%; box-sizing: border-box; margin: 8px 0; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; resize: vertical; }
 .pp-wear-fold .btn { margin-top: 2px; }
 .pp-wear-ai { margin-top: 4px; }
+.pp-wear-fold > .pp-wear-line { padding: 2px 12px 6px; }
+.pp-wear-fold > .pp-wear-area { width: calc(100% - 24px); margin: 8px 12px; }
+.pp-wear-fold > .btn { margin: 0 12px 12px; }
+.pp-wear-x:disabled { opacity: .4; }
