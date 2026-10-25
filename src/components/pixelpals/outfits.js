@@ -123,6 +123,143 @@ export const BUILTINS = [
       ].map(w16),
     },
   },
+  {
+    id: 'b:striped', name: '条纹毛衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#4a7fc1', '#2f5a8c'],
+      rows: [
+        '....aaaaaaaa....',
+        '...aaaaaaaaaa...',
+        '...bbbbbbbbbb...',
+        '...aaaaaaaaaa...',
+        '...bbbbbbbbbb...',
+        '....bbbbbbbb....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:check', name: '格纹衬衫', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#e6dfd0', '#c26b64'],
+      rows: [
+        '....abababab....',
+        '...ababababab...',
+        '...bababababa...',
+        '...ababababab...',
+        '...bababababa...',
+        '....abababab....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:hoodie', name: '连帽卫衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#5b8f6f', '#3f6b52'],
+      rows: [
+        '....aabbbbaa....',
+        '...aaabbbbaaa...',
+        '...aaaaaaaaaa...',
+        '...aabbbbbbaa...',
+        '...aabbbbbbaa...',
+        '....aaaaaaaa....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:trench', name: '长风衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#c9a06a', '#8f6b42', '#5a4327'],
+      rows: [
+        '....aabbbbaa....',
+        '...aabbbbbbaa...',
+        '...aaaaaaaaaa...',
+        '...aaaaaaaaaa...',
+        '...cccccccccc...',
+        '...aaaaaaaaaa...',
+        '...aaaaaaaaaa...',
+        '...aaaaaaaaaa...',
+        '...bbbbbbbbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:pleat', name: '百褶裙', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#c25b7c', '#8f3d57'],
+      rows: [
+        '....abababab....',
+        '...ababababab...',
+        '..abababababab..',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:cuffpants', name: '卷边长裤', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#3f5d8c', '#2b4166'],
+      rows: [
+        '....aaaaaaaa....',
+        '....aaaaaaaa....',
+        '...aaaaaaaaaa...',
+        '...bbbb..bbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:canvas', name: '红帆布鞋', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#c0392b', '#f5f5f5'],
+      rows: [
+        '....aaa..aaa....',
+        '...bbbb..bbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:boots', name: '短靴', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#4a3728', '#2a1f16'],
+      rows: [
+        '...aaaa..aaaa...',
+        '...bbbb..bbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:beret', name: '贝雷帽', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 0,
+      pal: ['#b03a48', '#7d2733'],
+      rows: [
+        '.......aa.......',
+        '....aaaaaaaa....',
+        '...aaaaaaaaaa...',
+        '...bbbbbbbbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:cat', name: '猫耳', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 0,
+      pal: ['#5c5c70', '#3a3a4a'],
+      rows: [
+        '....aa...aa.....',
+        '....aaa.aaa.....',
+        '..aaaaaaaaaaaa..',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
 ]
 
 /* ---------- 校验：返回 ''（没问题）或一句人话 ---------- */
