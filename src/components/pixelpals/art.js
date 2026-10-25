@@ -12,6 +12,7 @@ export const FLOOR = 98
 
 // 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
 import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, USER_SCENE_RE, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
+import { drawWeatherScene, isWeatherScene, drawLivingRoom } from './rooms'
 export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
@@ -318,6 +319,20 @@ export function placeOf(settings, st) {
 /** 此刻是不是真的在家里（画家里的房间、看得到墙纸、晚上有暖色滤镜）：放空去了海边之类的就不是 */
 export const atHome = (settings, st) => isHomeLike(st) && !placeOf(settings, st)
 
+/**
+ * 在家的时候待哪个房间：
+ * - 睡觉、起床到出门 → 卧室（床、礼物架；睡觉时小人躺在床上）
+ * - 下班到家到睡前、玩耍、放空 → 客厅（沙发、茶几、灯串）
+ * 不在家（上班 / 去了别的场景）返回 null
+ */
+export function roomOf(settings, st, hr) {
+  if (st === 'sleep') return 'home'
+  if (st === 'play' || st === 'idle') return 'living'
+  if (st === 'work') return null
+  const h = shiftHour(settings, hr)
+  return h >= settings.wake_h && h < settings.work_h ? 'home' : 'living'
+}
+
 export function moodNow(state, now = Date.now()) {
   if (!state) return DEFAULT_STATE.mood
   const t = state.mood_at ? Date.parse(state.mood_at) : NaN
@@ -542,6 +557,7 @@ export function createActor(slot) {
     x: 96, tx: 96, pause: 0, react: 0, blushT: 0, blink: 0, blinkT: 2, walking: false,
     state: null, zT: 0, nT: 0, particles: [],
     scene: null, // 此刻站在哪个数据场景里（null = 家里 / 办公室 / 咖啡馆），换地方时用来让小人直接出现在起点
+    room: null, // 在家时待哪个房间（null = 不在家 / 'home' = 卧室 / 'living' = 客厅）
   }
 }
 
@@ -560,19 +576,27 @@ export function stepActor(a, settings, hr, dt, mood) {
   const was = a.state
   const place = placeOf(settings, st)
   const spot = place ? sceneSpot(place) : null // 数据场景里：能走的范围 + 放空站的位置（办公室、咖啡馆、家里没有，用下面的老位置）
-  const walk = spot ? spot.walk : [80, 92]
-  const stand = spot ? spot.stand : IDLE_X
+  const room = place ? null : roomOf(settings, st, hr) // null = 在场景里；'home' = 卧室；'living' = 客厅
+  const living = room === 'living'
+  const walk = spot ? spot.walk : living ? [72, 96] : [80, 92]
+  const stand = spot ? spot.stand : living ? 84 : IDLE_X
   // 刚下班 / 刚起床回到家：先站到家里的中间；从在家切到玩耍/放空：直接走向各自的位置
   if (was && was !== st && isHomeLike(st) && !spot && (was === 'work' || was === 'sleep')) { a.x = 90; a.tx = 90 }
   // 进出数据场景（整个画面换了）：小人直接出现在那里的起点，不从上一个画面的位置滑过去
   const key = spot ? place : null
+  if (a.room !== room) {
+    // 卧室 ↔ 客厅：换了房间就直接站到新房间中间，别从旧位置滑过去（睡觉本来就固定在床上）
+    const prevRoom = a.room
+    a.room = room
+    if (prevRoom && room && st !== 'sleep') { a.x = stand; a.tx = stand }
+  }
   if (a.scene !== key) {
     a.scene = key
     if (spot) { a.x = st === 'idle' ? stand : (walk[0] + walk[1]) / 2; a.tx = a.x } else if (was) { a.x = 90; a.tx = 90 }
   }
   if (was !== st) {
     if (st === 'idle') a.tx = stand
-    else if (st === 'play') a.tx = rand(PLAY_X[0], PLAY_X[1])
+    else if (st === 'play') a.tx = living ? rand(74, 94) : rand(PLAY_X[0], PLAY_X[1])
   }
   a.state = st
   if (st === 'sleep') {
@@ -582,7 +606,7 @@ export function stepActor(a, settings, hr, dt, mood) {
     a.walking = false; a.pause -= dt
     if (a.pause <= 0) {
       if (st === 'idle') { a.tx = stand; a.pause = 2 } // 放空：站在窗前（或放空去的那个场景里）不动
-      else if (st === 'play') { a.tx = rand(PLAY_X[0], PLAY_X[1]); a.pause = rand(2.5, 5) }
+      else if (st === 'play') { a.tx = living ? rand(74, 94) : rand(PLAY_X[0], PLAY_X[1]); a.pause = rand(2.5, 5) }
       else {
         a.tx = st === 'work' ? rand(walk[0], walk[1]) : rand(66, 132)
         a.pause = st === 'work' ? rand(3, 6) : rand(1.5, 4)
@@ -681,8 +705,10 @@ export function renderFrame(ctx, a, m, hr, t) {
   const data = place && isDataScene(place)
   const o = { job, working: a.state === 'work', hr, t }
   if (data) drawScene(ctx, place, 'back', o)
+  else if (place && isWeatherScene(place)) drawWeatherScene(ctx, place, t) // 下雨 / 雨夜 / 下雪 / 下雪夜：手写场景，雨雪要动
   else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
-  else drawHome(ctx, m, a, hr, t)
+  else if (roomOf(m.settings, a.state, hr) === 'living') drawLivingRoom(ctx, hr, t) // 在家醒着：客厅
+  else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
   if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t)
   if (data) drawScene(ctx, place, 'front', o)
   if (a.state === 'sleep') {
