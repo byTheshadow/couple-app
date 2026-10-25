@@ -643,6 +643,10 @@ export const SCENE_LIST = [
   { k: 'library', n: '图书馆', e: '📚', tip: '' },
   { k: 'beach', n: '海边', e: '🏖️', tip: '适合放空' },
   { k: 'stars', n: '星空', e: '🌌', tip: '适合放空' },
+  { k: 'rain_day', n: '下雨', e: '🌦️', tip: '适合放空' },
+  { k: 'rain', n: '雨夜', e: '🌧️', tip: '适合放空' },
+  { k: 'snow_day', n: '下雪', e: '❄️', tip: '适合放空' },
+  { k: 'snow_night', n: '下雪夜', e: '🌨️', tip: '适合放空' },
 ]
 export const SCENES = Object.fromEntries(SCENE_LIST.map((s) => [s.k, s.n]))
 export const SCENE_ICON = Object.fromEntries(SCENE_LIST.map((s) => [s.k, s.e]))
