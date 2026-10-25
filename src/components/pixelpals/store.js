@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { normalizeSettings, normalizeState, btnLinesToRow } from './art'
 import { registerUserScene, unregisterUserScene } from './scenes'
+import { registerOutfit, unregisterOutfit, validateOutfit, outfitRow } from './outfits'
 import { presetFromRow, presetToRow } from './presets'
 
 const mapError = (e) => {
@@ -45,6 +46,11 @@ const mapError = (e) => {
   if (m.includes('bad food')) return '这个东西服务端不认识'
   if (m.includes('self interaction')) return '只能对 TA 的小人做这个'
   if (m.includes('not logged in') || m.includes('not signed in')) return '登录状态过期了，刷新一下再试'
+  if (m.includes('too many outfits')) return '这个部位最多 12 件，先删掉一件'
+  if (m.includes('这套衣服已经不在了') || m.includes('挑的衣服已经不在了')) return '这件衣服已经被删掉了，重新挑一件'
+  if (m.includes('至少要挑一个部位')) return '先挑一个部位'
+  if (m.includes('名字不能是空的')) return '给衣服起个名字（8 个字以内）'
+  if (/只能画在|每行要正好|颜色要|行数要|超出小人高度|衣服太大|slot 只能是|只能用/.test(m)) return m
   if (m.includes('too many presets')) return '预设最多存 8 套，先删掉一个'
   if (m.includes('presets too long')) return '预设内容太多了，先删掉一两套再存'
   if (m.includes('bad preset scene')) return '这套预设里的场景服务端还不认识，先把第五轮的 SQL（pixelpals-round5.sql）跑一下'
@@ -134,6 +140,8 @@ export async function saveSettings(userId, draft) {
       idle_from: draft.idle_from == null ? null : draft.idle_from,
       idle_to: draft.idle_to == null ? null : draft.idle_to,
       poke_lines: draft.poke_lines || {},
+      // 换装：只存四个部位的 id（空的丢掉）
+      outfit: outfitRow(draft.outfit),
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)
@@ -338,4 +346,105 @@ export async function sceneCopy(uuid) {
   if (!supabase) return { error: '还没有连上服务器', uuid: null }
   const { data: id, error } = await supabase.rpc('pal_scene_copy', { p_id: uuid })
   return { error: error ? mapError(error) : null, uuid: id || null }
+}
+
+/* ---------- 换装：自己/TA 的衣服，以及「让 TA 穿这个」的请求 ---------- */
+
+/**
+ * 某个人的衣服（最多每部位 12 件）：{ items, loading, missing, reload }
+ * 每项 { id, name, slot, data, ownerId }；读到就登记进 outfits.js 的注册表，两边的小屋都画得出来
+ */
+export function usePalOutfits(userId) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [missing, setMissing] = useState(false)
+  const reg = useRef([])
+
+  const reload = useCallback(async () => {
+    if (!supabase || !userId) { setLoading(false); return }
+    const { data, error } = await supabase
+      .from('pal_outfits')
+      .select('id, name, slot, data, owner_id, created_at')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: true })
+    if (error) {
+      setMissing(error.code === '42P01' || error.code === 'PGRST205' || /could not find the table|does not exist/i.test(error.message || ''))
+      setLoading(false)
+      return
+    }
+    const list = []
+    for (const r of data || []) {
+      const d = r.data && typeof r.data === 'object' && !Array.isArray(r.data) ? r.data : null
+      if (!d) continue
+      const data2 = { slot: r.slot, y0: d.y0, pal: d.pal, rows: d.rows }
+      if (validateOutfit(data2)) continue // 存坏的（比如服务端放行了旧格式）就当没有，不画
+      registerOutfit(r.id, { name: r.name, slot: r.slot, data: data2 })
+      list.push({ id: r.id, name: r.name, slot: r.slot, data: data2, ownerId: r.owner_id })
+    }
+    const keep = new Set(list.map((x) => x.id))
+    reg.current.forEach((id) => { if (!keep.has(id)) unregisterOutfit(id) })
+    reg.current = list.map((x) => x.id)
+    setItems(list)
+    setMissing(false)
+    setLoading(false)
+  }, [userId])
+
+  useEffect(() => { reload() }, [reload])
+  useEffect(() => () => { reg.current.forEach(unregisterOutfit); reg.current = [] }, [])
+
+  return { items, loading, missing, reload }
+}
+
+/** 保存一件衣服：uuid 为空 = 新建。返回 { error, uuid } */
+export async function outfitSave(uuid, name, slot, data) {
+  if (!supabase) return { error: '还没有连上服务器', uuid: null }
+  const { data: id, error } = await supabase.rpc('pal_outfit_save', { p_id: uuid || null, p_name: name, p_slot: slot, p_data: data })
+  return { error: error ? mapError(error) : null, uuid: id || null }
+}
+export const outfitDelete = (uuid) => rpc('pal_outfit_delete', { p_id: uuid })
+
+/** 发一条「让 TA 穿这个」：parts 只放挑了的那几个部位。返回 { error, id } */
+export async function outfitSend(to, parts, note) {
+  if (!supabase) return { error: '还没有连上服务器', id: null }
+  const { data, error } = await supabase.rpc('pal_outfit_send', { p_to: to, p_parts: parts, p_note: note || null })
+  return { error: error ? mapError(error) : null, id: data || null }
+}
+
+/** 接受 / 拒绝一条请求：返回 { error, status }（status 是服务端给的结果：accepted / declined / expired / 已处理过的状态） */
+export async function outfitRespond(id, accept) {
+  if (!supabase) return { error: '还没有连上服务器', status: null }
+  const { data, error } = await supabase.rpc('pal_outfit_respond', { p_id: id, p_accept: !!accept })
+  return { error: error ? mapError(error) : null, status: data || null }
+}
+export const outfitCancel = (id) => rpc('pal_outfit_cancel', { p_id: id })
+
+/**
+ * 和我有关的换装请求（我收到的 + 我发出的，最近 20 条）：{ items, reload }
+ * items 每项是 pal_outfit_req 的一行；有没有过期由界面按 created_at 算（24 小时）
+ */
+export function useOutfitReqs(myId, taId) {
+  const [items, setItems] = useState([])
+
+  const reload = useCallback(async () => {
+    if (!supabase || !myId) return
+    const { data, error } = await supabase
+      .from('pal_outfit_req')
+      .select('*')
+      .or(`from_id.eq.${myId},to_id.eq.${myId}`)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (!error) setItems(data || [])
+  }, [myId])
+
+  useEffect(() => { reload() }, [reload, taId])
+  useEffect(() => {
+    if (!supabase || !myId) return
+    const ch = supabase
+      .channel('pal-outfit-req')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pal_outfit_req' }, () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, reload])
+
+  return { items, reload }
 }

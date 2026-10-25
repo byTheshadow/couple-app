@@ -13,6 +13,7 @@ export const FLOOR = 98
 // 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
 import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, USER_SCENE_RE, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
 import { drawWeatherScene, isWeatherScene, drawLivingRoom } from './rooms'
+import { resolveWorn, SLOT_KEYS } from './outfits'
 export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
@@ -68,6 +69,8 @@ export const DEFAULT_SETTINGS = {
   poke_lines: {},
   // 第七轮：每个互动按钮点了以后说什么。3 个按钮各一项 { work, home, sleep }，没写的用 voice.js 里的默认台词
   btn_lines: [{}, {}, {}],
+  // 换装：身上穿的四个部位的 id（{ top, bottom, shoes, acc }，没穿的为空），衣服内容在 outfits.js
+  outfit: {},
 }
 
 export const DEFAULT_STATE = { mood: 70, coins: 100, gifts: [], mood_at: null }
@@ -185,6 +188,14 @@ export const WINDOW_KINDS = [
 // 认得的场景：内置的，或者自己画的（u:uuid，数据可能还没从服务器读回来，先认下来，读到了再画）
 const sceneKnown = (k) => typeof k === 'string' && (has(SCENES, k) || USER_SCENE_RE.test(k))
 
+// 身上穿的：只留四个部位、只留字符串，其余丢掉（衣服本身在 outfits.js 的注册表里）
+const outfitFromRow = (v) => {
+  const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  const out = {}
+  for (const k of SLOT_KEYS) if (typeof o[k] === 'string' && o[k]) out[k] = o[k]
+  return out
+}
+
 export function normalizeSettings(row, slot) {
   const r = row || {}
   const d = DEFAULT_SETTINGS
@@ -206,6 +217,7 @@ export function normalizeSettings(row, slot) {
     idle_to: xt,
     poke_lines: compactPokeLines(r.poke_lines),
     btn_lines: btnLinesFromRow(r.button_lines, buttons),
+    outfit: outfitFromRow(r.outfit),
   }
 }
 
@@ -359,7 +371,7 @@ const SPR_CODER = [
   '..HHSbSSSSbSHH..',
   '..HHSSSmmSSSHH..',
   '..HHHsSSSSsHHH..',
-  '..HH..SSSS..HH..',
+  '......sSSs......',
   '...HJJRRRRJJH...',
   '...JJMRRRRMJJ...',
   '..JJJJRRRRJJJJ..',
@@ -389,7 +401,7 @@ const SPR_WORKER = [
   '..HHSbSSSSbSHH..',
   '..HHSSSmmSSSHH..',
   '..HHHsSSSSsHHH..',
-  '..HHH.SSSS.HHH..',
+  '..HH..sSSs..HH..',
   '..HHCCCCCCCCHH..',
   '..HHCCcCCcCCHH..',
   '..HCCCcCCcCCCH..',
@@ -541,7 +553,12 @@ function drawHome(ctx, m, a, hr, t) {
   R(ctx, '#8c6a52', 4, 62, 5, 36); R(ctx, '#8c6a52', 6, 86, 54, 12); R(ctx, '#76563f', 6, 86, 54, 1)
   R(ctx, '#fbfbff', 8, 80, 50, 6); R(ctx, '#fff', 10, 74, 13, 6); R(ctx, '#e3e3ef', 10, 79, 13, 1)
   const sleeping = a.state === 'sleep'
-  if (sleeping) drawSprite(ctx, m.sp.spr, m.sp.pal, 8, 64, { blink: true, rows: [0, 11] })
+  if (sleeping) {
+    drawSprite(ctx, m.sp.spr, m.sp.pal, 8, 64, { blink: true, rows: [0, 11] })
+    // 睡着时只画配饰（帽子 / 围巾）：身体只露到第 11 行，上装下装鞋本来就看不见
+    const acc = resolveWorn(m.settings && m.settings.outfit).filter((g) => g.slot === 'acc')
+    if (acc.length) drawWorn(ctx, m.sp.spr, acc, 8, 64, 11)
+  }
   const bx = sleeping ? 8 : 22
   const bw = sleeping ? 52 : 38
   R(ctx, th.blanket, bx, 76, bw, 10); R(ctx, 'rgba(255,255,255,.35)', bx, 76, bw, 1); R(ctx, 'rgba(0,0,0,.12)', bx, 85, bw, 1)
@@ -662,7 +679,7 @@ function drawPlayProp(ctx, slot, x, y, t) {
   }
 }
 
-function drawChar(ctx, a, mood, t) {
+function drawChar(ctx, a, mood, t, worn) {
   let yo = 0
   if (a.react > 0) yo = -Math.round(Math.abs(Math.sin(a.react * 9)) * 4)
   else if (a.walking) yo = Math.floor(t * 8) % 2 ? -1 : 0
@@ -671,6 +688,7 @@ function drawChar(ctx, a, mood, t) {
   const y = FLOOR - 23 + yo
   R(ctx, 'rgba(0,0,0,.18)', x + 3, FLOOR - 1, 10, 2)
   drawSprite(ctx, a.sp.spr, a.sp.pal, x, y, { blink: a.blink > 0, blush: a.blushT > 0 })
+  if (worn && worn.length) drawWorn(ctx, a.sp.spr, worn, x, y)
   if (a.state === 'play') drawPlayProp(ctx, a.slot, x, y, t)
   if (a.state === 'idle') {
     // 放空：头的右上方一点一点冒出三个点，斜着往上排（像想心事的气泡；不和心情低落的小乌云重叠）
@@ -681,6 +699,72 @@ function drawChar(ctx, a, mood, t) {
     pat(ctx, CLOUD, { G: '#8a93a8' }, x + 4, y - 9)
     if (Math.floor(t * 3) % 2) R(ctx, '#7fb6ea', x + 7, y - 4, 1, 2)
   }
+}
+
+/* ---------- 换装：把衣服叠到小人身上 ---------- */
+
+const HAIR_CH = new Set(['H', 'h'])
+const SKIN_CH = new Set(['S', 's'])
+const FACE_CH = new Set(['E', 'F', 'b', 'm'])
+const SPAN_CACHE = new WeakMap()
+
+// 每一行身体像素的左右边界：衣服只在轮廓里落笔，不会画出飞在空中的像素
+function spansOf(spr) {
+  let spans = SPAN_CACHE.get(spr)
+  if (spans) return spans
+  spans = []
+  for (let y = 0; y < spr.length; y++) {
+    const line = spr[y]
+    let lo = 99
+    let hi = -1
+    for (let x = 0; x < line.length; x++) if (line[x] !== '.') { if (x < lo) lo = x; hi = x }
+    spans.push(hi < 0 ? null : [lo, hi])
+  }
+  SPAN_CACHE.set(spr, spans)
+  return spans
+}
+
+/**
+ * worn 是按「下装 → 鞋 → 上装 → 配饰」排好序的衣服（outfits.js 的 resolveWorn 解析并排序）。
+ * 三条落笔规则：身体外的格子不画；身上三件不盖头发和皮肤（手、耳朵永远露着）；配饰不盖五官。
+ */
+function drawWorn(ctx, spr, worn, x, y, maxRow) {
+  const spans = spansOf(spr)
+  for (const g of worn) {
+    const body = g.slot !== 'acc'
+    const rows = g.data.rows
+    for (let i = 0; i < rows.length; i++) {
+      const ry = g.data.y0 + i
+      if (maxRow != null && ry > maxRow) continue
+      const span = spans[ry]
+      if (!span) continue
+      const line = rows[i]
+      for (let cx = 0; cx < 16; cx++) {
+        const ch = line[cx]
+        if (ch === '.' || cx < span[0] || cx > span[1]) continue
+        const base = spr[ry][cx]
+        if (base === '.') continue
+        if (body && (HAIR_CH.has(base) || SKIN_CH.has(base))) continue
+        if (!body && FACE_CH.has(base)) continue
+        const col = g.data.pal[ch.charCodeAt(0) - 97]
+        if (col) R(ctx, col, x + cx, y + ry, 1, 1)
+      }
+    }
+  }
+}
+
+/** 只画小人自己（16×23，落在 0,0）：衣橱里的预览用，和真实外观走同一套代码 */
+export function drawAvatar(ctx, slot, worn) {
+  const sp = SPRITES[slot] || SPRITES.u1
+  for (let y = 0; y < sp.spr.length; y++) {
+    const line = sp.spr[y]
+    for (let x = 0; x < line.length; x++) {
+      const ch = line[x]
+      if (ch === '.' || !sp.pal[ch]) continue
+      R(ctx, sp.pal[ch], x, y, 1, 1)
+    }
+  }
+  if (worn && worn.length) drawWorn(ctx, sp.spr, worn, 0, 0)
 }
 
 function drawParticles(ctx, a) {
@@ -709,7 +793,7 @@ export function renderFrame(ctx, a, m, hr, t) {
   else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
   else if (roomOf(m.settings, a.state, hr) === 'living') drawLivingRoom(ctx, hr, t) // 在家醒着：客厅
   else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
-  if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t)
+  if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t, resolveWorn(m.settings && m.settings.outfit))
   if (data) drawScene(ctx, place, 'front', o)
   if (a.state === 'sleep') {
     R(ctx, 'rgba(8,10,34,.55)', 0, 0, W, H)

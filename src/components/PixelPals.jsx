@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, usePresets, usePalScenes, saveSettings, palPoke, palSettle, palLogClear } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond } from './pixelpals/store'
 import {
   W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
-  createActor, stepActor, renderFrame, headTop, hearts,
+  createActor, stepActor, renderFrame, drawAvatar, headTop, hearts,
   normalizeButtons, compactBtnLines, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
   placeOf, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
@@ -14,6 +14,8 @@ import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, shiftDay, INCOME } from './pixelpals/celebrate'
 import { DAILY_PRESETS, SPECIAL_PRESETS, MAX_PRESETS, applyPreset, activePreset, homeHour, makeCustomPreset } from './pixelpals/presets'
+import { BUILTINS, SLOT_KEYS, SLOT_NAMES, resolveWorn, outfitOf, outfitMessages, parseOutfitText, splitOutfitJson, validateOutfit } from './pixelpals/outfits'
+import { chat, loadAi, aiReady } from './pixelpals/ai'
 import Visitor from './pixelpals/Visitor'
 import Diary from './pixelpals/Diary'
 import Studio from './pixelpals/Studio'
@@ -92,7 +94,7 @@ const winOpts = (list) => [<option key="none" value="">不设</option>, ...list.
 const range = (a, b) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i)
 const winFromList = (s) => homeSegments(s).flatMap(([f, t]) => range(f, t - 1))
 const winToList = (s, from) => homeSegments(s).filter(([f, t]) => from == null || (from >= f && from < t)).flatMap(([f, t]) => range(Math.max(f + 1, from == null ? 0 : from + 1), t))
-const PLAN_TABS = [['preset', '预设'], ['scene', '场景'], ['sched', '作息'], ['touch', '互动'], ['persona', '人设']]
+const PLAN_TABS = [['preset', '预设'], ['scene', '场景'], ['wear', '换装'], ['sched', '作息'], ['touch', '互动'], ['persona', '人设']]
 const SCHED_NAMES = { wake_h: '起床', work_h: '上班', off_h: '下班', sleep_h: '睡觉' }
 const MINI_KEY = 'pp-mini'
 const MINI_POS_KEY = 'pp-mini-pos'
@@ -411,9 +413,225 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
 
 /* ---------- 自己的安排面板 ---------- */
 
-function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, userScenes, onSavePreset, onDeletePreset, say }) {
+/* ---------- 换装：衣橱 ---------- */
+
+// 一条请求是不是已经过期（服务端接受时也会按同样的 24 小时判断，这里只是用来显示）
+const reqExpired = (r) => Date.now() - new Date(r.created_at).getTime() > 24 * 3600 * 1000
+const reqText = (r) => {
+  const parts = r.parts || {}
+  const names = SLOT_KEYS.filter((k) => parts[k]).map((k) => {
+    const g = outfitOf(parts[k])
+    return g ? g.name : '（已删除）'
+  })
+  return names.join(' + ') || '空'
+}
+const reqStatus = (r) => {
+  if (r.status === 'pending') return reqExpired(r) ? '已过期' : '等 TA 回话'
+  if (r.status === 'accepted') return 'TA 穿上了'
+  if (r.status === 'declined') return 'TA 没答应'
+  if (r.status === 'cancelled') return '撤回了'
+  if (r.status === 'expired') return '已过期'
+  return String(r.status)
+}
+
+function Wardrobe({ slot, draft, setDraft, outfits }) {
+  const cvRef = useRef(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [pick, setPick] = useState('top') // 让 AI 做哪个部位
+  const [idea, setIdea] = useState('')
+  const [rawJson, setRawJson] = useState('') // 粘贴导入用的
+  const worn = draft.outfit || {}
+  const mine = outfits.mine || []
+  const ta = outfits.ta || []
+  const reqs = outfits.reqs || []
+  const taName = outfits.taName || 'TA'
+  const wornList = resolveWorn(worn)
+
+  // 预览和小屋里的小人走同一套绘制代码，看到的就是真的
+  useEffect(() => {
+    const cv = cvRef.current
+    if (!cv) return
+    const g = cv.getContext('2d')
+    g.clearRect(0, 0, 16, 23)
+    drawAvatar(g, slot, wornList)
+  })
+
+  const wear = (k, id) => setDraft((d) => {
+    const next = { ...(d.outfit || {}) }
+    if (id) next[k] = id
+    else delete next[k]
+    return { ...d, outfit: next }
+  })
+
+  const run = async (fn, okText) => {
+    setBusy(true)
+    const r = await fn()
+    setBusy(false)
+    if (r && r.error) outfits.say(r.error)
+    else if (okText) outfits.say(okText)
+    return r
+  }
+
+  const del = (o) => run(async () => {
+    const r = await outfitDelete(o.id)
+    if (!r.error) {
+      if (worn[o.slot] === o.id) wear(o.slot, null)
+      await outfits.reload()
+    }
+    return r
+  }, '删掉了')
+
+  const send = () => {
+    const parts = {}
+    for (const k of SLOT_KEYS) if (worn[k]) parts[k] = worn[k]
+    if (!Object.keys(parts).length) { outfits.say('先在下面挑点东西穿上，再发给 TA'); return }
+    run(async () => {
+      const r = await outfitSend(outfits.taId, parts, note.trim())
+      if (!r.error) { setNote(''); await outfits.reload() }
+      return r
+    }, `已经发给 ${taName} 了，等 TA 点头`)
+  }
+
+  const respond = (r, accept) => run(async () => {
+    const res = await outfitRespond(r.id, accept)
+    if (!res.error) {
+      await outfits.reload()
+      if (res.status === 'accepted') { outfits.say('换好了，就是小屋里这个样'); outfits.onAccepted() }
+      else if (res.status === 'declined') outfits.say('拒绝啦')
+      else if (res.status === 'expired') outfits.say('这条已经过期了')
+      else outfits.say('这条已经处理过了')
+    }
+    return res
+  })
+
+  // 让 AI 做一件：走用户自己填的 AI 设置（浏览器直连），回来看格式对不对，不对就带着原因再试一次
+  const makeByAi = async () => {
+    const cfg = loadAi()
+    if (!aiReady(cfg)) { outfits.say('先去页面最下面的「AI 设置」把地址、key、模型填上'); return }
+    setBusy(true)
+    let why = ''
+    for (let i = 0; i < 2; i++) {
+      const { error, text } = await chat(cfg, outfitMessages(pick, idea, why), { maxTokens: 900 })
+      if (error) { setBusy(false); outfits.say(error); return }
+      const parsed = parseOutfitText(text)
+      if (parsed.error) { why = parsed.error; continue }
+      const { name, data } = splitOutfitJson(parsed.data)
+      const bad = validateOutfit(data)
+      if (bad) { why = bad; continue }
+      const r = await outfitSave(null, name || cleanLabel(idea) || 'AI 做的', pick, data)
+      setBusy(false)
+      if (r.error) { outfits.say(r.error); return }
+      setIdea('')
+      await outfits.reload()
+      outfits.say('做好了，点它就能穿上')
+      return
+    }
+    setBusy(false)
+    outfits.say('AI 画得不对：' + (why || '再试一次'))
+  }
+
+  // 粘贴一段 JSON 导入（AI 在别处生成的、或者别人给的）
+  const importJson = () => {
+    const parsed = parseOutfitText(rawJson)
+    if (parsed.error) { outfits.say(parsed.error); return }
+    const { name, data } = splitOutfitJson(parsed.data)
+    const bad = validateOutfit(data)
+    if (bad) { outfits.say(bad); return }
+    run(async () => {
+      const r = await outfitSave(null, name || '导入的衣服', data.slot, data)
+      if (!r.error) { setRawJson(''); await outfits.reload() }
+      return r
+    }, '导进来了，点它就能穿上')
+  }
+
+  const incoming = reqs.filter((r) => r.status === 'pending' && r.to_id === outfits.myId && !reqExpired(r))
+  const outgoing = reqs.filter((r) => r.from_id === outfits.myId && r.to_id === outfits.taId).slice(0, 3)
+
+  const chipsFor = (k) => (
+    <>
+      <button type="button" className={`pp-chip${worn[k] ? '' : ' on'}`} onClick={() => wear(k, null)}>不穿</button>
+      {BUILTINS.filter((b) => b.slot === k).map((b) => (
+        <button key={b.id} type="button" className={`pp-chip${worn[k] === b.id ? ' on' : ''}`} onClick={() => wear(k, b.id)}>{b.name}</button>
+      ))}
+      {mine.filter((o) => o.slot === k).map((o) => (
+        <span className="pp-wear-item" key={o.id}>
+          <button type="button" className={`pp-chip${worn[k] === o.id ? ' on' : ''}`} onClick={() => wear(k, o.id)}>{o.name}</button>
+          <button type="button" className="pp-wear-x" onClick={() => del(o)} aria-label={`删掉 ${o.name}`}>×</button>
+        </span>
+      ))}
+      {ta.filter((o) => o.slot === k).map((o) => (
+        <button key={o.id} type="button" className={`pp-chip${worn[k] === o.id ? ' on' : ''}`} onClick={() => wear(k, o.id)}>{taName}·{o.name}</button>
+      ))}
+    </>
+  )
+
+  return (
+    <div className="pp-wear">
+      <div className="pp-wear-top">
+        <canvas ref={cvRef} className="pp-wear-cv" width={16} height={23} aria-hidden="true" />
+        <div className="pp-wear-say">
+          <b>{wornList.length ? wornList.map((g) => g.name).join(' + ') : '什么都没穿'}</b>
+          <small>上面的小屋会立刻跟着变；点保存，TA 那边才看得到</small>
+        </div>
+      </div>
+
+      {!!incoming.length && (
+        <div className="pp-req">
+          {incoming.map((r) => (
+            <div key={r.id} className="pp-req-card">
+              <div><b>{taName} 想让你穿</b>：{reqText(r)}</div>
+              {r.note && <div className="pp-req-note">“{r.note}”</div>}
+              <div className="pp-req-btns">
+                <button type="button" className="btn" disabled={busy} onClick={() => respond(r, true)}>穿上</button>
+                <button type="button" className="pp-chip" disabled={busy} onClick={() => respond(r, false)}>不要</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {SLOT_KEYS.map((k) => (
+        <div className="pp-wear-row" key={k}>
+          <div className="pp-wear-key">{SLOT_NAMES[k]}</div>
+          <div className="pp-chips">{chipsFor(k)}</div>
+        </div>
+      ))}
+
+      <div className="pp-wear-send">
+        <input className="pp-wear-in" value={note} maxLength={20} onChange={(e) => setNote(clipLine(e.target.value))} placeholder="留一句话（可不写）" aria-label="给这次请求的备注" />
+        <button type="button" className="btn" disabled={busy} onClick={send}>让 {taName} 穿这套</button>
+      </div>
+      {!!outgoing.length && (
+        <div className="pp-wear-log">
+          {outgoing.map((r) => <div key={r.id} className="pp-wear-line">{reqText(r)} · <b>{reqStatus(r)}</b></div>)}
+        </div>
+      )}
+
+      <div className="pp-sub">让 AI 做一件 <small>用「AI 设置」里填的模型，做好直接进你的衣橱</small></div>
+      <div className="pp-wear-send">
+        <select className="pp-sel" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="新衣服是哪个部位">
+          {SLOT_KEYS.map((k) => <option key={k} value={k}>{SLOT_NAMES[k]}</option>)}
+        </select>
+        <input className="pp-wear-in" value={idea} onChange={(e) => setIdea(e.target.value)} placeholder="比如：奶白色粗针毛衣，袖口有一道橘色" aria-label="想要什么衣服" />
+        <button type="button" className="btn" disabled={busy} onClick={makeByAi}>{busy ? '…' : '生成'}</button>
+      </div>
+
+      <details className="pp-fold pp-wear-fold">
+        <summary><b>粘贴一段 JSON</b><small>别处生成的衣服、或者别人给的</small></summary>
+        <textarea className="pp-wear-area" rows={4} value={rawJson} onChange={(e) => setRawJson(e.target.value)} placeholder='{"name":"粗针毛衣","slot":"top","y0":12,"pal":["#c96a4a"],"rows":["................"]}' aria-label="衣服 JSON" />
+        <button type="button" className="btn" disabled={busy || !rawJson.trim()} onClick={importJson}>存进衣橱</button>
+      </details>
+      <p className="pp-hint">
+        上装能画到第 20 行（长裙 / 长风衣），下装 17–20，鞋 21–22，配饰是帽子（0–4）和围巾（11–14）。
+        衣服只会在身体轮廓里上色，不会盖住头发、手和脸。{mine.length === 0 ? '' : ` 你已经做了 ${mine.length} 件。`}
+      </p>
+    </div>
+  )
+}
+
+function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, userScenes, onSavePreset, onDeletePreset, say, sec, setSec, outfits }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
-  const [sec, setSec] = useState('preset') // 当前翻到哪一页：预设 / 场景 / 作息 / 互动
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
   const [pn, setPn] = useState('')
   const [pBusy, setPBusy] = useState(false)
@@ -574,6 +792,10 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
           </div>
         </div>
 
+        <div className="pp-blk" hidden={sec !== 'wear'}>
+          <Wardrobe slot={slot} draft={draft} setDraft={setDraft} outfits={outfits} />
+        </div>
+
         <div className="pp-blk" hidden={sec !== 'sched'}>
           <div className="pp-h">作息 <small>其余时间在家，睡觉时间之后关灯</small></div>
           <div className="pp-sched">
@@ -716,6 +938,11 @@ export default function PixelPals({ onExit }) {
   // 自己画的场景：我的 + TA 的都读下来、登记进场景表（TA 换了新场景，这边跟着重新读，才画得出来）
   const myScenes = usePalScenes(me && me.id)
   const taScenes = usePalScenes(partner && partner.id, `${taPal.settings.work_scene}|${taPal.settings.idle_scene}`)
+  // 换装：我做的和 TA 做的都读下来登记，谁穿的是什么都画得出来；请求走同一个收件箱
+  const myOutfits = usePalOutfits(me && me.id)
+  const taOutfits = usePalOutfits(partner && partner.id)
+  const outfitReqs = useOutfitReqs(me && me.id, partner && partner.id)
+  const [sec, setSec] = useState('preset') // 设置面板当前翻到哪一页（信封角标要能直接跳到换装）
 
   const [tab, setTab] = useState('mine')
   const [sim, setSim] = useState(null) // null = 用真实时间
@@ -790,6 +1017,20 @@ export default function PixelPals({ onExit }) {
   const offPassed = (night ? real + 24 : real) >= myPal.settings.off_h
   const settleNote = settledToday ? (night ? '上一班已结算 ✓' : '今天已结算 ✓') : offPassed ? (night ? '上一班还没结算' : '今天还没结算') : '下班后自动结算'
   live.current = { tab, hr, mySlot, taSlot, myId: me && me.id, mySettings: myPal.settings, taSettings: taPal.settings }
+
+  // 换装的一揽子数据 + 动作：给衣橱和信封角标用
+  const outfits = {
+    mine: myOutfits.items,
+    ta: taOutfits.items,
+    reqs: outfitReqs.items,
+    myId: me && me.id,
+    taId: partner && partner.id,
+    taName,
+    say,
+    reload: async () => { await myOutfits.reload(); await outfitReqs.reload() },
+    onAccepted: () => { myPal.reload(); taPal.reload() },
+  }
+  const myPending = outfitReqs.items.filter((r) => r.status === 'pending' && r.to_id === (me && me.id) && !reqExpired(r)).length
 
   // TA 对我的小人做了什么：我正好在看自己的小屋，小人就当场反应；不在看就只进日记
   const onLogInsert = useCallback((row) => {
@@ -941,6 +1182,12 @@ export default function PixelPals({ onExit }) {
         <button type="button" role="tab" aria-selected={tab === 'ta'} className={tab === 'ta' ? 'on' : ''} onClick={() => setTab('ta')}>{taName}的小屋</button>
       </div>
 
+      {myPending > 0 && (
+        <button type="button" className="pp-mail" onClick={() => { setTab('mine'); setSec('wear') }}>
+          ✉ {taName} 想让你穿点什么（{myPending}）
+        </button>
+      )}
+
       {err && <div className="pp-err">{err}</div>}
 
       {tab === 'mine' ? (
@@ -968,6 +1215,9 @@ export default function PixelPals({ onExit }) {
             say={say}
             settleNote={settleNote}
             userScenes={myScenes.items}
+            sec={sec}
+            setSec={setSec}
+            outfits={outfits}
             income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
           />
           <Studio mine={myScenes} ta={taScenes} taName={taName} slot={mySlot} settings={myPal.settings} say={say} onDeleted={onSceneDeleted} />

@@ -123,3 +123,27 @@
   .pp-mini { animation: none; }
   .pp-seg button, .pp-bubble, .pp-ab button { transition: none; }
 }
+/* ---------- 换装 ---------- */
+.pp-wear { padding-top: 2px; }
+.pp-wear-top { display: flex; gap: 12px; align-items: center; margin: 6px 0 4px; }
+.pp-wear-cv { width: 64px; height: 92px; flex: none; image-rendering: pixelated; background: rgba(0, 0, 0, .05); border-radius: 10px; }
+.pp-wear-say { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.pp-wear-say small { color: var(--ink2); font-size: 12px; line-height: 1.4; }
+.pp-wear-row { display: flex; gap: 8px; align-items: flex-start; padding: 9px 0; border-top: 1px dashed var(--line); }
+.pp-wear-key { width: 40px; flex: none; font-size: 13px; padding-top: 8px; color: var(--ink2); }
+.pp-wear-item { display: inline-flex; align-items: center; }
+.pp-wear-x { border: 0; background: none; color: var(--ink2); font-size: 14px; line-height: 1; padding: 4px 3px; cursor: pointer; }
+.pp-wear-send { display: flex; gap: 8px; margin: 12px 0 4px; }
+.pp-wear-in { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 13px; }
+.pp-wear-log { margin: 6px 0; font-size: 12px; color: var(--ink2); }
+.pp-wear-line { padding: 3px 0; }
+.pp-req { margin: 10px 0; }
+.pp-req-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--chip); font-size: 13px; line-height: 1.6; }
+.pp-req-note { margin-top: 4px; color: var(--ink2); }
+.pp-req-btns { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.pp-mail { width: 100%; border: 0; border-radius: 12px; padding: 11px 14px; margin: 6px 0 2px; background: linear-gradient(135deg, #ffb35c, #ff7ba8); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pp-wear-fold { margin-top: 10px; }
+.pp-wear-fold summary { cursor: pointer; }
+.pp-wear-area { width: 100%; box-sizing: border-box; margin: 8px 0; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; resize: vertical; }
+.pp-wear-fold .btn { margin-top: 2px; }
+.pp-wear-ai { margin-top: 4px; }
