@@ -513,13 +513,13 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
     setBusy(true)
     let why = ''
     for (let i = 0; i < 2; i++) {
-      const { error, text } = await chat(cfg, outfitMessages(pick, idea, why), { maxTokens: 900 })
+      const { error, text } = await chat(cfg, outfitMessages(pick, idea, why), { maxTokens: 2000, json: true })
       if (error) { setBusy(false); outfits.say(error); return }
       const parsed = parseOutfitText(text)
-      if (parsed.error) { why = parsed.error; continue }
+      if (parsed.error) { why = parsed.error; console.warn('[换装] AI 这次返回的原文：', String(text).slice(0, 500)); continue }
       const { name, data } = splitOutfitJson(parsed.data)
       const bad = validateOutfit(data)
-      if (bad) { why = bad; continue }
+      if (bad) { why = bad; console.warn('[换装] AI 这次返回的衣服：', JSON.stringify(data).slice(0, 500)); continue }
       const r = await outfitSave(null, name || cleanLabel(idea) || 'AI 做的', data.slot, data)
       setBusy(false)
       if (r.error) { outfits.say(r.error); return }

@@ -142,11 +142,22 @@ export async function listModels(cfg) {
  * messages: [{ role: 'system'|'user'|'assistant', content }]
  * 返回 { error, text }。有些新模型不认 max_tokens / temperature，被拒时自动换个写法重试（最多 2 次）。
  */
+// 有的服务商把 content 给成字符串，有的给成「一段一段」的数组，还有的给 null
+const pickText = (c) => {
+  if (typeof c === 'string') return c.trim()
+  if (Array.isArray(c)) {
+    return c.map((p) => (typeof p === 'string' ? p : (p && (p.text || p.content)) || '')).join('').trim()
+  }
+  return ''
+}
+
 export async function chat(cfg, messages, opts) {
   const base = normBase(cfg && cfg.base)
   if (!base || !cfg.key || !cfg.model) return { error: '还没设置好 AI：到「我的小屋 → AI 设置」填地址、key 和模型', text: '' }
   const o = opts || {}
   const body = { model: cfg.model, messages, max_tokens: o.maxTokens || Math.max(256, (cfg.maxChars || 120) * 3), temperature: cfg.temp }
+  if (o.json) body.response_format = { type: 'json_object' }
+  let bumped = false // 空内容时把 token 预算翻倍重试过一次没有
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const { res, text } = await request(`${base}/chat/completions`, {
@@ -165,14 +176,30 @@ export async function chat(cfg, messages, opts) {
             delete body.temperature
             continue
           }
+          if (/response_format|json_object|json mode/i.test(text) && 'response_format' in body) {
+            delete body.response_format
+            continue
+          }
         }
         return { error: httpError(res.status, text), text: '' }
       }
       let j = null
       try { j = JSON.parse(text) } catch { /* 下面统一报 */ }
-      const c = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content
-      const out = typeof c === 'string' ? c.trim() : ''
-      if (!out) return { error: o.allowEmpty ? null : 'AI 没有返回内容（换个模型试试？）', text: '' }
+      const choice = j && j.choices && j.choices[0]
+      const out = pickText(choice && choice.message && choice.message.content)
+      const fr = choice && choice.finish_reason
+      if (!out) {
+        if (o.allowEmpty) return { error: null, text: '' }
+        // 最常见的「返回空内容」：会思考的模型把 token 预算全花在 reasoning 上了。翻倍再来一次
+        if (!bumped) {
+          bumped = true
+          const key = 'max_completion_tokens' in body ? 'max_completion_tokens' : 'max_tokens'
+          body[key] = Math.max(2048, (body[key] || 0) * 2)
+          continue
+        }
+        const why = fr === 'length' ? '：token 用完了，这个模型可能"会思考"，换个不思考的模型试试' : ''
+        return { error: `AI 没有返回内容（模型 ${cfg.model}，finish_reason=${fr || '无'}${why}）`, text: '' }
+      }
       return { error: null, text: out }
     } catch (e) {
       return { error: netError(e), text: '' }
