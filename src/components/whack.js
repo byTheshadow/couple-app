@@ -26,6 +26,16 @@ export const SPAWN_FROM = 1.1
 export const SPAWN_TO = 0.55
 export const SPAWN_RAMP = 10
 export const BUBBLE_FOR = 1.5
+
+/* ---------- 两档出怪速度（spec 第 3 节） ---------- */
+// mult 乘在出怪间隔上：慢档间隔更长（人更少），快档间隔更短（人更密）
+export const SPEEDS = {
+  slow: { key: 'slow', name: '慢', mult: 1.5 },
+  fast: { key: 'fast', name: '快', mult: 0.7 },
+}
+export const SPEED_KEY = 'whack.speed'
+export const DEFAULT_SPEED = 'slow'
+
 export const SFX_KEY = 'whack.sfx'
 export const BEST_KEY = 'whack.best'
 export const DAY_COIN_CAP = 60
@@ -114,6 +124,7 @@ export function createGame(opts) {
   const g = {
     seed: o.seed == null ? (Date.now() % 1000000) : o.seed,
     reduce: !!o.reduce,
+    speed: o.speed && SPEEDS[o.speed] ? o.speed : DEFAULT_SPEED,
     t: 0, left: DURATION,
     score: 0, combo: 0, bestCombo: 0, coins: 0,
     spawnIn: SPAWN_FROM, spawnCount: 0, lastGood: false,
@@ -125,12 +136,15 @@ export function createGame(opts) {
     impact: null,  // { t, x, y } 落锤那一下的火花
   }
   g.rng = mulberry32(g.seed)
+  g.spawnIn = spawnInterval(0, g.speed)
   return g
 }
 
-/** 出怪间隔：前 10 秒从 1.1 线性缩到 0.55，之后固定 0.55 */
-export function spawnInterval(t) {
-  return SPAWN_FROM - (SPAWN_FROM - SPAWN_TO) * Math.min(1, Math.max(0, t) / SPAWN_RAMP)
+/** 出怪间隔：前 10 秒从 1.1 线性缩到 0.55，之后固定 0.55；再乘这一档的倍率（speed 不传就是 1 倍） */
+export function spawnInterval(t, speed) {
+  const sp = SPEEDS[speed]
+  const mult = sp ? sp.mult : 1
+  return (SPAWN_FROM - (SPAWN_FROM - SPAWN_TO) * Math.min(1, Math.max(0, t) / SPAWN_RAMP)) * mult
 }
 
 export function fmtClock(left) {
@@ -211,7 +225,7 @@ export function stepGame(g, dt) {
 
   g.spawnIn -= dt
   if (g.spawnIn <= 0) {
-    g.spawnIn = spawnInterval(g.t)
+    g.spawnIn = spawnInterval(g.t, g.speed)
     if (g.slots.filter(Boolean).length < MAX_ALIVE) spawn(g, ev)
   }
 

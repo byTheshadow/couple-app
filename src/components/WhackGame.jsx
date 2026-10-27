@@ -9,11 +9,31 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { Svg } from './Icon'
 import {
-  W, H, HOLES, BEST_KEY, DURATION, ROUND_COIN_CAP, DAY_COIN_CAP,
+  W, H, HOLES, BEST_KEY, DURATION, ROUND_COIN_CAP, DAY_COIN_CAP, SPEEDS, SPEED_KEY, DEFAULT_SPEED,
   createGame, stepGame, tapAt, drawGame, resultOf, createSfx, aimAt, aimOff,
 } from './whack'
 import { reportWhack, dayRow, localDay } from './whackStore'
 import './whack.css'
+
+/** 开始页 / 结算页上的两档出怪速度 */
+function SpeedPick({ speed, onPick }) {
+  return (
+    <div className="wk-speed" role="group" aria-label="顾客出来的速度">
+      <span className="wk-slabel">速度</span>
+      {Object.keys(SPEEDS).map((k) => (
+        <button
+          key={k}
+          type="button"
+          className={`wk-chip${speed === k ? ' on' : ''}`}
+          aria-pressed={speed === k}
+          onClick={() => onPick(k)}
+        >
+          {SPEEDS[k].name}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function WhackGame({ onExit }) {
   const { partner } = useAuth()
@@ -31,6 +51,12 @@ export default function WhackGame({ onExit }) {
   const [phase, setPhase] = useState('idle')
   const [result, setResult] = useState(null)
   const [settle, setSettle] = useState(null)
+  const [speed, setSpeed] = useState(() => {
+    try {
+      const v = localStorage.getItem(SPEED_KEY)
+      return SPEEDS[v] ? v : DEFAULT_SPEED
+    } catch (e) { return DEFAULT_SPEED }
+  })
   const [best, setBest] = useState(() => {
     try { return Number(localStorage.getItem(BEST_KEY)) || 0 } catch (e) { return 0 }
   })
@@ -113,18 +139,24 @@ export default function WhackGame({ onExit }) {
   }, [sfx, finish])
   fireRef.current = fire
 
+  const pickSpeed = useCallback((k) => {
+    if (!SPEEDS[k]) return
+    setSpeed(k)
+    try { localStorage.setItem(SPEED_KEY, k) } catch (e) { /* 存不了就算了 */ }
+  }, [])
+
   /* ---------- 开始 / 再来一局 ---------- */
   const start = useCallback(() => {
     seqRef.current += 1
     setSettle(null)
-    gameRef.current = createGame({ reduce: reduceRef.current })
+    gameRef.current = createGame({ reduce: reduceRef.current, speed })
     aimAt(gameRef.current, W / 2, H / 2)
     setResult(null)
     phaseRef.current = 'playing'
     setPhase('playing')
     sfx.unlock()
     sfx.play('start')
-  }, [sfx])
+  }, [sfx, speed])
 
   /* ---------- 主循环：一直画；只有 playing 才推进 ---------- */
   useEffect(() => {
@@ -292,6 +324,7 @@ export default function WhackGame({ onExit }) {
                 <p className="wk-op">45 秒。柜台里冒出坏顾客，<b>点一下挥锤</b>，打中 +1 分。</p>
                 <p className="wk-op">连击每满 3 个 +10 金币（一局封顶 {ROUND_COIN_CAP}，每天 {DAY_COIN_CAP}）。</p>
                 <p className="wk-op">笑着的好顾客<b>不能打</b>：连击清零，还罚 3 秒。</p>
+                <SpeedPick speed={speed} onPick={pickSpeed} />
                 <button type="button" className="btn wk-start" onClick={start}>开始</button>
                 <span className="wk-os">键盘 1~9 也能挥锤</span>
               </div>
@@ -312,6 +345,7 @@ export default function WhackGame({ onExit }) {
                   )}
                 </div>
                 <p className="wk-op tiny">{settleNote}</p>
+                <SpeedPick speed={speed} onPick={pickSpeed} />
                 <div className="wk-acts">
                   <button type="button" className="btn wk-start" onClick={start}>再来一局</button>
                   <button type="button" className="btn ghost" onClick={() => onExit && onExit()}>返回小物</button>

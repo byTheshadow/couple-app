@@ -37,6 +37,14 @@
 .wk-op b { color: #ffd34d; }
 .wk-os { font-size: 10.5px; color: rgba(255,255,255,.45); }
 
+/* 两档出怪速度：开始页和结算页共用 */
+.wk-speed { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 1px 0; }
+.wk-slabel { font-size: 11.5px; color: rgba(255,255,255,.6); }
+.wk-chip { height: 30px; min-width: 56px; padding: 0 12px; border-radius: 15px;
+  border: 1px solid rgba(255,255,255,.26); background: rgba(255,255,255,.08);
+  color: #fff; font-size: 13px; font-weight: 650; font-family: inherit; }
+.wk-chip.on { background: #ffd34d; border-color: #ffd34d; color: #2a1a20; }
+
 .wk-overlay .btn { height: 40px; font-size: 14px; font-weight: 650; background: #ffd34d; color: #2a1a20; }
 .wk-overlay .btn.ghost { background: rgba(255,255,255,.12); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
 .wk-start { margin-top: 2px; }
