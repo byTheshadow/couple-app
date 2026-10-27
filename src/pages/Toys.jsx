@@ -11,6 +11,7 @@ import './toys.css'
 const MilkTea = lazy(() => import('../components/MilkTea'))
 const Crystal = lazy(() => import('../components/Crystal'))
 const PixelPals = lazy(() => import('../components/PixelPals'))
+const WhackGame = lazy(() => import('../components/WhackGame'))
 
 /* ===========================================================================
    小物：一个小抽屉柜。点抽屉前脸拉开，再点里面的东西拿出来。
@@ -97,11 +98,42 @@ function ArtPixel() {
   )
 }
 
+// 第 05 格：柜台 + 三个冒出来的坏顾客
+function ArtWhack() {
+  return (
+    <svg className="il" viewBox="0 0 132 92" {...ART}>
+      <circle cx="36" cy="46" r="11" style={PAPER} />
+      <circle cx="67" cy="40" r="12" style={PAPER} />
+      <circle cx="98" cy="47" r="10.5" style={PAPER} />
+      <path d="M28 39a11 11 0 0 1 16-3" />
+      <path d="M58 32a12 12 0 0 1 18-2" />
+      <path d="M90 41a10.5 10.5 0 0 1 13-2" />
+      <g stroke="none" style={{ fill: 'var(--paperInk)' }}>
+        <circle cx="32" cy="46" r="1.7" />
+        <circle cx="40" cy="46" r="1.7" />
+        <circle cx="62" cy="40" r="1.8" />
+        <circle cx="72" cy="40" r="1.8" />
+        <circle cx="94" cy="47" r="1.6" />
+        <circle cx="102" cy="47" r="1.6" />
+      </g>
+      <path d="M31 53q4 3 8 0" />
+      <path d="M61 47q6 4 11 0" />
+      <path d="M93 54q4 2 7 0" />
+      <path d="M79 24v7M75.5 27.5h7" />
+      <path d="M48 18v6M45 21h6" opacity=".45" />
+      <path d="M12 58h108l-4 7H16z" style={PAPER} />
+      <path d="M16 65h100l-3 15H19z" style={PAPER} />
+      <path d="M40 58v9M84 58v9" opacity=".3" />
+    </svg>
+  )
+}
+
 const DRAWERS = [
   { id: 'doodle', no: '01', name: '涂鸦小纸条', cap: '画一张，寄给 TA', go: '拿出来', Art: ArtDoodle, ready: true },
   { id: 'milktea', no: '02', name: '奶茶店', cap: '做一杯，寄张小票给 TA', go: '拿出来', Art: ArtMilkTea, ready: true },
   { id: 'crystal', no: '03', name: '水晶球', cap: '摇一摇，看看今天', go: '拿出来', Art: ArtCrystal, ready: true },
   { id: 'pixel', no: '04', name: '像素小屋', cap: '看看 TA 的小人在干嘛', go: '拿出来', Art: ArtPixel, ready: true },
+  { id: 'whack', no: '05', name: '气人顾客', cap: '打一打柜台里的坏顾客', go: '拿出来', Art: ArtWhack, ready: true },
 ]
 
 // 涂鸦草稿：只要本机存着草稿，抽屉前脸就挂一个「有草稿」
@@ -118,6 +150,7 @@ export default function Toys() {
   const inMilkTea = sub === 'milktea'
   const inCrystal = sub === 'crystal'
   const inPixel = sub === 'pixel'
+  const inWhack = sub === 'whack'
 
   const [open, setOpen] = useState(null) // 当前拉开的抽屉 id，一次只开一个
   const [touched, setTouched] = useState(false) // 动过抽屉之后，第一格就不再做「提示一下」的小动画
@@ -154,6 +187,7 @@ export default function Toys() {
     else if (d.id === 'milktea') navigate({ pathname: '/toys', search: '?p=milktea' }, { state: { fromHub: true } })
     else if (d.id === 'crystal') navigate({ pathname: '/toys', search: '?p=crystal' }, { state: { fromHub: true } })
     else if (d.id === 'pixel') navigate({ pathname: '/toys', search: '?p=pixel' }, { state: { fromHub: true } })
+    else if (d.id === 'whack') navigate({ pathname: '/toys', search: '?p=whack' }, { state: { fromHub: true } })
   }
 
   // 离开涂鸦页：如果是从抽屉柜点进来的，就退一步（历史记录里不留重复的一条）；直接打开链接进来的，就换成抽屉柜
@@ -188,6 +222,10 @@ export default function Toys() {
       ) : inPixel ? (
         <Suspense fallback={<div className="page center"><div className="h-sub">正在开机…</div></div>}>
           <PixelPals onExit={exitDoodle} />
+        </Suspense>
+      ) : inWhack ? (
+        <Suspense fallback={<div className="page center"><div className="h-sub">正在摆柜台…</div></div>}>
+          <WhackGame onExit={exitDoodle} />
         </Suspense>
       ) : (
         <main className="page">
@@ -246,7 +284,7 @@ export default function Toys() {
         </main>
       )}
 
-      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel} />
+      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel || inWhack} />
     </div>
   )
 }
