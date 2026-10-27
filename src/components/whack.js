@@ -7,7 +7,7 @@
    =========================================================================== */
 
 export const W = 160
-export const H = 120
+export const H = 200
 
 /* ---------- 数值（spec 第 3 节） ---------- */
 export const DURATION = 45
@@ -28,22 +28,44 @@ export const SPAWN_RAMP = 10
 export const BUBBLE_FOR = 1.5
 export const SFX_KEY = 'whack.sfx'
 export const BEST_KEY = 'whack.best'
+export const DAY_COIN_CAP = 60
+export const SWING = 0.2        // 按一下：抬手 → 落锤 → 回手，总共 0.2 s
+export const SWING_LAND = 0.075 // 锤头落到点击处的时间，之后才开始回手
 
-/* ---------- 柜台：6 个洞（spec 第 4 节） ---------- */
-export const HOLES = [
-  { x: 30, y: 68 }, { x: 80, y: 68 }, { x: 130, y: 68 },
-  { x: 30, y: 100 }, { x: 80, y: 100 }, { x: 130, y: 100 },
+/* ---------- 柜台：9 个洞，3 排 × 3 列（spec 第 4 节） ---------- */
+// s = 这一排小人画多大：越靠后越小，9 个洞才看得出纵深
+export const ROWS = [
+  { y: 78, s: 0.78 },
+  { y: 118, s: 0.88 },
+  { y: 158, s: 1 },
 ]
-// 点击区：往上只给到头顶（后排小人小一点，所以少给 5px），两行之间留空，不会点错格
-export const HIT = { half: 13, upBack: 22, upFront: 27, down: 3 }
+export const HOLES = []
+for (const r of ROWS) for (const x of [30, 80, 130]) HOLES.push({ x, y: r.y, s: r.s })
+
+// 点击区：往上只给到头顶（按这一排的大小算），排与排之间留了空，不会点错格
+export const HIT = { half: 13, down: 3 }
+export function hitUp(h) { return Math.round(26 * h.s) }
 
 export function slotAt(x, y) {
   for (let i = 0; i < HOLES.length; i++) {
     const h = HOLES[i]
-    const up = h.y === 68 ? HIT.upBack : HIT.upFront
-    if (x >= h.x - HIT.half && x <= h.x + HIT.half && y >= h.y - up && y <= h.y + HIT.down) return i
+    if (x >= h.x - HIT.half && x <= h.x + HIT.half && y >= h.y - hitUp(h) && y <= h.y + HIT.down) return i
   }
   return -1
+}
+
+/** 锤子跟到哪儿：鼠标移动 / 手指按下 / 键盘 1~6 都走这里 */
+export function aimAt(g, x, y) {
+  if (!g.aim) g.aim = { x: 0, y: 0, on: false }
+  // 夹到锤子放得下的范围：右下留出柄的长度，上面别压 HUD（点击判定用的是原始坐标，不受影响）
+  g.aim.x = clamp(x, 6, W - 28)
+  g.aim.y = clamp(y, 34, H - 24)
+  g.aim.on = true
+}
+
+/** 指针离开画面：锤子收起来（触屏抬手后也走这里） */
+export function aimOff(g) {
+  if (g.aim) g.aim.on = false
 }
 
 /* ---------- 顾客（3 坏 + 1 好） ---------- */
@@ -95,9 +117,12 @@ export function createGame(opts) {
     t: 0, left: DURATION,
     score: 0, combo: 0, bestCombo: 0, coins: 0,
     spawnIn: SPAWN_FROM, spawnCount: 0, lastGood: false,
-    slots: [null, null, null, null, null, null],
+    slots: HOLES.map(() => null),
     floats: [], flash: 0, over: false,
     hits: 0, mistakes: 0, missed: 0, spawned: 0,
+    aim: { x: W / 2, y: H / 2, on: false },
+    swing: null,   // { t, x, y, hit, landed }
+    impact: null,  // { t, x, y } 落锤那一下的火花
   }
   g.rng = mulberry32(g.seed)
   return g
@@ -191,6 +216,22 @@ export function stepGame(g, dt) {
   }
 
   stepFloats(g, dt)
+
+  // 锤子：落锤那一刻记一个火花，挥完就收回抬手姿势
+  if (g.swing) {
+    const sw = g.swing
+    sw.t += dt
+    if (sw.hit && !sw.landed && sw.t >= SWING_LAND) {
+      sw.landed = true
+      g.impact = { t: 0, x: sw.x, y: sw.y }
+    }
+    if (sw.t >= SWING) g.swing = null
+  }
+  if (g.impact) {
+    g.impact.t += dt
+    if (g.impact.t >= 0.16) g.impact = null
+  }
+
   if (g.flash > 0) g.flash = Math.max(0, g.flash - dt)
 
   if (g.left <= 0) {
@@ -205,10 +246,18 @@ export function stepGame(g, dt) {
 export function tapAt(g, x, y) {
   const ev = []
   if (g.over) return ev
+  aimAt(g, x, y) // 键盘 1~6 也要让锤子出现在那一格
   const i = slotAt(x, y)
-  if (i < 0) return ev
-  const c = g.slots[i]
-  if (!c || c.state !== 'up') return ev
+  const c = i < 0 ? null : g.slots[i]
+  const hittable = !!(c && c.state === 'up')
+  g.swing = { t: 0, x, y, hit: hittable, landed: false }
+  g.impact = null
+  ev.push({ type: 'swing' })
+  if (!hittable) {
+    // 空挥：不罚、不扣分，只有很轻的一声「呼」
+    ev.push({ type: 'whiff' })
+    return ev
+  }
   const k = KINDS[c.kind]
   const hx = HOLES[i].x
   const hy = HOLES[i].y
@@ -317,40 +366,43 @@ function drawText(ctx, str, x, y, color) {
 
 /* ---------- 墙 ---------- */
 function drawWall(ctx) {
-  R(ctx, '#f7e8d1', 0, 0, W, 54)
-  for (let x = 4; x < W; x += 16) R(ctx, '#eedcc0', x, 15, 1, 28) // 壁纸竖纹
-  R(ctx, '#ead6b6', 0, 43, W, 11) // 墙裙
-  R(ctx, '#dcc39d', 0, 43, W, 1)
-  R(ctx, '#c9ad86', 0, 52, W, 1)
-  R(ctx, '#d8bd97', 0, 53, W, 1)
+  R(ctx, '#f7e8d1', 0, 14, W, 32)                                   // 壁纸
+  for (let x = 4; x < W; x += 16) R(ctx, '#eedcc0', x, 20, 1, 26)   // 壁纸竖纹
+  R(ctx, '#ead6b6', 0, 46, W, 14)                                   // 墙裙
+  R(ctx, '#dcc39d', 0, 46, W, 1)
+  R(ctx, '#c9ad86', 0, 58, W, 1)
+  R(ctx, '#d8bd97', 0, 59, W, 1)
 }
 
 /* ---------- 柜台 ---------- */
 function drawCounter(ctx) {
-  R(ctx, '#6f452c', 0, 54, W, 2)
-  R(ctx, '#c08450', 0, 56, W, 1)
-  R(ctx, '#b07a45', 0, 57, W, 47)
-  for (let x = 0; x < W; x += 40) R(ctx, '#a06b3b', x, 57, 1, 47)
-  R(ctx, '#a06b3b', 0, 78, W, 1)
-  R(ctx, '#c08450', 0, 79, W, 1)
+  R(ctx, '#6f452c', 0, 60, W, 2)
+  R(ctx, '#c08450', 0, 62, W, 1)
+  R(ctx, '#b07a45', 0, 63, W, 113)
+  for (let x = 0; x < W; x += 40) R(ctx, '#a06b3b', x, 63, 1, 113)
+  // 两排之间的浅分隔线：一眼看出是三排
+  R(ctx, '#a06b3b', 0, 98, W, 1)
+  R(ctx, '#c08450', 0, 99, W, 1)
+  R(ctx, '#a06b3b', 0, 138, W, 1)
+  R(ctx, '#c08450', 0, 139, W, 1)
   // 柜台上的一小盆绿植（在最后一格右边，不挡点击区）
-  R(ctx, '#c96a4a', 147, 100, 8, 5)
-  R(ctx, '#e08a63', 146, 99, 10, 2)
-  R(ctx, '#5b8a4a', 149, 92, 4, 5)
-  R(ctx, '#6fa25a', 147, 94, 3, 3)
-  R(ctx, '#4e7a40', 151, 95, 3, 3)
+  R(ctx, '#c96a4a', 147, 166, 8, 5)
+  R(ctx, '#e08a63', 146, 165, 10, 2)
+  R(ctx, '#5b8a4a', 149, 158, 4, 5)
+  R(ctx, '#6fa25a', 147, 160, 3, 3)
+  R(ctx, '#4e7a40', 151, 161, 3, 3)
   // 前脸（比台面深一档，才看得出是「立起来的那一面」）
-  R(ctx, '#5c3620', 0, 104, W, 3)
-  R(ctx, '#d0985f', 0, 104, W, 1)
-  R(ctx, '#6b3f24', 0, 107, W, 9)
-  for (let x = 0; x < W; x += 32) R(ctx, '#57311c', x, 107, 1, 9)
-  R(ctx, '#432513', 0, 116, W, 4)
-  R(ctx, '#331d0f', 0, 119, W, 1)
+  R(ctx, '#5c3620', 0, 176, W, 3)
+  R(ctx, '#d0985f', 0, 176, W, 1)
+  R(ctx, '#6b3f24', 0, 179, W, 17)
+  for (let x = 0; x < W; x += 32) R(ctx, '#57311c', x, 179, 1, 17)
+  R(ctx, '#432513', 0, 196, W, 3)
+  R(ctx, '#331d0f', 0, 199, W, 1)
   // 前脸上贴的小票
-  R(ctx, '#fffdf4', 6, 107, 14, 8)
-  R(ctx, '#d8cfc0', 8, 109, 10, 1)
-  R(ctx, '#d8cfc0', 8, 111, 8, 1)
-  R(ctx, '#d8cfc0', 8, 113, 9, 1)
+  R(ctx, '#fffdf4', 6, 179, 14, 8)
+  R(ctx, '#d8cfc0', 8, 181, 10, 1)
+  R(ctx, '#d8cfc0', 8, 183, 8, 1)
+  R(ctx, '#d8cfc0', 8, 185, 9, 1)
 }
 
 /* ---------- 洞 ---------- */
@@ -373,7 +425,7 @@ function drawHole(ctx, h) {
 function drawCustomer(ctx, c, g) {
   const k = KINDS[c.kind]
   const h = HOLES[c.slot]
-  const s = h.y === 68 ? 0.82 : 1 // 后排小一点，看出前后
+  const s = h.s // 这一排的大小（越靠后越小）
   const rise = c.state === 'up' ? Math.min(1, c.age / RISE) : 1
   let dy = (1 - eas(rise)) * 16
   let sx = 1
@@ -499,7 +551,7 @@ function wrapText(t) {
 /** 气泡的框：drawBubble 和「谁说话」的判断共用这一套算法 */
 function bubbleBox(c) {
   const h = HOLES[c.slot]
-  const s = h.y === 68 ? 0.82 : 1
+  const s = h.s
   const lines = wrapText(c.text)
   const w = Math.max(...lines.map((l) => l.length)) * 9 + 6
   const hh = lines.length * 12 + 5
@@ -565,16 +617,114 @@ function drawHud(ctx, g) {
    一帧
    =========================================================================== */
 
+/* ===========================================================================
+   锤子：木柄 + 铁头，跟着指针；按下去挥一下
+   打桩环境没有 ctx.rotate，所以不旋转贴图：握点钉在指针右下，锤头绕着它转。
+   =========================================================================== */
+
+const WOOD = ['#c08a52', '#a26b39', '#4a2c16']                 // 高光 / 木色 / 描边
+const RUB = ['#ff8f7d', '#e0524a', '#a83029', '#3a1512']       // 高光 / 胶红 / 暗面 / 描边
+
+/** 从握点 (gx,gy) 到锤头 (hx,hy) 画一根 3px 木柄，再画一个 14x9 的铁头 */
+function drawHammerAt(ctx, hx, hy, gx, gy) {
+  const n = Math.max(4, Math.round(Math.hypot(hx - gx, hy - gy) / 2))
+  const x0 = Math.round(hx) - 10
+  const y0 = Math.round(hy) - 7
+
+  // 影子先落，锤子才不像贴在背景上（比锤头大一圈、往右下偏）
+  ctx.save()
+  ctx.globalAlpha = 0.2
+  R(ctx, '#1e100c', x0 + 3, y0 + 5, 21, 13)
+  ctx.restore()
+
+  // 木柄：5px 深色描边 + 2px 木色，米色墙和木柜台上都认得出来
+  for (let i = 0; i < n; i++) {
+    const k = i / (n - 1)
+    R(ctx, WOOD[2], gx + (hx - gx) * k - 2, gy + (hy - gy) * k - 2, 5, 5)
+  }
+  for (let i = 0; i < n; i++) {
+    const k = i / (n - 1)
+    const x = gx + (hx - gx) * k
+    const y = gy + (hy - gy) * k
+    R(ctx, WOOD[1], x - 1, y - 1, 2, 2)
+    if (i % 3 === 0) R(ctx, WOOD[0], x - 1, y - 1, 1, 1)
+  }
+
+  // 胶锤头：20 x 14，四角收 1px，2px 深色描边
+  R(ctx, RUB[3], x0 + 1, y0, 18, 14)
+  R(ctx, RUB[3], x0, y0 + 1, 20, 12)
+  R(ctx, RUB[1], x0 + 2, y0 + 2, 16, 10)
+  R(ctx, RUB[0], x0 + 2, y0 + 2, 16, 3)   // 受光的顶面
+  R(ctx, RUB[2], x0 + 2, y0 + 9, 16, 3)   // 背光的底面
+  R(ctx, RUB[0], x0 + 2, y0 + 2, 3, 8)    // 左侧反光
+  R(ctx, RUB[0], x0 + 6, y0 + 5, 8, 2)    // 胶面上的一道亮带
+  R(ctx, '#ffc3ba', x0 + 4, y0 + 3, 3, 2)
+}
+
+/** 抬手（锤头在指针左上）→ 落锤（锤头压在指针上）→ 回手 */
+function drawHammer(ctx, g) {
+  if (!g.aim || !g.aim.on) return
+  const ax = g.aim.x
+  const ay = g.aim.y
+  // 握点在指针右下，锤子举在指针右侧：不挡顾客、不压气泡，手指也盖不住它
+  const gx = ax + 22
+  const gy = ay + 20
+  const bob = g.reduce ? 0 : Math.round(Math.sin(g.t * 2.6))
+  const upX = ax + 17
+  const upY = ay + 4 + bob
+  const hitX = ax
+  const hitY = ay - 4
+  let hx = upX
+  let hy = upY
+
+  if (g.swing) {
+    const p = Math.min(1, g.swing.t / SWING)
+    const land = SWING_LAND / SWING
+    if (p < 0.18) {
+      const q = eas(p / 0.18)                     // 蓄力：往右上再抬一点
+      hx = upX + 2 * q
+      hy = upY - 3 * q
+    } else if (p < land) {
+      const q = eas((p - 0.18) / (land - 0.18))   // 砸下去
+      hx = upX + 2 + (hitX - upX - 2) * q
+      hy = upY - 3 + (hitY - upY + 3) * q
+    } else {
+      const q = eas((p - land) / (1 - land))      // 回手
+      hx = hitX + (upX - hitX) * q
+      hy = hitY + (upY - hitY) * q
+    }
+  }
+  drawHammerAt(ctx, hx, hy, gx, gy)
+}
+
+/** 落锤的火花：8 个亮点向外散开，0.16 s 消失 */
+function drawImpact(ctx, g) {
+  const im = g.impact
+  if (!im) return
+  const p = Math.min(1, im.t / 0.16)
+  const rad = 5 + Math.round(p * 11)
+  const cols = ['#fff3b0', '#ffd34d', '#ff9d4d']
+  ctx.save()
+  ctx.globalAlpha = Math.max(0, 1 - p * p)
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + 0.4
+    const rr = i % 2 ? rad : rad * 0.66
+    R(ctx, cols[i % cols.length], im.x + Math.cos(a) * rr - 1, im.y + Math.sin(a) * rr - 1, 3, 3)
+  }
+  R(ctx, '#fff8dc', im.x - 2, im.y - 2, 5, 5)
+  ctx.restore()
+}
+
 export function drawGame(ctx, g) {
   drawWall(ctx)
   drawCounter(ctx)
   for (const h of HOLES) drawHole(ctx, h)
-  // 后排先画（远），前排后画（近），气泡再盖在上面
-  for (const c of g.slots) if (c && HOLES[c.slot].y === 68) drawCustomer(ctx, c, g)
-  for (const c of g.slots) if (c && HOLES[c.slot].y === 100) drawCustomer(ctx, c, g)
+  // 从后排往前排画（HOLES 本来就是按排排好的），气泡再盖在上面
+  for (const c of g.slots) if (c) drawCustomer(ctx, c, g)
   // 谁说话：最新的那位优先，但如果他的气泡会压到别人身上，就退给下一个能说清楚的
   // （同一列前后排都有人时，谁的气泡都会糊住另一个人，这时候宁可不显示）
   const talkers = g.slots.filter((c) => c && c.state === 'up' && c.age <= BUBBLE_FOR).sort((a, b) => a.age - b.age)
+  drawHammer(ctx, g)
   const rects = g.slots.filter(Boolean).map((c) => {
     const h = HOLES[c.slot]
     return { c, x: h.x - 10, y: h.y - 30, w: 20, h: 33 }
@@ -583,6 +733,7 @@ export function drawGame(ctx, g) {
     if (bubbleFits(t, rects)) { drawBubble(ctx, t); break }
   }
   for (const f of g.floats) drawFloat(ctx, f)
+  drawImpact(ctx, g)
   if (g.flash > 0) {
     ctx.save()
     ctx.globalAlpha = (g.reduce ? 0.14 : 0.26) * (g.flash / 0.35)
@@ -654,6 +805,29 @@ export function createSfx() {
     o.stop(t0 + dur + 0.03)
   }
 
+  /** 一小段噪声过带通：挥空的「呼」和落锤的「咚」用它，比纯振荡器更像物理的声音 */
+  function noiseBurst(dur, gain, freq) {
+    const c = ctxOf()
+    if (!c || !master) return
+    const n = Math.max(1, Math.floor(c.sampleRate * dur))
+    let buf = null
+    try { buf = c.createBuffer(1, n, c.sampleRate) } catch (e) { return }
+    const d = buf.getChannelData(0)
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n)
+    const src = c.createBufferSource()
+    src.buffer = buf
+    const bp = c.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.value = freq || 1200
+    bp.Q.value = 1.1
+    const gn = c.createGain()
+    gn.gain.value = gain == null ? 0.3 : gain
+    src.connect(bp)
+    bp.connect(gn)
+    gn.connect(master)
+    src.start()
+  }
+
   return {
     get on() { return on },
     setOn(v) {
@@ -672,6 +846,13 @@ export function createSfx() {
         tone(1320, null, 0.09, 'square', 0.22, 0.09)
       } else if (kind === 'wrong') {
         tone(150, 90, 0.22, 'sawtooth', 0.45)
+      } else if (kind === 'swing') {
+        noiseBurst(0.06, 0.13, 1500)          // 挥锤的风声，很轻
+      } else if (kind === 'whack') {
+        tone(150, 62, 0.09, 'sine', 0.5)      // 落锤的「咚」
+        noiseBurst(0.05, 0.24, 620)
+      } else if (kind === 'whiff') {
+        noiseBurst(0.05, 0.09, 900)           // 打空了：一点空气声，别吵
       } else if (kind === 'miss') {
         tone(220, null, 0.1, 'sine', 0.35)
       } else if (kind === 'start') {
