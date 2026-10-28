@@ -1,0 +1,198 @@
+/* 小物 · 捏泡泡：独立文件，由 BubbleWrap.jsx 引入。
+   故意不跟像素风：这是一张真泡泡纸。固定奶油纸色 + 真圆角 + 内阴影。
+   没有 backdrop-filter、没有大范围模糊、没有 infinite 动画。 */
+
+.bw-root {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #e7dcc9;
+  color: #2a2018;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.bw-ui {
+  width: 100%;
+  max-width: 430px;
+  height: 100%;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bw-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.bw-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(91, 64, 37, .17);
+  background: rgba(255, 252, 243, .58);
+  color: #3a2b1e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0;
+  box-shadow: 0 2px 7px rgba(96, 72, 45, .08), inset 0 1px 0 rgba(255, 255, 255, .7);
+}
+
+.bw-icon.off { opacity: .52; }
+.bw-icon:active { transform: scale(.94); }
+
+.bw-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bw-title h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 21px;
+  line-height: 1.12;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+.bw-title span {
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(42, 32, 24, .52);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bw-reset {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 19px;
+  border: 1px solid rgba(91, 64, 37, .19);
+  background: rgba(255, 252, 243, .72);
+  color: #3a2b1e;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: .03em;
+  box-shadow: 0 2px 7px rgba(96, 72, 45, .09), inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.bw-reset:active { transform: scale(.96); }
+
+.bw-sheet {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(10, minmax(0, 1fr));
+  gap: clamp(4px, 1.35vw, 7px);
+  padding: clamp(7px, 2.5vw, 12px);
+  border-radius: 19px;
+  border: 1px solid rgba(104, 76, 43, .18);
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 255, 255, .52), transparent 31%),
+    radial-gradient(circle at 86% 90%, rgba(255, 255, 255, .3), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(113, 83, 48, .022) 0 1px, transparent 1px 4px),
+    #efe6d6;
+  box-shadow:
+    0 12px 28px rgba(87, 62, 34, .15),
+    0 2px 5px rgba(87, 62, 34, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .82);
+  touch-action: none;
+  overflow: hidden;
+  animation: bwIn .12s ease-out both;
+}
+
+@keyframes bwIn {
+  from { opacity: .28; }
+  to { opacity: 1; }
+}
+
+.bw-cell {
+  min-width: 0;
+  min-height: 0;
+  border-radius: 50%;
+  background: radial-gradient(120% 120% at 34% 28%, #fff 0 10%, #f6f0e4 42%, #ded3c0 100%);
+  box-shadow:
+    inset 0 -4px 7px rgba(0, 0, 0, .10),
+    inset 0 4px 8px rgba(255, 255, 255, .95),
+    0 1px 2px rgba(0, 0, 0, .05);
+  transition: transform .1s ease, background .12s ease, box-shadow .12s ease;
+}
+
+.bw-cell.on {
+  background:
+    repeating-linear-gradient(112deg, rgba(0, 0, 0, .07) 0 1px, transparent 1px 6px),
+    radial-gradient(120% 120% at 38% 32%, #e9dfcd 0 18%, #d5c9b4 100%);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, .22),
+    inset 0 -1px 1px rgba(255, 255, 255, .5);
+  transform: scale(.95);
+}
+
+.bw-cell.on::after {
+  content: '';
+  display: block;
+  width: 58%;
+  height: 42%;
+  margin: 29% auto 0;
+  border-radius: 50%;
+  border-top: 1px solid rgba(74, 55, 33, .22);
+  transform: rotate(-14deg);
+}
+
+.bw-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 3px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: rgba(42, 32, 24, .56);
+}
+
+.bw-count b {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #3a2b1e;
+}
+
+.bw-note {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: rgba(42, 32, 24, .4);
+}
+
+@media (max-height: 640px) {
+  .bw-ui { gap: 8px; padding-top: calc(env(safe-area-inset-top) + 7px); padding-bottom: calc(env(safe-area-inset-bottom) + 7px); }
+  .bw-top { min-height: 38px; }
+  .bw-title h1 { font-size: 19px; }
+  .bw-title span { display: none; }
+  .bw-icon { width: 36px; height: 36px; }
+  .bw-reset { height: 34px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bw-sheet { animation: none; }
+  .bw-cell { transition: none; }
+  .bw-cell.on { transform: none; }
+}
