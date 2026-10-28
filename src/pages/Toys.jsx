@@ -12,6 +12,8 @@ const MilkTea = lazy(() => import('../components/MilkTea'))
 const Crystal = lazy(() => import('../components/Crystal'))
 const PixelPals = lazy(() => import('../components/PixelPals'))
 const WhackGame = lazy(() => import('../components/WhackGame'))
+const BubbleWrap = lazy(() => import('../components/BubbleWrap'))
+const MustacheStudio = lazy(() => import('../components/MustacheStudio'))
 
 /* ===========================================================================
    小物：一个小抽屉柜。点抽屉前脸拉开，再点里面的东西拿出来。
@@ -128,12 +130,80 @@ function ArtWhack() {
   )
 }
 
+
+// 第 06 格：一张泡泡纸，几颗已经捏瘪了
+function ArtBubble() {
+  return (
+    <svg className="il" viewBox="0 0 132 92" {...ART}>
+      <rect x="16" y="13" width="100" height="70" rx="8" style={PAPER} />
+      <g stroke="none" style={{ fill: '#f7f1e5' }}>
+        <circle cx="27" cy="26" r="6.2" />
+        <circle cx="43" cy="26" r="6.2" />
+        <circle cx="59" cy="26" r="6.2" />
+        <circle cx="75" cy="26" r="6.2" />
+        <circle cx="91" cy="26" r="6.2" />
+        <circle cx="107" cy="26" r="6.2" />
+        <circle cx="27" cy="44" r="6.2" />
+        <circle cx="43" cy="44" r="6.2" />
+        <circle cx="59" cy="44" r="6.2" />
+        <circle cx="91" cy="44" r="6.2" />
+        <circle cx="107" cy="44" r="6.2" />
+        <circle cx="27" cy="62" r="6.2" />
+        <circle cx="59" cy="62" r="6.2" />
+        <circle cx="75" cy="62" r="6.2" />
+        <circle cx="107" cy="62" r="6.2" />
+      </g>
+      <g fill="none" opacity=".42">
+        <circle cx="75" cy="44" r="6.2" />
+        <circle cx="43" cy="62" r="6.2" />
+        <circle cx="91" cy="62" r="6.2" />
+      </g>
+      <g stroke="none" style={{ fill: '#fff' }} opacity=".9">
+        <circle cx="25" cy="24" r="1.6" />
+        <circle cx="41" cy="24" r="1.6" />
+        <circle cx="57" cy="24" r="1.6" />
+        <circle cx="73" cy="24" r="1.6" />
+        <circle cx="25" cy="42" r="1.6" />
+        <circle cx="57" cy="42" r="1.6" />
+        <circle cx="25" cy="60" r="1.6" />
+        <circle cx="57" cy="60" r="1.6" />
+      </g>
+      <path d="M72 42l6 4M73 47l5-3" opacity=".4" />
+      <path d="M40 60l6 4M41 65l5-3" opacity=".4" />
+      <path d="M88 60l6 4M89 65l5-3" opacity=".4" />
+      <path d="M24 78h84" opacity=".22" />
+    </svg>
+  )
+}
+
+// 第 07 格：一张顾客脸，已经贴上两撇胡和一颗痘
+function ArtMustache() {
+  return (
+    <svg className="il" viewBox="0 0 132 92" {...ART}>
+      <rect x="17" y="8" width="98" height="78" rx="8" style={PAPER} />
+      <circle cx="66" cy="44" r="24" style={{ fill: '#f2c7a0' }} />
+      <path d="M42 42q1-23 24-23 22 0 24 23" style={{ fill: '#3b2b4a' }} stroke="none" />
+      <path d="M45 32q9-9 21-9 13 0 21 9" style={{ fill: '#58416b' }} stroke="none" />
+      <circle cx="56" cy="45" r="1.8" style={{ fill: 'var(--paperInk)' }} stroke="none" />
+      <circle cx="76" cy="45" r="1.8" style={{ fill: 'var(--paperInk)' }} stroke="none" />
+      <path d="M62 49l2 4h4l2-4" opacity=".5" />
+      <path d="M47 57q8-8 19-2 10-6 19 2-9 8-19 2-10 6-19-2z" style={{ fill: '#3a2418' }} stroke="none" />
+      <path d="M42 63q-7 0-9-8M90 63q7 0 9-8" strokeWidth="2.4" />
+      <circle cx="83" cy="53" r="2.6" style={{ fill: '#d9534f' }} stroke="none" />
+      <path d="M29 76q37 8 74 0" opacity=".24" />
+      <path d="M26 84h80" opacity=".2" />
+    </svg>
+  )
+}
+
 const DRAWERS = [
   { id: 'doodle', no: '01', name: '涂鸦小纸条', cap: '画一张，寄给 TA', go: '拿出来', Art: ArtDoodle, ready: true },
   { id: 'milktea', no: '02', name: '奶茶店', cap: '做一杯，寄张小票给 TA', go: '拿出来', Art: ArtMilkTea, ready: true },
   { id: 'crystal', no: '03', name: '水晶球', cap: '摇一摇，看看今天', go: '拿出来', Art: ArtCrystal, ready: true },
   { id: 'pixel', no: '04', name: '像素小屋', cap: '看看 TA 的小人在干嘛', go: '拿出来', Art: ArtPixel, ready: true },
   { id: 'whack', no: '05', name: '气人顾客', cap: '打一打柜台里的坏顾客', go: '拿出来', Art: ArtWhack, ready: true },
+  { id: 'bubble', no: '06', name: '捏泡泡', cap: '一张泡泡纸，划过去一串啵', go: '拿出来', Art: ArtBubble, ready: true },
+  { id: 'mustache', no: '07', name: '画小胡子', cap: '给顾客画点奇怪的东西', go: '拿出来', Art: ArtMustache, ready: true },
 ]
 
 // 涂鸦草稿：只要本机存着草稿，抽屉前脸就挂一个「有草稿」
@@ -151,6 +221,8 @@ export default function Toys() {
   const inCrystal = sub === 'crystal'
   const inPixel = sub === 'pixel'
   const inWhack = sub === 'whack'
+  const inBubble = sub === 'bubble'
+  const inMustache = sub === 'mustache'
 
   const [open, setOpen] = useState(null) // 当前拉开的抽屉 id，一次只开一个
   const [touched, setTouched] = useState(false) // 动过抽屉之后，第一格就不再做「提示一下」的小动画
@@ -188,6 +260,8 @@ export default function Toys() {
     else if (d.id === 'crystal') navigate({ pathname: '/toys', search: '?p=crystal' }, { state: { fromHub: true } })
     else if (d.id === 'pixel') navigate({ pathname: '/toys', search: '?p=pixel' }, { state: { fromHub: true } })
     else if (d.id === 'whack') navigate({ pathname: '/toys', search: '?p=whack' }, { state: { fromHub: true } })
+    else if (d.id === 'bubble') navigate({ pathname: '/toys', search: '?p=bubble' }, { state: { fromHub: true } })
+    else if (d.id === 'mustache') navigate({ pathname: '/toys', search: '?p=mustache' }, { state: { fromHub: true } })
   }
 
   // 离开涂鸦页：如果是从抽屉柜点进来的，就退一步（历史记录里不留重复的一条）；直接打开链接进来的，就换成抽屉柜
@@ -226,6 +300,14 @@ export default function Toys() {
       ) : inWhack ? (
         <Suspense fallback={<div className="page center"><div className="h-sub">正在摆柜台…</div></div>}>
           <WhackGame onExit={exitDoodle} />
+        </Suspense>
+      ) : inBubble ? (
+        <Suspense fallback={<div className="page center"><div className="h-sub">正在铺泡泡纸…</div></div>}>
+          <BubbleWrap onExit={exitDoodle} />
+        </Suspense>
+      ) : inMustache ? (
+        <Suspense fallback={<div className="page center"><div className="h-sub">正在找顾客…</div></div>}>
+          <MustacheStudio onExit={exitDoodle} />
         </Suspense>
       ) : (
         <main className="page">
@@ -284,7 +366,7 @@ export default function Toys() {
         </main>
       )}
 
-      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel || inWhack} />
+      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel || inWhack || inBubble || inMustache} />
     </div>
   )
 }

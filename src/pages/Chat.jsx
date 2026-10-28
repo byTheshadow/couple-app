@@ -4,7 +4,7 @@ import { useStatus } from '../lib/hooks'
 import { useChat } from '../lib/chat'
 import { holdBgPause } from '../lib/perf'
 import { useTheme } from '../lib/theme'
-import { supabase } from '../lib/supabase'
+import { sendImageToChat } from '../lib/chatImage'
 import { Svg } from '../components/Icon'
 import TabBar from '../components/TabBar'
 import './chat.css'
@@ -15,7 +15,6 @@ const MENU_W = 156
 const MENU_ITEM = 44
 const MAX_IMG_PICK = 9 // 一次最多选几张
 const MAX_ORIGINAL = 25 * 1024 * 1024 // 原图上限；压缩后会小很多
-const MAX_UPLOAD = 6 * 1024 * 1024 // 压缩后的上限
 
 const pad = (n) => String(n).padStart(2, '0')
 const hm = (iso) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
@@ -28,23 +27,6 @@ const dayLabel = (iso) => {
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日`
 }
 const initial = (s) => (s || '?').trim().slice(0, 1).toUpperCase()
-
-// 上传前在本地把图片压小：最长边不超过 1600px，转成 JPEG（跟相册那边的压缩逻辑一致）
-async function compressImage(file, maxDim = 1600, quality = 0.82) {
-  try {
-    const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
-    const w = Math.round(bitmap.width * scale)
-    const h = Math.round(bitmap.height * scale)
-    const canvas = document.createElement('canvas')
-    canvas.width = w; canvas.height = h
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h)
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
-    return blob || file
-  } catch {
-    return file
-  }
-}
 
 export default function Chat() {
   const { me, partner } = useAuth()
@@ -300,16 +282,14 @@ export default function Chat() {
       const img = imgs[i]
       const caption = i === imgs.length - 1 ? t : ''
       const replyFor = i === 0 ? rp : null
-      let path = ''
       try {
-        const blob = await compressImage(img.file)
-        if (blob.size > MAX_UPLOAD) throw new Error('too big')
-        path = `${myId}/${img.key}.jpg`
-        const { error: upErr } = await supabase.storage.from('chat-images').upload(path, blob, { contentType: 'image/jpeg' })
-        if (upErr) throw upErr
-        const { data } = supabase.storage.from('chat-images').getPublicUrl(path)
-        const r = await chat.send(caption, replyFor, null, data.publicUrl)
-        if (r.error) { await supabase.storage.from('chat-images').remove([path]); throw new Error(r.error) }
+        // 聊天页把自己的 chat.send 传进去：保留乐观发送、失败重发、临时消息替换
+        const r = await sendImageToChat(img.file, caption, myId, {
+          key: img.key,
+          replyTo: replyFor,
+          send: chat.send,
+        })
+        if (r.error) throw new Error(r.error)
         sentCount += 1
         URL.revokeObjectURL(img.preview)
         setStagedImgs((cur) => cur.filter((p) => p.key !== img.key))
