@@ -41,7 +41,13 @@ export function applyDusk() {
 
 // 一加载就写好颜色（不管当前是不是晚霞主题，这样切过去时颜色是现成的）
 applyDusk()
+const isDusk = () => document.documentElement.dataset.theme === 'dusk'
+const tick = () => { if (isDusk()) applyDusk() }
+
 if (typeof window !== 'undefined') {
-  setInterval(applyDusk, 60000)
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) applyDusk() })
+  // 以前是 1 分钟一次：颜色每次变一点、过渡要跑 40 秒，等于整屏渐变一直在重画。
+  // 5 分钟对一次表就够（色的变化肉眼看不出来），省下来的都是电。
+  setInterval(tick, 5 * 60 * 1000)
+  // 回到前台立刻对一次表（补上离开这段时间的颜色变化）
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick() })
 }

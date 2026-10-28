@@ -76,6 +76,8 @@ svg { display: block; }
 .aurora { position: absolute; left: 50%; top: 40%; width: 110vmax; height: 110vmax; margin: -55vmax 0 0 -55vmax; opacity: .3; filter: blur(55px);
   background: conic-gradient(from 0deg, transparent, var(--b1), transparent 28%, var(--b4), transparent 62%, var(--b2), transparent); animation: spin 80s linear infinite; }
 html[data-bg-paused] .blob, html[data-bg-paused] .aurora { animation-play-state: paused; }
+/* 停住的时候把 will-change 也放掉：不需要动画了，没必要一直占着几块大贴图 */
+html[data-bg-paused] .blob { will-change: auto; }
 @keyframes morph {
   0%, 100% { border-radius: 58% 42% 61% 39% / 45% 55% 45% 55%; rotate: 0deg; }
   33% { border-radius: 40% 60% 45% 55% / 62% 38% 62% 38%; rotate: 40deg; }

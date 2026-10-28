@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAuth } from '../lib/auth'
 import { useStatus } from '../lib/hooks'
 import { useChat } from '../lib/chat'
+import { holdBgPause } from '../lib/perf'
 import { useTheme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 import { Svg } from '../components/Icon'
@@ -80,6 +81,7 @@ export default function Chat() {
   const blurTimer = useRef(null)
   const toastTimer = useRef(null)
   const lp = useRef({ t: 0, x: 0, y: 0, fired: false })
+  const scrollRaf = useRef(0)
   const readMap = useRef(new Map())
 
   const say = useCallback((t) => {
@@ -87,7 +89,12 @@ export default function Chat() {
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(''), 1900)
   }, [])
-  useEffect(() => () => { clearTimeout(toastTimer.current); clearTimeout(blurTimer.current); clearTimeout(lp.current.t) }, [])
+  useEffect(() => () => {
+    clearTimeout(toastTimer.current)
+    clearTimeout(blurTimer.current)
+    clearTimeout(lp.current.t)
+    cancelAnimationFrame(scrollRaf.current)
+  }, [])
 
    // ---------- 页面环境：锁住 html + body 的滚动（只锁 body 不够，iOS 聚焦输入框时
   // 还是会把 <html> 自己滚一下，跟下面 visualViewport 的矫正打架，就是乱弹的根源）----------
@@ -127,13 +134,10 @@ export default function Chat() {
   }, [])
 
   // 聊天页待得比较久，背景的呼吸/漂移动画一直在跑，叠加气泡的 backdrop-filter 比较费电；
-  // 在聊天页时把背景暂停成静止的（玻璃效果还在，只是不再动），复用现有的 data-bg-paused 机制
-  useEffect(() => {
-    const html = document.documentElement
-    const already = html.hasAttribute('data-bg-paused')
-    if (!already) html.setAttribute('data-bg-paused', '')
-    return () => { if (!already && !document.hidden) html.removeAttribute('data-bg-paused') }
-  }, [])
+  // 在聊天页时把背景暂停成静止的（玻璃效果还在，只是不再动）。
+  // 这里必须走引用计数：以前直接开关 html[data-bg-paused]，切一次后台再回来时
+  // perf.js 会把它关掉，聊天页的暂停就丢了（要退出重进才恢复）——用久了发烫的一个来源。
+  useEffect(() => holdBgPause('chat'), [])
 
   useEffect(() => {
     const onVis = () => setVisible(document.visibilityState === 'visible')
@@ -151,15 +155,20 @@ export default function Chat() {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
   }, [])
 
+  // 滚动事件一秒能来上百次；这里合并成一帧算一次，避免每来一个事件就读一遍布局
   const onScroll = () => {
-    const nb = nearBottom()
-    stick.current = nb
-    setAtBottom((v) => (v === nb ? v : nb))
-    const el = listRef.current
-    const isFar = el ? el.scrollHeight - el.scrollTop - el.clientHeight > 220 : false
-    setFar((v) => (v === isFar ? v : isFar))
-    if (nb) setPending(0)
     clearTimeout(lp.current.t)
+    if (scrollRaf.current) return
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = 0
+      const el = listRef.current
+      const nb = nearBottom()
+      stick.current = nb
+      setAtBottom((v) => (v === nb ? v : nb))
+      const isFar = el ? el.scrollHeight - el.scrollTop - el.clientHeight > 220 : false
+      setFar((v) => (v === isFar ? v : isFar))
+      if (nb) setPending(0)
+    })
   }
 
   // 顶栏 / 底栏的高度写成 CSS 变量，消息列表据此留白；高度变化（键盘、回复条、导航收起）时贴底的话继续贴底
@@ -402,23 +411,97 @@ export default function Chat() {
       const day = dayKey(m.created_at)
       if (day !== lastDay) { out.push({ type: 'date', key: `d-${day}`, label: dayLabel(m.created_at) }); lastDay = day }
       if (m.recalled_at) { out.push({ type: 'sys', key: m._k || m.id, m }); return }
-      out.push({ type: 'msg', key: m._k || m.id, m, first: !near(msgs[i - 1], m), last: !near(m, msgs[i + 1]) })
+      out.push({ type: 'msg', key: m._k || m.id, m, time: hm(m.created_at), first: !near(msgs[i - 1], m), last: !near(m, msgs[i + 1]) })
     })
     return out
   }, [msgs])
 
-  const quoteOf = (m) => {
+  // 引用卡片要按 id 找原消息：先建一次表，别再每条都 find 一遍
+  const byId = useMemo(() => {
+    const map = new Map()
+    for (const m of msgs) map.set(m.id, m)
+    return map
+  }, [msgs])
+
+  const quoteOf = useCallback((m) => {
     if (!m.reply_to) return null
-    const q = msgs.find((x) => x.id === m.reply_to)
+    const q = byId.get(m.reply_to)
     if (!q) return { gone: true, who: '', text: '更早的消息', id: m.reply_to }
     const text = q.recalled_at ? '此讯息已被收回' : (q.body || (q.image_url ? '[图片]' : ''))
     return { gone: !!q.recalled_at, who: q.sender_id === myId ? '你' : 'TA', text, id: q.id }
-  }
+  }, [byId, myId])
 
   const pname = partner?.display_name || 'TA'
-  const avatarStyle = ps?.avatar_url ? { backgroundImage: `url(${ps.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined
+  const avatarUrl = ps?.avatar_url || ''
+  const avatarStyle = useMemo(() => (avatarUrl
+    ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : undefined), [avatarUrl])
 
-  const miniAvatar = () => <div className="ch-mini" style={avatarStyle}>{!ps?.avatar_url && initial(pname)}</div>
+  const miniAvatar = useCallback(() => (
+    <div className="ch-mini" style={avatarStyle}>{!avatarUrl && initial(pname)}</div>
+  ), [avatarStyle, avatarUrl, pname])
+
+  const menuId = menu ? menu.id : null
+
+  // 消息行整体 memo 掉：打字（text / typing / 待发图片）只重渲染输入栏和外壳，
+  // 不再把整条消息列表重新算一遍——长聊天记录下手感差别最明显的一处。
+  const rows = useMemo(() => items.map((it) => {
+    if (it.type === 'date') return <div key={it.key} className="ch-date">{it.label}</div>
+    const m = it.m
+    const mineMsg = m.sender_id === myId
+    if (it.type === 'sys') {
+      return (
+        <div key={it.key} data-row={m.id} className={`ch-sys${flashId === m.id ? ' flash' : ''}`}>
+          {mineMsg ? '你' : `${pname} `}收回了一则讯息
+        </div>
+      )
+    }
+    const q = quoteOf(m)
+    const cls = `ch-row ${mineMsg ? 'me' : 'ta'}${it.first ? ' first' : ''}${it.last ? ' last' : ''}${chat.fresh && (chat.fresh === m.id || chat.fresh === m._k) ? ' new' : ''}${flashId === m.id ? ' flash' : ''}${m.state === 'failed' ? ' failed' : ''}`
+    const bub = (
+      <div className={`ch-bub${m.image_url ? ' ch-bub-img' : ''}${menuId === m.id ? ' pressed' : ''}${m.state === 'sending' ? ' sending' : ''}`} data-id={m.id}>
+        {q && (
+          <button type="button" className={`ch-q${q.gone ? ' gone' : ''}`} data-q={q.id}>
+            {q.who && <b>{q.who}</b>}<span>{q.text}</span>
+          </button>
+        )}
+        {m.image_url && (
+          <img
+            className="ch-img" src={m.image_url} alt="" loading="lazy" decoding="async"
+            onClick={(e) => { e.stopPropagation(); setViewImg(m.image_url) }}
+          />
+        )}
+        {m.body && (m.image_url ? <div className="ch-cap">{m.body}</div> : m.body)}
+      </div>
+    )
+    if (!mineMsg) {
+      return (
+        <div key={it.key} data-row={m.id} className={cls}>
+          <div className="ch-side">{it.first && miniAvatar()}</div>
+          {bub}
+          {it.last && <div className="ch-meta">{it.time}</div>}
+        </div>
+      )
+    }
+    let status
+    if (m.state === 'sending') status = <span className="rd unread">发送中…</span>
+    else if (m.state === 'failed') {
+      status = (
+        <span className="rd bad">
+          <button type="button" onClick={() => chat.send(m.body, m.reply_to, m.id, m.image_url)}>重发</button>
+          {' · '}
+          <button type="button" onClick={() => chat.discard(m.id)}>删除</button>
+        </span>
+      )
+    } else if (m.read_at) status = <span className={`rd${justRead.has(m.id) ? ' flipped' : ''}`}>已读</span>
+    else status = <span className="rd unread">未读</span>
+    return (
+      <div key={it.key} data-row={m.id} className={cls}>
+        {(it.last || m.state === 'failed') && <div className="ch-meta">{status}{m.state === 'failed' ? '' : it.time}</div>}
+        {bub}
+      </div>
+    )
+  }), [items, myId, pname, miniAvatar, quoteOf, chat.fresh, flashId, justRead, menuId, chat.send, chat.discard])
 
   return (
     <div className="ch-page">
@@ -470,63 +553,7 @@ export default function Chat() {
             <div className="ch-empty"><Svg name="chat" size={26} stroke={1.5} /><span>还没有消息，先说一句吧</span></div>
           )}
 
-          {items.map((it) => {
-            if (it.type === 'date') return <div key={it.key} className="ch-date">{it.label}</div>
-            const m = it.m
-            const mineMsg = m.sender_id === myId
-            if (it.type === 'sys') {
-              return (
-                <div key={it.key} data-row={m.id} className={`ch-sys${flashId === m.id ? ' flash' : ''}`}>
-                  {mineMsg ? '你' : `${pname} `}收回了一则讯息
-                </div>
-              )
-            }
-            const q = quoteOf(m)
-            const cls = `ch-row ${mineMsg ? 'me' : 'ta'}${it.first ? ' first' : ''}${it.last ? ' last' : ''}${chat.fresh && (chat.fresh === m.id || chat.fresh === m._k) ? ' new' : ''}${flashId === m.id ? ' flash' : ''}${m.state === 'failed' ? ' failed' : ''}`
-            const bub = (
-              <div className={`ch-bub${m.image_url ? ' ch-bub-img' : ''}${menu?.id === m.id ? ' pressed' : ''}${m.state === 'sending' ? ' sending' : ''}`} data-id={m.id}>
-                {q && (
-                  <button type="button" className={`ch-q${q.gone ? ' gone' : ''}`} data-q={q.id}>
-                    {q.who && <b>{q.who}</b>}<span>{q.text}</span>
-                  </button>
-                )}
-                {m.image_url && (
-                  <img
-                    className="ch-img" src={m.image_url} alt="" loading="lazy" decoding="async"
-                    onClick={(e) => { e.stopPropagation(); setViewImg(m.image_url) }}
-                  />
-                )}
-                {m.body && (m.image_url ? <div className="ch-cap">{m.body}</div> : m.body)}
-              </div>
-            )
-            if (!mineMsg) {
-              return (
-                <div key={it.key} data-row={m.id} className={cls}>
-                  <div className="ch-side">{it.first && miniAvatar()}</div>
-                  {bub}
-                  {it.last && <div className="ch-meta">{hm(m.created_at)}</div>}
-                </div>
-              )
-            }
-            let status
-            if (m.state === 'sending') status = <span className="rd unread">发送中…</span>
-            else if (m.state === 'failed') {
-              status = (
-                <span className="rd bad">
-                  <button type="button" onClick={() => chat.send(m.body, m.reply_to, m.id, m.image_url)}>重发</button>
-                  {' · '}
-                  <button type="button" onClick={() => chat.discard(m.id)}>删除</button>
-                </span>
-              )
-            } else if (m.read_at) status = <span className={`rd${justRead.has(m.id) ? ' flipped' : ''}`}>已读</span>
-            else status = <span className="rd unread">未读</span>
-            return (
-              <div key={it.key} data-row={m.id} className={cls}>
-                {(it.last || m.state === 'failed') && <div className="ch-meta">{status}{m.state === 'failed' ? '' : hm(m.created_at)}</div>}
-                {bub}
-              </div>
-            )
-          })}
+          {rows}
         </div>
 
         <button type="button" className={`ch-fab glass${far || pending ? ' on' : ''}`} onClick={() => { setPending(0); toBottom(true) }} aria-label="回到最新消息">

@@ -60,6 +60,9 @@
 /* 晚霞自己有光晕，页面里原来的漂浮光团调淡一点，免得太花 */
 :root[data-theme='dusk'] .bg { opacity: .7; }
 
+/* 页面要求背景静止时（聊天页待很久 / 切到后台），这团呼吸光也一起停，别偷偷跑 */
+:root[data-theme='dusk'][data-bg-paused] body::after { animation-play-state: paused; }
+
 @media (prefers-reduced-motion: reduce) {
   :root[data-theme='dusk'] { transition: none; }
   :root[data-theme='dusk'] body::after { animation: none; }
