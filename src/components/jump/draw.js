@@ -117,25 +117,25 @@ const PALETTES = [
     sky: ['#3a3160', '#463a6b', '#5b4675', '#775382', '#98648a', '#b97a8d', '#d5948f', '#e9ae9b'],
     hill: ['#443560', '#2e2442'],
     sun: '#ffeecb', glow: '#ffd9a8', moon: false,
-    stars: 1, cloud: '#ffd9c4', cloudA: 0.16,
+    stars: 1, cloud: '#ffd9c4', cloudA: 0.16, birds: 2,
   },
   {
     sky: ['#12162e', '#171c3a', '#1d2448', '#252c54', '#2e3562', '#383d6e', '#44467a', '#504e86'],
     hill: ['#242449', '#171831'],
     sun: '#e8ecff', glow: '#aab6ff', moon: true,
-    stars: 1.7, cloud: '#aab6ff', cloudA: 0.13,
+    stars: 1.7, cloud: '#aab6ff', cloudA: 0.13, flies: 6,
   },
   {
     sky: ['#4a3a63', '#6b4a72', '#9a5f7d', '#c47a82', '#e59a8b', '#f4b79b', '#fbd3b4', '#ffe6cf'],
     hill: ['#6b4a63', '#4a3048'],
     sun: '#fff1d0', glow: '#ffc7a8', moon: false,
-    stars: 0.45, cloud: '#ffd9c4', cloudA: 0.2,
+    stars: 0.45, cloud: '#ffd9c4', cloudA: 0.2, wind: 5,
   },
   {
     sky: ['#7fb6e8', '#93c6ee', '#aed6f2', '#c9e5f5', '#e2f0f5', '#f4f0e2', '#fbe7c8', '#ffe1b8'],
     hill: ['#6f8fae', '#4f6d88'],
     sun: '#fff8d8', glow: '#ffe7a0', moon: false,
-    stars: 0.12, cloud: '#ffffff', cloudA: 0.32,
+    stars: 0.12, cloud: '#ffffff', cloudA: 0.32, birds: 3,
   },
   {
     sky: ['#0b0a18', '#0f0e22', '#14122c', '#1a1738', '#211c45', '#292152', '#31265f', '#3a2b6b'],
@@ -248,28 +248,88 @@ function drawSky(ctx, cam, t, pal, alpha) {
     ctx.globalAlpha = a
   }
 
-  // 云：慢慢横着飘
+  // 云：四层，越近越快越大越实；每朵还有一点点上下浮
   if (pal.cloud) {
-    const span = W + 200
-    for (let i = 0; i < 3; i++) {
-      // 云：镜头视差 + 自己的漂移，站着不动也会慢慢往左走
-      const raw = i * 170 + 30 - cam * 0.16 - t * (6 + i * 2)
-      const x = ((raw % span) + span) % span - 90
-      cloud(ctx, x, 104 + i * 52, 62 + i * 14, pal.cloudA * a, pal.cloud)
+    const span = W + 240
+    const CL = [
+      { y: 98, w: 54, v: 4, par: 0.07, k: 0.5, dy: 1.6 },
+      { y: 136, w: 76, v: 8.5, par: 0.13, k: 0.78, dy: 2.2 },
+      { y: 190, w: 98, v: 15, par: 0.2, k: 1, dy: 3 },
+      { y: 248, w: 70, v: 10.5, par: 0.17, k: 0.7, dy: 2.4 },
+    ]
+    for (let i = 0; i < CL.length; i++) {
+      const c = CL[i]
+      const raw = i * 205 + 40 - cam * c.par - t * c.v
+      const x = ((raw % span) + span) % span - 100
+      const bob = Math.sin(t * 0.6 + i * 1.9) * c.dy
+      const breath = 0.9 + 0.1 * Math.sin(t * 0.5 + i * 1.3)
+      cloud(ctx, x, c.y + bob, c.w, pal.cloudA * a * c.k * breath, pal.cloud, t, i)
     }
   }
+
+  if (t > 0 && pal.birds) drawBirds(ctx, cam, t, a, pal.birds)
+  if (t > 0 && pal.flies) drawFlies(ctx, t, a, pal.flies)
+  if (t > 0 && pal.wind) drawWind(ctx, cam, t, a, pal.wind)
   ctx.globalAlpha = 1
 }
 
-function cloud(ctx, x, y, w, alpha, color) {
+function cloud(ctx, x, y, w, alpha, color, t, seed) {
   ctx.globalAlpha = alpha
   ctx.fillStyle = color || '#ffd9c4'
   const u = Math.max(4, Math.round(w / 8))
   const bx = Math.round(x)
   const by = Math.round(y)
+  // 云顶那一瓣慢慢胀缩 + 左右挪一点：静止也能看出来是活的
+  const puff = t ? Math.sin(t * 0.8 + (seed || 0) * 2.1) : 0
+  const tw = Math.max(u * 2, w - u * 4 + Math.round(puff * 8))
   ctx.fillRect(bx, by + u * 2, w, u * 2)
   ctx.fillRect(bx + u, by + u, w - u * 2, u * 2)
-  ctx.fillRect(bx + u * 2, by, w - u * 4, u * 2)
+  ctx.fillRect(bx + u * 2 + Math.round(puff * 3), by, tw, u * 2)
+  if ((seed || 0) % 2 === 0) ctx.fillRect(bx + u * 4, by + u, u * 3, u)
+  ctx.globalAlpha = 1
+}
+
+/* 三只小鸟：2px 的 V，扇翅膀 */
+function drawBirds(ctx, cam, t, alpha, n) {
+  const span = W + 160
+  ctx.fillStyle = '#2f2740'
+  for (let i = 0; i < n; i++) {
+    const raw = i * 230 + 80 - cam * 0.3 - t * (14 + i * 4)
+    const x = Math.round(((raw % span) + span) % span - 80)
+    const y = Math.round(104 + i * 26 + Math.sin(t * 0.9 + i * 1.7) * 3)
+    const up = Math.sin(t * 6 + i * 2) > 0
+    ctx.globalAlpha = alpha * 0.72
+    ctx.fillRect(x - 2, y + (up ? -2 : 0), 2, 2)
+    ctx.fillRect(x, y + (up ? 0 : -2), 2, 2)
+    ctx.fillRect(x + 2, y + (up ? -2 : 0), 2, 2)
+  }
+  ctx.globalAlpha = 1
+}
+
+/* 萤火虫：低空慢慢上下浮，一亮一暗 */
+function drawFlies(ctx, t, alpha, n) {
+  ctx.fillStyle = '#ffe9a3'
+  for (let i = 0; i < n; i++) {
+    const x = 26 + i * 54 + Math.sin(t * 0.7 + i * 2.3) * 14
+    const y = 330 + Math.sin(t * 1.1 + i * 1.3) * 22
+    const blink = Math.max(0, 0.45 + 0.55 * Math.sin(t * 2.2 + i * 1.9))
+    ctx.globalAlpha = alpha * blink * 0.8
+    ctx.fillRect(Math.round(x), Math.round(y), 2, 2)
+  }
+  ctx.globalAlpha = 1
+}
+
+/* 风：几道很淡的横线，从右往左快一点 */
+function drawWind(ctx, cam, t, alpha, n) {
+  ctx.fillStyle = '#fff1e2'
+  const span = W + 120
+  for (let i = 0; i < n; i++) {
+    const raw = i * 150 + 40 - cam * 0.2 - t * (46 + i * 9)
+    const x = Math.round(((raw % span) + span) % span - 60)
+    const y = Math.round(120 + i * 34 + Math.sin(t * 1.3 + i) * 4)
+    ctx.globalAlpha = alpha * (0.2 + 0.1 * Math.sin(t * 3 + i))
+    ctx.fillRect(x, y, 12, 2)
+  }
   ctx.globalAlpha = 1
 }
 
