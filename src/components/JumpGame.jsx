@@ -277,6 +277,8 @@ export default function JumpGame({ onExit }) {
       g.x = cx
     }
     g.snap = -1
+    // 磁铁：下一跳自动吸到下一块中心（落地时按 g.snap 判定）
+    if (p.type === 'magnet') g.snap = p.i + 1
     g.combo = perfect ? g.combo + 1 : 0
     const from = g.from
 
@@ -341,6 +343,11 @@ export default function JumpGame({ onExit }) {
       burst(g, g.x, p.y - 26, '#ffc3d8', 14, 110, 3)
       sfx.play('gift')
       say('🎁 ' + giftAt())
+    }
+    if (p.type === 'magnet') {
+      ring(g, g.x, p.y - 16, '#d8c8ff', 10, 22, 3)
+      sfx.play('magnet')
+      addFloat(g, '吸住下一块', g.x, p.y - 50, '#d8c8ff')
     }
     commitRef.current(from, p.i, gain)
   }, [say, sfx])

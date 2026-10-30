@@ -105,6 +105,9 @@ export function createSfx() {
       tone(880, 990, 0.08, 'sine', 0.22)
       tone(1320, 1320, 0.08, 'sine', 0.18, 0.08)
       tone(1760, 1760, 0.1, 'sine', 0.14, 0.16)
+    } else if (kind === 'magnet') {
+      tone(420, 1200, 0.16, 'sine', 0.22)
+      tone(1200, 1600, 0.08, 'triangle', 0.1, 0.12)
     } else if (kind === 'fall') {
       tone(420, 110, 0.26, 'triangle', 0.18)
     }

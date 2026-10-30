@@ -7,9 +7,10 @@
    第二版（GEN = 2）：每 25 块一段，段首一块宽 72 的休息台；
    间距不变（40 块以后已经封顶），难度加在移动块的「数量 + 速度」上：
    移动块占比 2% → 6%，周期 2.4s → 1.8s，到第 100 块封顶。
+   第三版（GEN = 3）：加「磁铁」平台（2%），落在上面下一跳自动吸到下一块中心。
    =========================================================================== */
 
-export const GEN = 2
+export const GEN = 3
 
 // 平台本身：逻辑像素（画布 360 × 540），16 = 8 格 × 2px
 export const PLAT = {
@@ -120,6 +121,7 @@ export function buildRoad(seed, count = 40) {
       else if (roll < 0.25) type = 'teleport'
       else if (roll < 0.28) type = 'gift'
       else if (roll < 0.30 + 0.01 * sec) type = 'moving'
+      else if (roll < 0.32 + 0.01 * sec) type = 'magnet'
     }
 
     road.push({

@@ -21,6 +21,7 @@ const TINT = {
   teleport: { top: '#dbeaff', body: '#7ea9d5', edge: '#3f5f86' },
   gift: { top: '#ffe1ea', body: '#d78ba6', edge: '#7d4358' },
   moving: { top: '#ffedbd', body: '#d4a95a', edge: '#7c5a24' },
+  magnet: { top: '#efe6ff', body: '#8b6fe3', edge: '#3e2f7a' },
 }
 
 /* ---------- 两个像素小人：沿用像素小屋的配色（u1 白发 / u2 黑发） ---------- */
@@ -117,25 +118,25 @@ const PALETTES = [
     sky: ['#3a3160', '#463a6b', '#5b4675', '#775382', '#98648a', '#b97a8d', '#d5948f', '#e9ae9b'],
     hill: ['#443560', '#2e2442'],
     sun: '#ffeecb', glow: '#ffd9a8', moon: false,
-    stars: 1, cloud: '#ffd9c4', cloudA: 0.16, birds: 2,
+    stars: 1, cloud: '#ffd9c4', cloudA: 0.16, birds: 2, skyProp: 'balloon', hang: 'balloon',
   },
   {
     sky: ['#12162e', '#171c3a', '#1d2448', '#252c54', '#2e3562', '#383d6e', '#44467a', '#504e86'],
     hill: ['#242449', '#171831'],
     sun: '#e8ecff', glow: '#aab6ff', moon: true,
-    stars: 1.7, cloud: '#aab6ff', cloudA: 0.13, flies: 6,
+    stars: 1.7, cloud: '#aab6ff', cloudA: 0.13, flies: 6, night: true, skyProp: 'lantern', hang: 'lamp',
   },
   {
     sky: ['#4a3a63', '#6b4a72', '#9a5f7d', '#c47a82', '#e59a8b', '#f4b79b', '#fbd3b4', '#ffe6cf'],
     hill: ['#6b4a63', '#4a3048'],
     sun: '#fff1d0', glow: '#ffc7a8', moon: false,
-    stars: 0.45, cloud: '#ffd9c4', cloudA: 0.2, wind: 5,
+    stars: 0.45, cloud: '#ffd9c4', cloudA: 0.2, wind: 5, skyProp: 'kite',
   },
   {
     sky: ['#7fb6e8', '#93c6ee', '#aed6f2', '#c9e5f5', '#e2f0f5', '#f4f0e2', '#fbe7c8', '#ffe1b8'],
     hill: ['#6f8fae', '#4f6d88'],
     sun: '#fff8d8', glow: '#ffe7a0', moon: false,
-    stars: 0.12, cloud: '#ffffff', cloudA: 0.32, birds: 3,
+    stars: 0.12, cloud: '#ffffff', cloudA: 0.32, birds: 3, skyProp: 'kite', hang: 'balloon',
   },
   {
     sky: ['#0b0a18', '#0f0e22', '#14122c', '#1a1738', '#211c45', '#292152', '#31265f', '#3a2b6b'],
@@ -343,6 +344,91 @@ function hill(ctx, x, base, w, h, color) {
   }
 }
 
+/* 确定性散列：装饰按 seed + 世界槽位摆，每次打开都一样 */
+function hash2(seed, n) {
+  let h = Math.imul((seed >>> 0) ^ Math.imul(n + 1, 0x9e3779b1), 0x85ebca6b)
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return (h >>> 0) / 4294967296
+}
+
+/* 挂在平台下面的小道具：夜里是灯笼，白天是气球（纯装饰，不参与碰撞） */
+function drawHang(ctx, p, cx, ww, top, t, pal, seed) {
+  if (!pal.hang) return
+  if (hash2(seed ^ 0x5bd1e995, p.i + 40) < 0.68) return
+  const x = Math.round(cx)
+  const y = top + 16
+  if (pal.hang === 'lamp') {
+    ctx.fillStyle = '#3a2c3a'
+    ctx.fillRect(x - 1, y, 2, 4)
+    ctx.globalAlpha = 0.26
+    disc(ctx, x, y + 9, 8, '#ffb066')
+    ctx.globalAlpha = 1
+    ctx.fillStyle = '#ffcf8a'
+    ctx.fillRect(x - 3, y + 4, 6, 6)
+    ctx.fillStyle = '#ff9a5e'
+    ctx.fillRect(x - 2, y + 6, 4, 3)
+  } else if (pal.hang === 'balloon') {
+    const bob = Math.round(Math.sin((t || 0) * 1.6 + p.i) * 2)
+    ctx.fillStyle = 'rgba(255,255,255,.4)'
+    ctx.fillRect(x - 1, y, 1, 8)
+    ctx.fillStyle = '#ff9ec4'
+    ctx.fillRect(x - 4, y + 8 + bob, 8, 3)
+    ctx.fillRect(x - 3, y + 6 + bob, 6, 2)
+    ctx.fillRect(x - 3, y + 11 + bob, 6, 2)
+    ctx.fillStyle = '#ffd45e'
+    ctx.fillRect(x - 1, y + 13 + bob, 2, 2)
+  }
+}
+/* 天上的小物件：风筝 / 气球 / 孔明灯 */
+function drawSkyProp(ctx, cam, t, pal, alpha) {
+  if (!pal.skyProp) return
+  const a = alpha == null ? 1 : alpha
+  if (pal.skyProp === 'kite') {
+    const span = W + 260
+    const x = Math.round(((140 - cam * 0.06 - t * 7) % span + span) % span - 130)
+    const y = Math.round(84 + Math.sin(t * 0.8) * 5)
+    ctx.globalAlpha = a
+    ctx.fillStyle = '#e05a5a'
+    ctx.fillRect(x + 4, y, 2, 2)
+    ctx.fillRect(x + 2, y + 2, 6, 4)
+    ctx.fillRect(x + 4, y + 6, 2, 2)
+    ctx.fillStyle = '#ffd45e'
+    ctx.fillRect(x + 4, y + 8, 2, 2)
+    ctx.fillStyle = 'rgba(255,255,255,.35)'
+    ctx.fillRect(x + 4, y + 10, 1, 10)
+    ctx.globalAlpha = 1
+  } else if (pal.skyProp === 'balloon') {
+    const span = 420
+    const y = Math.round(500 - ((t * 9 + 120) % span))
+    const x = Math.round(58 + Math.sin(t * 0.5) * 9)
+    const fade = Math.max(0, Math.min(1, Math.min((540 - y) / 50, y / 60)))
+    ctx.globalAlpha = a * fade
+    ctx.fillStyle = '#ff9ec4'
+    ctx.fillRect(x + 2, y, 4, 6)
+    ctx.fillRect(x, y + 2, 8, 3)
+    ctx.fillStyle = '#ffd45e'
+    ctx.fillRect(x + 3, y + 7, 2, 2)
+    ctx.fillStyle = 'rgba(255,255,255,.4)'
+    ctx.fillRect(x + 3, y + 9, 1, 8)
+    ctx.globalAlpha = 1
+  } else if (pal.skyProp === 'lantern') {
+    const span = 460
+    const y = Math.round(510 - ((t * 5.5 + 60) % span))
+    const x = Math.round(74 + Math.sin(t * 0.4) * 12)
+    const fade = Math.max(0, Math.min(1, Math.min((540 - y) / 60, y / 70)))
+    ctx.globalAlpha = a * fade * 0.25
+    disc(ctx, x + 3, y + 4, 9, '#ffb066')
+    ctx.globalAlpha = a * fade
+    ctx.fillStyle = '#ffcf8a'
+    ctx.fillRect(x, y, 6, 8)
+    ctx.fillStyle = '#ff9a5e'
+    ctx.fillRect(x + 1, y + 2, 4, 4)
+    ctx.globalAlpha = 1
+  }
+}
+
 function drawHills(ctx, cam, pal) {
   const span = 260
   let off = ((cam * 0.28) % span + span) % span
@@ -353,7 +439,7 @@ function drawHills(ctx, cam, pal) {
 }
 
 /* ---------- 平台 ---------- */
-function drawPlatform(ctx, p, cx, w, t) {
+function drawPlatform(ctx, p, cx, w, t, pal, seed) {
   const tint = TINT[p.type] || TINT.plain
   const x = even(cx - w / 2)
   const ww = Math.max(14, even(w))
@@ -393,6 +479,8 @@ function drawPlatform(ctx, p, cx, w, t) {
     ctx.fillStyle = '#ff9ec4'
     ctx.fillRect(fx + 2 + (wave < 0 ? 2 : 0), top - 10, 4, 2)
   }
+
+  drawHang(ctx, p, x + ww / 2, ww, top, t, pal, seed)
 }
 
 function drawGlyph(ctx, type, cx, y, tint) {
@@ -425,10 +513,21 @@ function drawGlyph(ctx, type, cx, y, tint) {
   } else if (type === 'moving') {
     pat(ctx, ['...#.', '..#..', '.#...', '..#..', '...#.'], cx - 9, y, 2, ink)
     pat(ctx, ['.#...', '..#..', '...#.', '..#..', '.#...'], cx + 9, y, 2, ink)
+  } else if (type === 'magnet') {
+    // 马蹄形磁铁：红 / 蓝两个磁极，一眼认出来
+    const mx = Math.round(cx) - 7
+    ctx.fillStyle = ink
+    ctx.fillRect(mx, y, 4, 9)
+    ctx.fillRect(mx + 10, y, 4, 9)
+    ctx.fillRect(mx, y + 5, 14, 4)
+    ctx.fillStyle = '#e0574f'
+    ctx.fillRect(mx, y, 4, 3)
+    ctx.fillStyle = '#7fb0f0'
+    ctx.fillRect(mx + 10, y, 4, 3)
   }
 }
 
-function drawPlatforms(ctx, g, cam, t) {
+function drawPlatforms(ctx, g, cam, t, pal) {
   const from = Math.max(0, g.idx - 3)
   const to = Math.min(g.road.length - 1, g.idx + 9)
   for (let i = from; i <= to; i++) {
@@ -436,7 +535,7 @@ function drawPlatforms(ctx, g, cam, t) {
     if (!p) continue
     const px = platformX(p, g.t) - cam
     if (px < -140 || px > W + 140) continue
-    drawPlatform(ctx, p, px, widthOf(p, g.narrow && g.narrow[p.i]), t)
+    drawPlatform(ctx, p, px, widthOf(p, g.narrow && g.narrow[p.i]), t, pal, g.seed)
   }
 }
 
@@ -580,8 +679,9 @@ export function drawScene(ctx, g, opts) {
     drawSky(ctx, g.cam, animT, pal, 1)
     drawHills(ctx, g.cam, pal)
   }
+  drawSkyProp(ctx, g.cam, animT, pal, 1)
 
-  drawPlatforms(ctx, g, cam, animT)
+  drawPlatforms(ctx, g, cam, animT, pal)
   if (g.combo >= 3) drawTrail(ctx, g, cam)
   const blink = !reduce && (g.mode === 'idle' || g.mode === 'charge' || g.mode === 'landed') && (g.t % 4.6) < 0.11
   drawFigure(ctx, g.x - cam, g.y, o.slot, squashOf(g), g.mode === 'fall' ? 0.7 : 1, blink)
