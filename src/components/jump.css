@@ -1,0 +1,244 @@
+/* 小物 · 一起跳一跳：独立文件，由 JumpGame.jsx 自己引入。
+   外壳沿用 styles.css 的主题变量（亮暗主题自动适配）；只有画布里面是固定的黄昏配色。
+   目标：小屏一屏装下（画布按 2:3 缩，不出现上下滚动才能玩）。 */
+
+.jp-root {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.jp-ui {
+  min-height: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- 顶栏 ---------- */
+.jp-top { display: flex; align-items: center; gap: 8px; }
+.jp-ic {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--win2);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.jp-ic.off { opacity: .55; }
+.jp-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.jp-title h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.jp-title .sub { font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jp-dots { letter-spacing: 1px; font-weight: 700; }
+
+.jp-menu-wrap { position: relative; flex-shrink: 0; }
+.jp-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 6;
+  width: 150px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--win2);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.jp-menu button {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.jp-menu button:active { background: var(--chip); }
+
+/* ---------- 分数行 ---------- */
+.jp-stat {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-height: 17px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--ink2);
+}
+.jp-stat b { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--ink); }
+.jp-stat .ta b { color: #c76a8c; }
+.jp-stat .grow { flex: 1; }
+.jp-just { color: #c76a8c; }
+.jp-sync { color: var(--ink2); }
+.jp-retry {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #b04b4b;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- 画布 ---------- */
+.jp-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.jp-bezel {
+  width: min(100%, 400px);
+  width: min(100%, calc((100dvh - 196px) * 0.6667 + 14px));
+  max-width: 410px;
+  padding: 7px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: #17171c;
+  box-shadow: inset 0 3px 10px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
+}
+.jp-screen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #241a33;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.jp-screen canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: pointer;
+}
+/* 很轻的暗角，让画布和外面的界面分开；不用 blur / backdrop-filter */
+.jp-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 42%, transparent 62%, rgba(10,6,16,.24));
+}
+
+.jp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--ink2);
+}
+.jp-foot span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jp-foot .mono { flex-shrink: 0; letter-spacing: .04em; }
+
+/* ---------- 全屏说明 / 报错 ---------- */
+.jp-ov {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 20px;
+  text-align: center;
+  color: #fff;
+  background: rgba(20, 14, 26, .86);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.jp-ov b { font-size: 15px; font-weight: 700; }
+.jp-ov span { max-width: 250px; color: rgba(255,255,255,.72); }
+.jp-ov .btn { height: 38px; margin-top: 6px; padding: 0 20px; font-size: 13px; background: #ffd34d; color: #2a1a20; }
+
+/* ---------- 答题卡 / 换路确认 ---------- */
+.jp-card {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: rgba(20, 14, 26, .72);
+}
+.jp-card-in {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 14px;
+  border-radius: 12px;
+  background: #fbf3e3;
+  color: #2a2130;
+  box-shadow: 0 14px 34px rgba(0,0,0,.4);
+}
+.jp-qtag { margin-bottom: 6px; font-size: 10.5px; letter-spacing: .04em; color: #9a7a58; }
+.jp-q { font-size: 14px; font-weight: 650; line-height: 1.45; }
+.jp-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.jp-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid rgba(60, 40, 30, .18);
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #2a2130;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+.jp-opt i { flex-shrink: 0; width: 14px; font-family: var(--mono); font-size: 11px; font-style: normal; opacity: .45; }
+.jp-opt span { flex: 1; }
+.jp-opt:active { transform: scale(.99); }
+.jp-opt.ok { background: #ddf2df; border-color: #6fb56f; }
+.jp-opt.no { background: #fbe2e2; border-color: #d37a7a; }
+.jp-opt.right { box-shadow: inset 0 0 0 2px #6fb56f; }
+.jp-opt:disabled { opacity: 1; cursor: default; }
+.jp-res { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; font-size: 12px; line-height: 1.5; color: #6b5a4a; }
+.jp-res b { font-size: 12.5px; }
+.jp-res b.ok { color: #2f7d4f; }
+.jp-res b.no { color: #b04b4b; }
+.jp-cont { width: 100%; height: 38px; margin-top: 10px; font-size: 13px; }
+.jp-confirm b { display: block; margin-bottom: 6px; font-size: 15px; }
+.jp-confirm p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: #6b5a4a; }
+.jp-confirm-acts { display: flex; gap: 8px; }
+.jp-confirm-acts .btn { flex: 1; height: 38px; font-size: 13px; }
+.jp-confirm-acts .btn.ghost { background: rgba(60, 40, 30, .08); color: #2a2130; }
+
+@media (max-height: 620px) {
+  .jp-ui { gap: 6px; padding-top: calc(env(safe-area-inset-top) + 6px); }
+  .jp-ic { width: 34px; height: 34px; }
+  .jp-title h1 { font-size: 16px; }
+  .jp-bezel { border-radius: 14px; padding: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-opt:active { transform: none; }
+}

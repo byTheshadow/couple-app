@@ -14,6 +14,7 @@ const PixelPals = lazy(() => import('../components/PixelPals'))
 const WhackGame = lazy(() => import('../components/WhackGame'))
 const BubbleWrap = lazy(() => import('../components/BubbleWrap'))
 const MustacheStudio = lazy(() => import('../components/MustacheStudio'))
+const JumpGame = lazy(() => import('../components/JumpGame'))
 
 /* ===========================================================================
    小物：一个小抽屉柜。点抽屉前脸拉开，再点里面的东西拿出来。
@@ -196,6 +197,28 @@ function ArtMustache() {
   )
 }
 
+// 第 08 格：一条悬在空中的路，小人正准备往问号平台跳
+function ArtJump() {
+  return (
+    <svg className="il" viewBox="0 0 132 92" {...ART}>
+      <rect x="10" y="70" width="44" height="10" rx="2" style={PAPER} />
+      <rect x="78" y="52" width="40" height="10" rx="2" style={PAPER} />
+      <path d="M50 63q14-28 26-6" strokeDasharray="2 5" opacity=".5" />
+      <circle cx="32" cy="48" r="8" style={PAPER} />
+      <path d="M24 47q0-9 8-9t8 9" style={{ fill: 'var(--paperInk)' }} stroke="none" />
+      <circle cx="29" cy="49" r="1.2" style={{ fill: 'var(--paperInk)' }} stroke="none" />
+      <circle cx="35" cy="49" r="1.2" style={{ fill: 'var(--paperInk)' }} stroke="none" />
+      <path d="M25 56h14v13H25z" style={PAPER} />
+      <path d="M28 69v10M36 69v10" />
+      <rect x="86" y="30" width="18" height="18" rx="3" style={{ fill: '#f2c94c' }} />
+      <path d="M92 36q3-4 6 0t-3 5v2M95 47v1" strokeWidth="1.8" />
+      <path d="M108 24v5M105.5 26.5h5" opacity=".6" />
+      <path d="M68 30v4M66 32h4" opacity=".4" />
+      <path d="M14 86h104" opacity=".18" />
+    </svg>
+  )
+}
+
 const DRAWERS = [
   { id: 'doodle', no: '01', name: '涂鸦小纸条', cap: '画一张，寄给 TA', go: '拿出来', Art: ArtDoodle, ready: true },
   { id: 'milktea', no: '02', name: '奶茶店', cap: '做一杯，寄张小票给 TA', go: '拿出来', Art: ArtMilkTea, ready: true },
@@ -204,6 +227,7 @@ const DRAWERS = [
   { id: 'whack', no: '05', name: '气人顾客', cap: '打一打柜台里的坏顾客', go: '拿出来', Art: ArtWhack, ready: true },
   { id: 'bubble', no: '06', name: '捏泡泡', cap: '一张泡泡纸，划过去一串啵', go: '拿出来', Art: ArtBubble, ready: true },
   { id: 'mustache', no: '07', name: '画小胡子', cap: '给顾客画点奇怪的东西', go: '拿出来', Art: ArtMustache, ready: true },
+  { id: 'jump', no: '08', name: '一起跳一跳', cap: '一条路，两个人接力跳', go: '拿出来', Art: ArtJump, ready: true },
 ]
 
 // 涂鸦草稿：只要本机存着草稿，抽屉前脸就挂一个「有草稿」
@@ -223,6 +247,7 @@ export default function Toys() {
   const inWhack = sub === 'whack'
   const inBubble = sub === 'bubble'
   const inMustache = sub === 'mustache'
+  const inJump = sub === 'jump'
 
   const [open, setOpen] = useState(null) // 当前拉开的抽屉 id，一次只开一个
   const [touched, setTouched] = useState(false) // 动过抽屉之后，第一格就不再做「提示一下」的小动画
@@ -262,6 +287,7 @@ export default function Toys() {
     else if (d.id === 'whack') navigate({ pathname: '/toys', search: '?p=whack' }, { state: { fromHub: true } })
     else if (d.id === 'bubble') navigate({ pathname: '/toys', search: '?p=bubble' }, { state: { fromHub: true } })
     else if (d.id === 'mustache') navigate({ pathname: '/toys', search: '?p=mustache' }, { state: { fromHub: true } })
+    else if (d.id === 'jump') navigate({ pathname: '/toys', search: '?p=jump' }, { state: { fromHub: true } })
   }
 
   // 离开涂鸦页：如果是从抽屉柜点进来的，就退一步（历史记录里不留重复的一条）；直接打开链接进来的，就换成抽屉柜
@@ -308,6 +334,10 @@ export default function Toys() {
       ) : inMustache ? (
         <Suspense fallback={<div className="page center"><div className="h-sub">正在找顾客…</div></div>}>
           <MustacheStudio onExit={exitDoodle} />
+        </Suspense>
+      ) : inJump ? (
+        <Suspense fallback={<div className="page center"><div className="h-sub">正在铺路…</div></div>}>
+          <JumpGame onExit={exitDoodle} />
         </Suspense>
       ) : (
         <main className="page">
@@ -366,7 +396,7 @@ export default function Toys() {
         </main>
       )}
 
-      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel || inWhack || inBubble || inMustache} />
+      <TabBar hidden={inDoodle || inMilkTea || inCrystal || inPixel || inWhack || inBubble || inMustache || inJump} />
     </div>
   )
 }

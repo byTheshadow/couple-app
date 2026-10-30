@@ -1,0 +1,832 @@
+/* ===========================================================================
+   小物 · 一起跳一跳（抽屉第 08 格）
+   - 一条共享的路：seed / platform / score 都在 pal_jump_run 的一行里，两个人异步接力
+   - 生成 / 物理 / 题库 / 画面分别在 jump/ 下面，这里只管：画布循环、蓄力、答题卡、RPC
+   - 落地先提交 RPC，成功才允许下一跳；stale = TA 先跳了，直接跟到新位置
+   - 规则见 docs/jump-design.md，SQL 见 docs/jump-design.sql
+   =========================================================================== */
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '../lib/auth'
+import { Svg } from './Icon'
+import { buildRoad } from './jump/gen'
+import {
+  VIEW, PHYS, powerOf, velocityOf, widthOf, platformX, jumpGain,
+  stepBall, hitPlatform, SPRING_GAIN,
+} from './jump/engine'
+import { questionAt, giftAt } from './jump/quiz'
+import { createSfx } from './jump/sfx'
+import { drawScene, drawBackdrop } from './jump/draw'
+import { loadState, submitStepRetry, resetRun } from '../lib/jumpStore'
+import './jump.css'
+
+const W = VIEW.W
+const H = VIEW.H
+const CAM = VIEW.camX
+
+/* ---------- 一局的内存状态（不进 React，每帧直接改） ---------- */
+function makeGame(seed, platform) {
+  const road = buildRoad(seed, Math.max(40, platform + 28))
+  const p = road[Math.min(platform, road.length - 1)]
+  return {
+    seed,
+    road,
+    idx: platform,
+    x: p.x,
+    y: p.y,
+    vx: 0,
+    vy: 0,
+    mode: 'idle',
+    from: platform,
+    power: 0,
+    held: 0,
+    chargeAt: 0,
+    cam: p.x - CAM,
+    t: 0,
+    landAt: 0,
+    springAt: 0,
+    fallAt: 0,
+    hop: null,
+    auto: false,
+    combo: 0,
+    narrow: {},
+    snap: -1,
+    particles: [],
+    floats: [],
+    trail: [],
+    squash: 0,
+    shake: 0,
+  }
+}
+
+/* 路是顺序生成的：快用到头了就多生成一些。换 seed 时整条重建。 */
+function ensureRoad(g, i) {
+  if (i + 10 >= g.road.length) g.road = buildRoad(g.seed, i + 30)
+  return g.road[Math.max(0, Math.min(i, g.road.length - 1))]
+}
+
+function burst(g, x, y, color, n, speed, size) {
+  for (let i = 0; i < n; i++) {
+    if (g.particles.length >= 140) return
+    const a = Math.random() * Math.PI * 2
+    const v = speed * (0.35 + Math.random() * 0.85)
+    g.particles.push({
+      x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40,
+      life: 0.4, max: 0.4, color, size: size || 2,
+    })
+  }
+}
+
+function ring(g, x, y, color, n, r, size) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2
+    g.particles.push({
+      x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.65,
+      vx: Math.cos(a) * 42, vy: Math.sin(a) * 42 - 36,
+      life: 0.4, max: 0.4, color, size: size || 3,
+    })
+  }
+}
+
+function dust(g, x, y) {
+  for (let i = 0; i < 6; i++) {
+    g.particles.push({
+      x: x - 10 + i * 4, y,
+      vx: (i - 2.5) * 26, vy: -30 - Math.random() * 30,
+      life: 0.32, max: 0.32, color: '#d8b58e', size: 2,
+    })
+  }
+}
+
+function addFloat(g, text, x, y, color) {
+  g.floats.push({ text, x, y, color, life: 1, max: 1 })
+  if (g.floats.length > 6) g.floats.shift()
+}
+
+/* ---------- 答题卡 ---------- */
+function QuizCard({ q, onPick, onClose }) {
+  return (
+    <div className="jp-card" role="dialog" aria-modal="true" aria-label="问号平台的题">
+      <div className="jp-card-in">
+        <div className="jp-qtag">问号平台 · 答对下一跳吸中心</div>
+        <div className="jp-q">{q.q}</div>
+        <div className="jp-opts">
+          {q.opts.map((o, i) => {
+            let cls = 'jp-opt'
+            if (q.done && o === q.right) cls += ' right'
+            if (q.done && o === q.pick && q.ok) cls += ' ok'
+            if (q.done && o === q.pick && !q.ok) cls += ' no'
+            return (
+              <button key={o} type="button" className={cls} disabled={q.done} onClick={() => onPick(o)}>
+                <i>{'ABCD'[i]}</i><span>{o}</span>
+              </button>
+            )
+          })}
+        </div>
+        {q.done && (
+          <div className="jp-res">
+            {q.ok
+              ? <b className="ok">答对了，下一跳会吸到中心</b>
+              : <b className="no">答错了，正确答案是「{q.right}」</b>}
+            {!q.ok && <span>下一块会窄一点，还是能跳</span>}
+          </div>
+        )}
+        {q.done && (
+          <button type="button" className="btn jp-cont" onClick={onClose}>继续跳</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function JumpGame({ onExit }) {
+  const { me, partner, loading: authLoading } = useAuth()
+  const myId = me && me.id
+
+  const canvasRef = useRef(null)
+  const gRef = useRef(null)
+  const aliveRef = useRef(true)
+  const phaseRef = useRef('loading')
+  const quizRef = useRef(null)
+  const menuRef = useRef(false)
+  const confirmRef = useRef(false)
+  const syncRef = useRef('idle')
+  const pendingRef = useRef(null)
+  const answeredRef = useRef({})
+  const seqRef = useRef(0)
+  const slotRef = useRef('u1')
+  const commitRef = useRef(() => {})
+  const landRef = useRef(() => {})
+  const sayT = useRef(0)
+
+  const [sfx] = useState(() => createSfx())
+  const [sfxOn, setSfxOn] = useState(sfx.on)
+  const [hud, setHud] = useState(null)
+  const [phase, setPhase] = useState('loading')
+  const [sync, setSync] = useState('idle')
+  const [err, setErr] = useState('')
+  const [quiz, setQuiz] = useState(null)
+  const [menu, setMenu] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const say = useCallback((t) => {
+    setToast(t)
+    clearTimeout(sayT.current)
+    sayT.current = setTimeout(() => setToast(''), 2600)
+  }, [])
+
+  useEffect(() => {
+    slotRef.current = (me && me.slot) || 'u1'
+  }, [me])
+
+  useEffect(() => () => {
+    aliveRef.current = false
+    clearTimeout(sayT.current)
+    sfx.dispose()
+  }, [sfx])
+
+  /* ---------- 服务器状态 → 本地 ---------- */
+  const applyState = useCallback((st) => {
+    if (!st) return
+    setHud(st)
+    const g = gRef.current
+    if (!g) return
+    if (st.seed !== g.seed) {
+      gRef.current = makeGame(st.seed, st.platform)
+      answeredRef.current = {}
+      return
+    }
+    if (st.platform !== g.idx) {
+      const p = ensureRoad(g, st.platform)
+      g.idx = st.platform
+      g.x = p.x
+      g.y = p.y
+      g.vx = 0
+      g.vy = 0
+      g.mode = 'idle'
+      g.power = 0
+      g.snap = -1
+      g.combo = 0
+      g.cam = p.x - CAM
+      g.particles.length = 0
+      g.floats.length = 0
+      g.trail.length = 0
+    }
+  }, [])
+
+  /* ---------- 交一跳 ---------- */
+  const commit = useCallback(async (from, to, gain) => {
+    if (syncRef.current === 'saving') return
+    const seq = seqRef.current
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await submitStepRetry(from, to, gain)
+    if (!aliveRef.current || seq !== seqRef.current) return
+    if (res.missing || res.error) {
+      pendingRef.current = { from, to, gain }
+      syncRef.current = 'error'
+      setSync('error')
+      setErr(res.missing ? '服务端还没有这条路：先在 Supabase 跑 docs/jump-design.sql' : res.error)
+      return
+    }
+    pendingRef.current = null
+    syncRef.current = 'idle'
+    setSync('idle')
+    setErr('')
+    applyState(res.state)
+    if (!res.ok && res.reason === 'stale') say('TA 先跳了，跟上了')
+    else if (!res.ok) say('这一跳没算上，重新来')
+  }, [applyState, say])
+
+  useEffect(() => { commitRef.current = commit }, [commit])
+
+  /* ---------- 落地 ---------- */
+  const onLand = useCallback((p, x, auto) => {
+    const g = gRef.current
+    if (!g || !p) return
+    const now = performance.now()
+    g.idx = p.i
+    g.x = x
+    g.y = p.y
+    g.vx = 0
+    g.vy = 0
+    g.mode = 'landed'
+    g.landAt = now
+    g.squash = 1
+    g.shake = 1
+    g.auto = false
+
+    const w = widthOf(p, g.narrow[p.i])
+    const cx = platformX(p, g.t)
+    let perfect = !auto && Math.abs(x - cx) <= Math.max(4, w * PHYS.perfect)
+    if (!auto && g.snap === p.i) {
+      perfect = true
+      g.x = cx
+    }
+    g.snap = -1
+    g.combo = perfect ? g.combo + 1 : 0
+    const from = g.from
+
+    if (auto) {
+      addFloat(g, '+2', g.x, p.y - 34, '#ffe9c4')
+      dust(g, g.x, p.y)
+      sfx.play('land')
+      commitRef.current(from, p.i, SPRING_GAIN)
+      return
+    }
+
+    if (p.type === 'spring') {
+      g.mode = 'spring'
+      g.springAt = now
+      sfx.play('spring')
+      addFloat(g, '弹簧！', g.x, p.y - 48, '#b6f2cf')
+      return
+    }
+
+    if (p.type === 'teleport') {
+      burst(g, g.x, p.y - 20, '#bfe4ff', 16, 130, 3)
+      ring(g, g.x, p.y - 16, '#eaf6ff', 8, 18, 3)
+      sfx.play('teleport')
+      addFloat(g, '传送 +3', g.x, p.y - 48, '#c9e8ff')
+      const to = Math.min(p.i + 2, from + PHYS.maxStep)
+      if (to > p.i) commitRef.current(from, to, 3)
+      else commitRef.current(from, p.i, jumpGain({ type: 'plain', perfect, combo: g.combo }))
+      return
+    }
+
+    const gain = jumpGain({ type: p.type, perfect, combo: g.combo })
+    if (perfect) {
+      ring(g, g.x, p.y - 16, '#ffe6a3', 12, 24, 4)
+      burst(g, g.x, p.y - 40, '#fff2c8', 6, 60, 2)
+      sfx.play('perfect')
+      addFloat(g, '完美 +' + gain, g.x, p.y - 54, '#ffe6a3')
+    } else {
+      dust(g, g.x, p.y)
+      sfx.play('land')
+      addFloat(g, '+' + gain, g.x, p.y - 34, '#fff1d0')
+    }
+    if (p.type === 'gift') {
+      burst(g, g.x, p.y - 26, '#ffc3d8', 14, 110, 3)
+      sfx.play('gift')
+      say('🎁 ' + giftAt())
+    }
+    commitRef.current(from, p.i, gain)
+  }, [say, sfx])
+
+  useEffect(() => { landRef.current = onLand }, [onLand])
+
+  /* ---------- 开局：读共享的路 ---------- */
+  const boot = useCallback(async () => {
+    if (authLoading) return
+    if (!myId) {
+      phaseRef.current = 'noauth'
+      setPhase('noauth')
+      return
+    }
+    const seq = ++seqRef.current
+    phaseRef.current = 'loading'
+    setPhase('loading')
+    setErr('')
+    syncRef.current = 'idle'
+    setSync('idle')
+    pendingRef.current = null
+    const res = await loadState()
+    if (!aliveRef.current || seq !== seqRef.current) return
+    if (res.missing) {
+      phaseRef.current = 'missing'
+      setPhase('missing')
+      return
+    }
+    if (res.error) {
+      phaseRef.current = 'error'
+      setPhase('error')
+      setErr(res.error)
+      return
+    }
+    answeredRef.current = {}
+    gRef.current = makeGame(res.state.seed, res.state.platform)
+    setHud(res.state)
+    phaseRef.current = 'ready'
+    setPhase('ready')
+  }, [authLoading, myId])
+
+  useEffect(() => {
+    aliveRef.current = true
+    boot()
+  }, [boot])
+
+  /* ---------- 静音开关 ---------- */
+  const toggleSfx = () => {
+    const next = !sfxOn
+    sfx.setOn(next)
+    setSfxOn(next)
+    if (next) {
+      sfx.unlock()
+      sfx.play('jump')
+    }
+  }
+
+  /* ---------- 蓄力 / 起跳 ---------- */
+  const canPlay = () => (
+    phaseRef.current === 'ready' &&
+    syncRef.current === 'idle' &&
+    gRef.current && gRef.current.mode === 'idle' &&
+    !quizRef.current && !menuRef.current && !confirmRef.current
+  )
+
+  const openQuiz = useCallback(() => {
+    const g = gRef.current
+    if (!g) return
+    const q = questionAt(g.seed, g.idx)
+    const next = { q: q.q, opts: q.opts, right: q.right, pick: '', done: false, ok: false }
+    quizRef.current = next
+    setQuiz(next)
+    sfx.play('land')
+  }, [sfx])
+
+  const pickAnswer = useCallback((text) => {
+    const q = quizRef.current
+    const g = gRef.current
+    if (!q || q.done || !g) return
+    const ok = text === q.right
+    if (ok) g.snap = g.idx + 1
+    else g.narrow[g.idx + 1] = true
+    answeredRef.current[g.idx] = true
+    const next = { ...q, done: true, ok, pick: text }
+    quizRef.current = next
+    setQuiz(next)
+    sfx.play(ok ? 'perfect' : 'fall')
+    try { navigator.vibrate?.(ok ? 8 : [10, 30, 10]) } catch (e) { /* iOS 不支持 */ }
+  }, [sfx])
+
+  const closeQuiz = useCallback(() => {
+    quizRef.current = null
+    setQuiz(null)
+  }, [])
+
+  const startCharge = (e) => {
+    if (!canPlay()) return
+    const g = gRef.current
+    const p = g.road[g.idx]
+    sfx.unlock()
+    if (p && p.type === 'quiz' && !answeredRef.current[g.idx]) {
+      openQuiz()
+      return
+    }
+    g.mode = 'charge'
+    g.chargeAt = performance.now()
+    g.held = 0
+    g.power = 0.04
+    if (e && e.currentTarget && e.pointerId != null) {
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch (err) { /* 有些浏览器不支持 */ }
+    }
+  }
+
+  const release = () => {
+    const g = gRef.current
+    if (!g || g.mode !== 'charge') return
+    const power = powerOf(performance.now() - g.chargeAt)
+    const v = velocityOf(power)
+    g.from = g.idx
+    g.power = power
+    g.vx = v.vx
+    g.vy = v.vy
+    g.mode = 'fly'
+    g.auto = false
+    sfx.play('jump')
+    try { navigator.vibrate?.(4) } catch (e) { /* 跟随系统 */ }
+  }
+
+  const cancelCharge = () => {
+    const g = gRef.current
+    if (g && g.mode === 'charge') {
+      g.mode = 'idle'
+      g.power = 0
+    }
+  }
+
+  /* ---------- 换一条路 ---------- */
+  const openMenu = () => {
+    const next = !menuRef.current
+    if (next && !canPlay()) return
+    menuRef.current = next
+    setMenu(next)
+  }
+
+  const closeMenu = () => {
+    menuRef.current = false
+    setMenu(false)
+  }
+
+  const askReset = () => {
+    menuRef.current = false
+    setMenu(false)
+    confirmRef.current = true
+    setConfirm(true)
+  }
+
+  const cancelReset = () => {
+    confirmRef.current = false
+    setConfirm(false)
+  }
+
+  const doReset = useCallback(async () => {
+    confirmRef.current = false
+    setConfirm(false)
+    const seq = ++seqRef.current
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await resetRun()
+    if (!aliveRef.current || seq !== seqRef.current) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没有这条路：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    answeredRef.current = {}
+    quizRef.current = null
+    pendingRef.current = null
+    setQuiz(null)
+    setErr('')
+    gRef.current = makeGame(res.state.seed, 0)
+    setHud(res.state)
+    say('换了一条新路，两个人从头开始')
+  }, [say])
+
+  const retry = () => {
+    const p = pendingRef.current
+    if (!p) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    commitRef.current(p.from, p.to, p.gain)
+  }
+
+  /* ---------- 主循环 ---------- */
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = false
+
+    const startFall = (g, now) => {
+      g.mode = 'fall'
+      g.fallAt = now
+      g.vx = 0
+      g.vy = Math.max(g.vy, 120)
+      g.power = 0
+      g.combo = 0
+      g.trail.length = 0
+      sfx.play('fall')
+    }
+
+    const respawn = (g) => {
+      const p = g.road[g.from] || g.road[0]
+      g.idx = p.i
+      g.x = platformX(p, g.t)
+      g.y = p.y
+      g.vx = 0
+      g.vy = 0
+      g.mode = 'idle'
+      g.power = 0
+      g.snap = -1
+      g.landAt = 0
+      g.cam = p.x - CAM
+    }
+
+    const step = (g, now, dt) => {
+      if (g.mode === 'charge') {
+        g.held = now - g.chargeAt
+        g.power = powerOf(g.held)
+      } else if (g.power > 0.001) {
+        g.power = Math.max(0, g.power - dt * 3.2)
+      }
+
+      if (g.mode === 'spring' && now - g.springAt > PHYS.springMs) {
+        const next = ensureRoad(g, g.idx + 1)
+        g.hop = { x0: g.x, y0: g.y, x1: next.x, y1: next.y, t0: now, dur: PHYS.hopMs }
+        g.mode = 'hop'
+        sfx.play('jump')
+      }
+
+      if (g.mode === 'hop' && g.hop) {
+        const u = Math.min(1, (now - g.hop.t0) / g.hop.dur)
+        g.x = g.hop.x0 + (g.hop.x1 - g.hop.x0) * u
+        g.y = g.hop.y0 + (g.hop.y1 - g.hop.y0) * u - Math.sin(u * Math.PI) * 76
+        g.vy = -Math.cos(u * Math.PI) * 300
+        if (u >= 1) {
+          const next = g.road[g.idx + 1]
+          g.hop = null
+          if (next) landRef.current(next, next.x, true)
+        }
+      }
+
+      if (g.mode === 'fly') {
+        const sub = Math.min(4, Math.max(1, Math.ceil(dt / (1 / 120))))
+        const h = dt / sub
+        for (let s = 0; s < sub; s++) {
+          const prevY = g.y
+          stepBall(g, h)
+          if (g.vy > 0) {
+            const last = Math.min(g.from + PHYS.maxStep, g.road.length - 1)
+            for (let i = g.from + 1; i <= last; i++) {
+              const p = g.road[i]
+              if (!p) continue
+              const w = widthOf(p, g.narrow[p.i])
+              if (hitPlatform(prevY, g, p, w, g.t)) {
+                landRef.current(p, g.x, false)
+                return
+              }
+            }
+          }
+          if (g.y > PHYS.fallY) {
+            startFall(g, now)
+            return
+          }
+        }
+      }
+
+      if (g.mode === 'fall') {
+        g.vy += PHYS.g * dt
+        g.y += g.vy * dt
+        if (now - g.fallAt > PHYS.fallMs) respawn(g)
+      }
+
+      if (g.mode === 'landed' && syncRef.current === 'idle' && now - g.landAt > 150) g.mode = 'idle'
+
+      // 站在移动平台上：人跟着平台一起左右滑，别被平台甩下去
+      const cur = g.road[g.idx]
+      if (cur && cur.type === 'moving' && (g.mode === 'idle' || g.mode === 'charge' || g.mode === 'landed')) {
+        g.x = platformX(cur, g.t)
+      }
+
+      // 相机：角色固定在 x = 120，世界横着滚
+      g.cam += ((g.x - CAM) - g.cam) * Math.min(1, dt * 8)
+
+      // 连击拖尾
+      if (g.mode === 'fly' && g.combo >= 3) {
+        g.trail.push({ x: g.x, y: g.y })
+        if (g.trail.length > 6) g.trail.shift()
+      } else if (g.trail.length) {
+        g.trail.length = 0
+      }
+
+      // 粒子和浮字：都在 400ms / 1s 内收掉
+      for (let i = g.particles.length - 1; i >= 0; i--) {
+        const pa = g.particles[i]
+        pa.life -= dt
+        pa.x += pa.vx * dt
+        pa.y += pa.vy * dt
+        pa.vy += 240 * dt
+        if (pa.life <= 0) g.particles.splice(i, 1)
+      }
+      for (let i = g.floats.length - 1; i >= 0; i--) {
+        g.floats[i].life -= dt
+        if (g.floats[i].life <= 0) g.floats.splice(i, 1)
+      }
+      if (g.squash > 0) g.squash = Math.max(0, g.squash - dt * 5)
+      if (g.shake > 0) g.shake = Math.max(0, g.shake - dt * 6)
+    }
+
+    let raf = 0
+    let last = performance.now()
+    let backdrop = false
+    const frame = (now) => {
+      raf = requestAnimationFrame(frame)
+      const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000))
+      last = now
+      const g = gRef.current
+      if (!g) {
+        if (!backdrop) {
+          drawBackdrop(ctx)
+          backdrop = true
+        }
+        return
+      }
+      if (document.hidden) return
+      if (quizRef.current || menuRef.current || confirmRef.current) return
+      if (phaseRef.current === 'ready') {
+        g.t += dt
+        step(g, now, dt)
+      }
+      const p = g.road[g.idx]
+      const hint = !!(p && p.type === 'quiz' && !answeredRef.current[g.idx] && (g.mode === 'idle' || g.mode === 'landed'))
+      drawScene(ctx, g, { slot: slotRef.current, quizHint: hint })
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [sfx])
+
+  /* ---------- 键盘：空格蓄力，Esc 返回 ---------- */
+  useEffect(() => {
+    const down = (e) => {
+      if (e.code === 'Space' && !e.repeat) {
+        if (document.activeElement && document.activeElement.tagName === 'BUTTON') return
+        e.preventDefault()
+        startCharge(null)
+      }
+    }
+    const up = (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault()
+        release()
+      }
+    }
+    const esc = (e) => {
+      if (e.key !== 'Escape') return
+      if (quizRef.current || confirmRef.current || menuRef.current) {
+        if (confirmRef.current) cancelReset()
+        else if (menuRef.current) closeMenu()
+        return
+      }
+      if (onExit) onExit()
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('keydown', esc)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('keydown', esc)
+    }
+  })
+
+  /* ---------- 切后台：别一直蓄力 ---------- */
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden) cancelCharge()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  })
+  /* ---------- 界面上的几个数 ---------- */
+  const byUser = (hud && hud.by_user) || {}
+  const myScore = Number(byUser[myId] || 0)
+  const taScore = partner ? Number(byUser[partner.id] || 0) : 0
+  const blocks = hud ? hud.platform : 0
+  const best = hud ? hud.best : 0
+  const taName = (partner && partner.display_name) || 'TA'
+  const taJust = !!(
+    hud && hud.last_uid && hud.last_uid !== myId && hud.updated_at &&
+    Date.now() - new Date(hud.updated_at).getTime() < 5 * 60 * 1000
+  )
+  const standing = gRef.current && gRef.current.road[gRef.current.idx]
+  const needQuiz = !!(standing && standing.type === 'quiz' && !answeredRef.current[standing.i])
+  let hintText = '按住蓄力，松手起跳'
+  if (phase === 'ready' && sync === 'saving') hintText = '正在把这一跳交给 TA…'
+  else if (phase === 'ready' && sync === 'error') hintText = '没同步上：点上面的「重试」，同一跳不会重复加分'
+  else if (phase === 'ready' && needQuiz) hintText = '这块是问号平台：按一下，先答题'
+  else if (phase !== 'ready') hintText = '两个人在同一条路上接力'
+
+  return (
+    <div className="jp-root">
+      <div className="jp-ui">
+        <div className="jp-top">
+          <button type="button" className="jp-ic tap" onClick={() => onExit && onExit()} aria-label="返回小物">
+            <Svg name="back" size={18} />
+          </button>
+          <div className="jp-title">
+            <h1>一起跳一跳</h1>
+            <div className="sub">
+              {blocks > 0 ? `一起跳了 ${blocks} 块` : '一条两个人共用的路'}
+              {best > 0 ? ` · 最高 ${best}` : ''}
+            </div>
+          </div>
+          <button
+            type="button" className={`jp-ic tap${sfxOn ? '' : ' off'}`} onClick={toggleSfx}
+            aria-pressed={sfxOn} aria-label={sfxOn ? '关掉音效' : '打开音效'}
+          >
+            {sfxOn ? '🔊' : '🔇'}
+          </button>
+          <div className="jp-menu-wrap">
+            <button type="button" className="jp-ic tap" onClick={openMenu} aria-label="更多">
+              <span className="jp-dots">···</span>
+            </button>
+            {menu && (
+              <div className="jp-menu">
+                <button type="button" onClick={askReset}>换一条路</button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="jp-stat">
+          <span>你 <b>{myScore}</b></span>
+          {partner && <span className="ta">{taName} <b>{taScore}</b></span>}
+          {taJust && <span className="jp-just">TA 刚跳了</span>}
+          <span className="grow" />
+          {sync === 'saving' && <span className="jp-sync">同步中…</span>}
+          {sync === 'error' && (
+            <button type="button" className="jp-retry" onClick={retry}>重试</button>
+          )}
+        </div>
+
+        <div className="jp-stage">
+          <div className="jp-bezel">
+            <div className="jp-screen">
+              <canvas
+                ref={canvasRef}
+                width={W}
+                height={H}
+                role="img"
+                aria-label="一起跳一跳：按住画布蓄力，松手起跳；落在平台中间算完美，问号平台要先答题"
+                onPointerDown={startCharge}
+                onPointerUp={release}
+                onPointerCancel={cancelCharge}
+                onContextMenu={(e) => e.preventDefault()}
+              />
+
+              {phase === 'loading' && (
+                <div className="jp-ov"><b>正在铺路…</b><span>把你们上次停下的地方找出来</span></div>
+              )}
+
+              {phase === 'noauth' && (
+                <div className="jp-ov">
+                  <b>登录后两个人一起跳</b>
+                  <span>这条路只有你们两个人，登录才能接着跳</span>
+                  <button type="button" className="btn" onClick={() => onExit && onExit()}>回小物</button>
+                </div>
+              )}
+
+              {phase === 'missing' && (
+                <div className="jp-ov">
+                  <b>还没有这条路</b>
+                  <span>在 Supabase → SQL Editor 里跑一遍 docs/jump-design.sql，再点重试</span>
+                  <button type="button" className="btn" onClick={boot}>重试</button>
+                </div>
+              )}
+
+              {phase === 'error' && (
+                <div className="jp-ov">
+                  <b>路没连上</b>
+                  <span>{err || '网络不通'}</span>
+                  <button type="button" className="btn" onClick={boot}>重试</button>
+                </div>
+              )}
+
+              {quiz && <QuizCard q={quiz} onPick={pickAnswer} onClose={closeQuiz} />}
+
+              {confirm && (
+                <div className="jp-card">
+                  <div className="jp-card-in jp-confirm">
+                    <b>换一条路？</b>
+                    <p>两个人都会从第一块重新开始，最高分保留。</p>
+                    <div className="jp-confirm-acts">
+                      <button type="button" className="btn ghost" onClick={cancelReset}>再想想</button>
+                      <button type="button" className="btn" onClick={doReset}>换路</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="jp-foot">
+          <span>{hintText}</span>
+          <span className="mono">{best > 0 ? `BEST ${best}` : ''}</span>
+        </div>
+      </div>
+
+      {toast && <div className="toast glass">{toast}</div>}
+    </div>
+  )
+}
