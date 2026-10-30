@@ -35,7 +35,9 @@ export function velocityOf(power) {
 /** 平台当前的 x：移动平台左右 ±24px，周期 2.4s，相位由生成器给 */
 export function platformX(p, t) {
   if (!p || p.type !== 'moving') return p ? p.x : 0
-  return p.x + Math.sin(t * (Math.PI * 2 / 2.4) + p.phase) * 24
+  // 周期由生成器按段落给：2.4s（热身）→ 1.8s（星河）
+  const period = p.period || 2.4
+  return p.x + Math.sin(t * (Math.PI * 2 / period) + p.phase) * 24
 }
 
 /** 平台的当前宽度（答错以后下一块窄 35%） */

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { Svg } from './Icon'
-import { buildRoad } from './jump/gen'
+import { buildRoad, SECTIONS, sectionOf } from './jump/gen'
 import {
   VIEW, PHYS, powerOf, velocityOf, widthOf, platformX, jumpGain,
   stepBall, hitPlatform, SPRING_GAIN,
@@ -27,8 +27,14 @@ const CAM = VIEW.camX
 function makeGame(seed, platform) {
   const road = buildRoad(seed, Math.max(40, platform + 28))
   const p = road[Math.min(platform, road.length - 1)]
+  const sec = sectionOf(platform)
   return {
     seed,
+    sec,
+    skyFrom: sec,
+    skyTo: sec,
+    skyMix: 1,
+    skyAt: 0,
     road,
     idx: platform,
     x: p.x,
@@ -207,6 +213,10 @@ export default function JumpGame({ onExit }) {
       g.power = 0
       g.snap = -1
       g.combo = 0
+      g.sec = sectionOf(st.platform)
+      g.skyFrom = g.sec
+      g.skyTo = g.sec
+      g.skyMix = 1
       g.cam = p.x - CAM
       g.particles.length = 0
       g.floats.length = 0
@@ -266,6 +276,25 @@ export default function JumpGame({ onExit }) {
     g.snap = -1
     g.combo = perfect ? g.combo + 1 : 0
     const from = g.from
+
+    // 换段：天色在 0.5s 里淡过去（只在 25/50/75/100… 的休息台触发）
+    const sec = sectionOf(p.i)
+    if (sec !== g.sec) {
+      g.skyFrom = g.sec
+      g.skyTo = sec
+      g.skyAt = now
+      g.skyMix = 0
+      g.sec = sec
+    }
+
+    // 段首休息台：报个段名，撒点彩带（不加分，不改规则）
+    if (p.rest) {
+      const sec = SECTIONS[sectionOf(p.i)]
+      say('第 ' + sec.no + ' 段 · ' + sec.name + ' · 一起跳了 ' + p.i + ' 块')
+      burst(g, g.x, p.y - 34, '#ffd45e', 12, 120, 3)
+      burst(g, g.x, p.y - 34, '#ff9ec4', 8, 90, 3)
+      addFloat(g, '第 ' + sec.no + ' 段 · ' + sec.name, g.x, p.y - 66, '#ffe6a3')
+    }
 
     if (auto) {
       addFloat(g, '+2', g.x, p.y - 34, '#ffe9c4')
@@ -506,6 +535,8 @@ export default function JumpGame({ onExit }) {
     if (!canvas) return undefined
     const ctx = canvas.getContext('2d')
     ctx.imageSmoothingEnabled = false
+    const reduce = !!(typeof window !== 'undefined' && window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 
     const startFall = (g, now) => {
       g.mode = 'fall'
@@ -592,6 +623,9 @@ export default function JumpGame({ onExit }) {
 
       if (g.mode === 'landed' && syncRef.current === 'idle' && now - g.landAt > 150) g.mode = 'idle'
 
+      // 换段的天色淡入：0.5s 走完
+      if (g.skyMix < 1) g.skyMix = Math.min(1, (now - g.skyAt) / 500)
+
       // 站在移动平台上：人跟着平台一起左右滑，别被平台甩下去
       const cur = g.road[g.idx]
       if (cur && cur.type === 'moving' && (g.mode === 'idle' || g.mode === 'charge' || g.mode === 'landed')) {
@@ -649,7 +683,7 @@ export default function JumpGame({ onExit }) {
       }
       const p = g.road[g.idx]
       const hint = !!(p && p.type === 'quiz' && !answeredRef.current[g.idx] && (g.mode === 'idle' || g.mode === 'landed'))
-      drawScene(ctx, g, { slot: slotRef.current, quizHint: hint })
+      drawScene(ctx, g, { slot: slotRef.current, quizHint: hint, reduce })
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
@@ -703,6 +737,8 @@ export default function JumpGame({ onExit }) {
   const taScore = partner ? Number(byUser[partner.id] || 0) : 0
   const blocks = hud ? hud.platform : 0
   const best = hud ? hud.best : 0
+  const liveIdx = gRef.current ? gRef.current.idx : blocks
+  const sec = SECTIONS[sectionOf(liveIdx)] || SECTIONS[0]
   const taName = (partner && partner.display_name) || 'TA'
   const taJust = !!(
     hud && hud.last_uid && hud.last_uid !== myId && hud.updated_at &&
@@ -726,8 +762,9 @@ export default function JumpGame({ onExit }) {
           <div className="jp-title">
             <h1>一起跳一跳</h1>
             <div className="sub">
-              {blocks > 0 ? `一起跳了 ${blocks} 块` : '一条两个人共用的路'}
-              {best > 0 ? ` · 最高 ${best}` : ''}
+              {blocks > 0
+                ? `第 ${sec.no} 段 · ${sec.name} · 一起跳了 ${blocks} 块`
+                : '一条两个人共用的路'}
             </div>
           </div>
           <button

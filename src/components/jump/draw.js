@@ -8,10 +8,6 @@ import { VIEW, platformX, widthOf } from './engine.js'
 const W = VIEW.W
 const H = VIEW.H
 
-/* ---------- 黄昏配色：上面偏紫，地平线偏橘 ---------- */
-const SKY = ['#3a3160', '#463a6b', '#5b4675', '#775382', '#98648a', '#b97a8d', '#d5948f', '#e9ae9b']
-const SKY_H = [70, 80, 80, 70, 60, 55, 45, 80]
-
 const STARS = [
   [26, 30], [70, 54], [112, 22], [150, 70], [196, 34], [240, 58],
   [300, 26], [332, 74], [54, 110], [130, 124], [210, 102], [286, 120],
@@ -113,48 +109,131 @@ function disc(ctx, cx, cy, r, color) {
   }
 }
 
-/* ---------- 天空 / 星星 / 落日 / 云 / 远山 ---------- */
-function drawSky(ctx, cam, t) {
+/* ---------- 天空：按段落换配色（黄昏 / 夜 / 清晨 / 午后 / 星河） ---------- */
+const SKY_H = [70, 80, 80, 70, 60, 55, 45, 80]
+
+const PALETTES = [
+  {
+    sky: ['#3a3160', '#463a6b', '#5b4675', '#775382', '#98648a', '#b97a8d', '#d5948f', '#e9ae9b'],
+    hill: ['#443560', '#2e2442'],
+    sun: '#ffeecb', glow: '#ffd9a8', moon: false,
+    stars: 1, cloud: '#ffd9c4', cloudA: 0.16,
+  },
+  {
+    sky: ['#12162e', '#171c3a', '#1d2448', '#252c54', '#2e3562', '#383d6e', '#44467a', '#504e86'],
+    hill: ['#242449', '#171831'],
+    sun: '#e8ecff', glow: '#aab6ff', moon: true,
+    stars: 1.7, cloud: '#aab6ff', cloudA: 0.08,
+  },
+  {
+    sky: ['#4a3a63', '#6b4a72', '#9a5f7d', '#c47a82', '#e59a8b', '#f4b79b', '#fbd3b4', '#ffe6cf'],
+    hill: ['#6b4a63', '#4a3048'],
+    sun: '#fff1d0', glow: '#ffc7a8', moon: false,
+    stars: 0.45, cloud: '#ffd9c4', cloudA: 0.2,
+  },
+  {
+    sky: ['#7fb6e8', '#93c6ee', '#aed6f2', '#c9e5f5', '#e2f0f5', '#f4f0e2', '#fbe7c8', '#ffe1b8'],
+    hill: ['#6f8fae', '#4f6d88'],
+    sun: '#fff8d8', glow: '#ffe7a0', moon: false,
+    stars: 0.12, cloud: '#ffffff', cloudA: 0.32,
+  },
+  {
+    sky: ['#0b0a18', '#0f0e22', '#14122c', '#1a1738', '#211c45', '#292152', '#31265f', '#3a2b6b'],
+    hill: ['#1a1738', '#0d0b1c'],
+    sun: null, glow: null, moon: false,
+    stars: 2, cloud: null, cloudA: 0, milky: true,
+  },
+]
+
+const STARS2 = [
+  [46, 44], [84, 82], [124, 46], [166, 92], [206, 64], [248, 86],
+  [288, 44], [316, 104], [20, 140], [108, 170], [188, 138], [256, 148],
+  [336, 168], [64, 196],
+]
+
+const MILKY = [
+  [24, 96], [38, 110], [52, 88], [66, 124], [80, 100], [94, 138], [108, 112],
+  [122, 150], [136, 124], [150, 162], [164, 136], [178, 174], [192, 148],
+  [206, 186], [220, 160], [234, 198], [248, 172], [262, 210], [276, 184],
+  [290, 222], [304, 196], [318, 234], [332, 208], [346, 246],
+]
+
+function drawSky(ctx, cam, t, pal, alpha) {
+  const a = alpha == null ? 1 : alpha
   let y = 0
-  for (let i = 0; i < SKY.length; i++) {
-    ctx.fillStyle = SKY[i]
+  ctx.globalAlpha = a
+  for (let i = 0; i < SKY_H.length; i++) {
+    ctx.fillStyle = pal.sky[i]
     ctx.fillRect(0, y, W, SKY_H[i])
     y += SKY_H[i]
   }
 
-  for (let i = 0; i < STARS.length; i++) {
-    const a = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t * 1.5 + i * 1.7))
+  const starA = Math.max(0, Math.min(1.8, pal.stars || 0))
+  if (starA > 0.05) {
+    for (let i = 0; i < STARS.length; i++) {
+      const tw = 0.55 + 0.45 * Math.sin(t * 1.5 + i * 1.7)
+      ctx.globalAlpha = a * Math.min(1, (0.3 + 0.25 * tw) * starA)
+      ctx.fillStyle = '#fff3da'
+      ctx.fillRect(STARS[i][0], STARS[i][1], 2, 2)
+    }
+    if (starA > 1.2) {
+      for (let i = 0; i < STARS2.length; i++) {
+        ctx.globalAlpha = a * (0.18 + 0.18 * ((i * 5) % 4) / 3)
+        ctx.fillRect(STARS2[i][0], STARS2[i][1], 2, 2)
+      }
+    }
     ctx.globalAlpha = a
-    ctx.fillStyle = '#fff3da'
-    ctx.fillRect(STARS[i][0], STARS[i][1], 2, 2)
   }
-  ctx.globalAlpha = 1
 
-  // 落日：外面两圈光晕 + 圆盘
-  const sx = 282
-  const sy = 356
-  ctx.globalAlpha = 0.14
-  disc(ctx, sx, sy, 38, '#ffd9a8')
-  ctx.globalAlpha = 0.22
-  disc(ctx, sx, sy, 28, '#ffe2b6')
-  ctx.globalAlpha = 1
-  disc(ctx, sx, sy, 22, '#ffeecb')
-  ctx.fillStyle = 'rgba(255,238,203,.45)'
-  ctx.fillRect(sx - 48, sy + 10, 96, 2)
-  ctx.fillRect(sx - 66, sy + 18, 132, 2)
+  // 星河：一条斜着的碎星带（不做模糊，只叠小点）
+  if (pal.milky) {
+    ctx.fillStyle = '#d9d2ff'
+    for (let i = 0; i < MILKY.length; i++) {
+      ctx.globalAlpha = a * (0.12 + 0.12 * ((i * 7) % 5) / 4)
+      ctx.fillRect(MILKY[i][0], MILKY[i][1], 2, 2)
+    }
+    ctx.globalAlpha = a
+  }
+
+  // 太阳 / 月亮：外面两圈光晕 + 圆盘；光晕轻轻呼吸
+  if (pal.sun) {
+    const sx = 282
+    const sy = 356
+    const pulse = 1 + 0.12 * Math.sin(t * 1.2)
+    ctx.globalAlpha = a * 0.14 * pulse
+    disc(ctx, sx, sy, 38, pal.glow)
+    ctx.globalAlpha = a * 0.22 * pulse
+    disc(ctx, sx, sy, 28, pal.glow)
+    ctx.globalAlpha = a
+    disc(ctx, sx, sy, 22, pal.sun)
+    if (pal.moon) {
+      ctx.fillStyle = 'rgba(120,130,190,.45)'
+      ctx.fillRect(sx - 9, sy - 8, 7, 5)
+      ctx.fillRect(sx + 3, sy + 2, 9, 6)
+      ctx.fillRect(sx - 4, sy + 9, 5, 4)
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,.2)'
+      ctx.fillRect(sx - 48, sy + 10, 96, 2)
+      ctx.fillRect(sx - 66, sy + 18, 132, 2)
+    }
+    ctx.globalAlpha = a
+  }
 
   // 云：慢慢横着飘
-  const span = W + 200
-  for (let i = 0; i < 3; i++) {
-    const raw = i * 170 + 30 - cam * 0.16
-    const x = ((raw % span) + span) % span - 90
-    cloud(ctx, x, 104 + i * 52, 62 + i * 14, 0.16)
+  if (pal.cloud) {
+    const span = W + 200
+    for (let i = 0; i < 3; i++) {
+      const raw = i * 170 + 30 - cam * 0.16
+      const x = ((raw % span) + span) % span - 90
+      cloud(ctx, x, 104 + i * 52, 62 + i * 14, pal.cloudA * a, pal.cloud)
+    }
   }
+  ctx.globalAlpha = 1
 }
 
-function cloud(ctx, x, y, w, alpha) {
+function cloud(ctx, x, y, w, alpha, color) {
   ctx.globalAlpha = alpha
-  ctx.fillStyle = '#ffd9c4'
+  ctx.fillStyle = color || '#ffd9c4'
   const u = Math.max(4, Math.round(w / 8))
   const bx = Math.round(x)
   const by = Math.round(y)
@@ -174,16 +253,17 @@ function hill(ctx, x, base, w, h, color) {
   }
 }
 
-function drawHills(ctx, cam) {
+function drawHills(ctx, cam, pal) {
   const span = 260
   let off = ((cam * 0.28) % span + span) % span
-  for (let k = -1; k < 3; k++) hill(ctx, k * span - off + 10, 546, 250, 74, '#443560')
+  for (let k = -1; k < 3; k++) hill(ctx, k * span - off + 10, 546, 250, 74, pal.hill[0])
   const span2 = 320
   let off2 = ((cam * 0.5) % span2 + span2) % span2
-  for (let k = -1; k < 3; k++) hill(ctx, k * span2 - off2 + 120, 574, 300, 66, '#2e2442')
+  for (let k = -1; k < 3; k++) hill(ctx, k * span2 - off2 + 120, 574, 300, 66, pal.hill[1])
 }
+
 /* ---------- 平台 ---------- */
-function drawPlatform(ctx, p, cx, w) {
+function drawPlatform(ctx, p, cx, w, t) {
   const tint = TINT[p.type] || TINT.plain
   const x = even(cx - w / 2)
   const ww = Math.max(14, even(w))
@@ -209,6 +289,20 @@ function drawPlatform(ctx, p, cx, w) {
   ctx.fillRect(x + 2, top + 5, 1, 8)
 
   drawGlyph(ctx, p.type, x + ww / 2, top + 4, tint)
+
+  // 段首休息台：右边插一面小旗，远远就能看见「到站了」
+  if (p.rest) {
+    const fx = Math.round(x + ww - 16)
+    const wave = Math.round(Math.sin((t || 0) * 2.6 + p.i) * 2)
+    ctx.fillStyle = '#3a2c3a'
+    ctx.fillRect(fx, top - 16, 2, 16)
+    ctx.fillStyle = '#ffd45e'
+    ctx.fillRect(fx + 2, top - 16, 10, 2)
+    ctx.fillRect(fx + 2 + (wave > 0 ? 2 : 0), top - 14, 8, 2)
+    ctx.fillRect(fx + 2 + (wave < 0 ? 2 : 0), top - 12, 6, 2)
+    ctx.fillStyle = '#ff9ec4'
+    ctx.fillRect(fx + 2 + (wave < 0 ? 2 : 0), top - 10, 4, 2)
+  }
 }
 
 function drawGlyph(ctx, type, cx, y, tint) {
@@ -244,7 +338,7 @@ function drawGlyph(ctx, type, cx, y, tint) {
   }
 }
 
-function drawPlatforms(ctx, g, cam) {
+function drawPlatforms(ctx, g, cam, t) {
   const from = Math.max(0, g.idx - 3)
   const to = Math.min(g.road.length - 1, g.idx + 9)
   for (let i = from; i <= to; i++) {
@@ -252,12 +346,12 @@ function drawPlatforms(ctx, g, cam) {
     if (!p) continue
     const px = platformX(p, g.t) - cam
     if (px < -140 || px > W + 140) continue
-    drawPlatform(ctx, p, px, widthOf(p, g.narrow && g.narrow[p.i]))
+    drawPlatform(ctx, p, px, widthOf(p, g.narrow && g.narrow[p.i]), t)
   }
 }
 
 /* ---------- 小人 ---------- */
-export function drawFigure(ctx, cx, feetY, slot, squash, alpha) {
+export function drawFigure(ctx, cx, feetY, slot, squash, alpha, blink) {
   const f = FIG[slot] || FIG.u1
   const s = squash || 1
   const top = feetY - FIG_H * s
@@ -268,7 +362,9 @@ export function drawFigure(ctx, cx, feetY, slot, squash, alpha) {
     for (let c = 0; c < line.length; c++) {
       const k = line[c]
       if (k === '.') continue
-      const col = f.pal[k]
+      let col = f.pal[k]
+      if (blink && k === 'E') col = f.pal.S
+      if (blink && k === 'F') col = '#7a5a4e'
       if (!col) continue
       ctx.fillStyle = col
       ctx.fillRect(Math.round(cx - FIG_W / 2 + c * CELL), ry, CELL, CELL)
@@ -309,9 +405,14 @@ function drawFloats(ctx, g, cam) {
     const f = g.floats[i]
     if (f.life <= 0) continue
     const k = 1 - f.life / f.max
+    const tx = Math.round(f.x - cam)
+    const ty = Math.round(f.y - k * 18)
     ctx.globalAlpha = Math.max(0, Math.min(1, f.life / f.max))
+    // 浅色天空（长路）也要看得清：先压一层深色影子
+    ctx.fillStyle = 'rgba(32,22,40,.45)'
+    ctx.fillText(f.text, tx + 1, ty + 1)
     ctx.fillStyle = f.color
-    ctx.fillText(f.text, Math.round(f.x - cam), Math.round(f.y - k * 18))
+    ctx.fillText(f.text, tx, ty)
   }
   ctx.globalAlpha = 1
 }
@@ -368,11 +469,32 @@ export function drawScene(ctx, g, opts) {
   const o = opts || {}
   const shake = g.shake > 0 ? Math.sin(g.t * 80) * 2 * g.shake : 0
   const cam = g.cam + shake
-  drawSky(ctx, g.cam, g.t)
-  drawHills(ctx, g.cam)
-  drawPlatforms(ctx, g, cam)
+  const reduce = !!o.reduce
+  const animT = reduce ? 0 : g.t
+  const here = g.road[g.idx]
+  const sec = g.sec != null ? g.sec : (here && here.sec) || 0
+  const pal = PALETTES[sec] || PALETTES[0]
+  const fromSec = g.skyFrom != null ? g.skyFrom : sec
+  const fromPal = PALETTES[fromSec] || pal
+  const mix = reduce ? 1 : (g.skyMix == null ? 1 : g.skyMix)
+
+  // 换段：旧天色铺底，新天色按 0~1 的透明度叠上去（0.5s，不是硬切）
+  if (mix < 1 && fromPal !== pal) {
+    drawSky(ctx, g.cam, animT, fromPal, 1)
+    drawHills(ctx, g.cam, fromPal)
+    drawSky(ctx, g.cam, animT, pal, mix)
+    ctx.globalAlpha = mix
+    drawHills(ctx, g.cam, pal)
+    ctx.globalAlpha = 1
+  } else {
+    drawSky(ctx, g.cam, animT, pal, 1)
+    drawHills(ctx, g.cam, pal)
+  }
+
+  drawPlatforms(ctx, g, cam, animT)
   if (g.combo >= 3) drawTrail(ctx, g, cam)
-  drawFigure(ctx, g.x - cam, g.y, o.slot, squashOf(g), g.mode === 'fall' ? 0.7 : 1)
+  const blink = !reduce && (g.mode === 'idle' || g.mode === 'charge' || g.mode === 'landed') && (g.t % 4.6) < 0.11
+  drawFigure(ctx, g.x - cam, g.y, o.slot, squashOf(g), g.mode === 'fall' ? 0.7 : 1, blink)
   drawParticles(ctx, g, cam)
   drawFloats(ctx, g, cam)
   drawBar(ctx, g)
@@ -381,8 +503,8 @@ export function drawScene(ctx, g, opts) {
 
 /** 还没有路的时候（登录中 / 报错）画个背景，别留一块黑 */
 export function drawBackdrop(ctx) {
-  drawSky(ctx, 0, 0)
-  drawHills(ctx, 0)
+  drawSky(ctx, 0, 0, PALETTES[0], 1)
+  drawHills(ctx, 0, PALETTES[0])
 }
 
 export { W, H, FIG_W, FIG_H }
