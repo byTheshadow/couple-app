@@ -123,7 +123,7 @@ const PALETTES = [
     sky: ['#12162e', '#171c3a', '#1d2448', '#252c54', '#2e3562', '#383d6e', '#44467a', '#504e86'],
     hill: ['#242449', '#171831'],
     sun: '#e8ecff', glow: '#aab6ff', moon: true,
-    stars: 1.7, cloud: '#aab6ff', cloudA: 0.08,
+    stars: 1.7, cloud: '#aab6ff', cloudA: 0.13,
   },
   {
     sky: ['#4a3a63', '#6b4a72', '#9a5f7d', '#c47a82', '#e59a8b', '#f4b79b', '#fbd3b4', '#ffe6cf'],
@@ -170,29 +170,58 @@ function drawSky(ctx, cam, t, pal, alpha) {
 
   const starA = Math.max(0, Math.min(1.8, pal.stars || 0))
   if (starA > 0.05) {
+    ctx.fillStyle = '#fff3da'
     for (let i = 0; i < STARS.length; i++) {
-      const tw = 0.55 + 0.45 * Math.sin(t * 1.5 + i * 1.7)
-      ctx.globalAlpha = a * Math.min(1, (0.3 + 0.25 * tw) * starA)
-      ctx.fillStyle = '#fff3da'
+      // 每颗星星自己的频率和相位：不整片一起呼吸，才会「闪」
+      const tw = 0.5 + 0.5 * Math.sin(t * (1.0 + (i % 5) * 0.37) + i * 1.7)
+      const al = a * Math.min(1, (0.16 + 0.66 * tw) * starA)
+      ctx.globalAlpha = al
       ctx.fillRect(STARS[i][0], STARS[i][1], 2, 2)
+      // 三颗「主星」亮到顶时多一个十字，像素感的闪
+      if ((i === 4 || i === 10 || i === 16) && tw > 0.8) {
+        const sx = STARS[i][0]
+        const sy = STARS[i][1]
+        ctx.globalAlpha = al * 0.5
+        ctx.fillRect(sx - 2, sy, 2, 2)
+        ctx.fillRect(sx + 2, sy, 2, 2)
+        ctx.fillRect(sx, sy - 2, 2, 2)
+        ctx.fillRect(sx, sy + 2, 2, 2)
+      }
     }
     if (starA > 1.2) {
       for (let i = 0; i < STARS2.length; i++) {
-        ctx.globalAlpha = a * (0.18 + 0.18 * ((i * 5) % 4) / 3)
+        const tw = 0.5 + 0.5 * Math.sin(t * (0.8 + (i % 4) * 0.31) + i * 2.1)
+        ctx.globalAlpha = a * (0.09 + 0.23 * tw)
+        ctx.fillStyle = '#fff3da'
         ctx.fillRect(STARS2[i][0], STARS2[i][1], 2, 2)
       }
     }
     ctx.globalAlpha = a
   }
 
-  // 星河：一条斜着的碎星带（不做模糊，只叠小点）
+  // 星河：一条斜着的碎星带（不做模糊，只叠小点），每颗自己慢慢呼吸
   if (pal.milky) {
     ctx.fillStyle = '#d9d2ff'
     for (let i = 0; i < MILKY.length; i++) {
-      ctx.globalAlpha = a * (0.12 + 0.12 * ((i * 7) % 5) / 4)
+      const tw = 0.5 + 0.5 * Math.sin(t * 0.9 + i * 0.8)
+      ctx.globalAlpha = a * (0.07 + 0.17 * tw)
       ctx.fillRect(MILKY[i][0], MILKY[i][1], 2, 2)
     }
     ctx.globalAlpha = a
+
+    // 每 11 秒一颗流星：0.7s 划过，只有星河段有（reduce 时 t=0，不出现）
+    const k = (t + 3.2) % 11
+    if (k < 0.7) {
+      const u = k / 0.7
+      const hx = 318 - u * 150
+      const hy = 44 + u * 96
+      ctx.fillStyle = '#fff6ff'
+      for (let s = 0; s < 6; s++) {
+        ctx.globalAlpha = a * (0.55 - s * 0.08) * (1 - u * 0.45)
+        ctx.fillRect(Math.round(hx + s * 3), Math.round(hy - s * 2), 2, 2)
+      }
+      ctx.globalAlpha = a
+    }
   }
 
   // 太阳 / 月亮：外面两圈光晕 + 圆盘；光晕轻轻呼吸
@@ -223,7 +252,8 @@ function drawSky(ctx, cam, t, pal, alpha) {
   if (pal.cloud) {
     const span = W + 200
     for (let i = 0; i < 3; i++) {
-      const raw = i * 170 + 30 - cam * 0.16
+      // 云：镜头视差 + 自己的漂移，站着不动也会慢慢往左走
+      const raw = i * 170 + 30 - cam * 0.16 - t * (6 + i * 2)
       const x = ((raw % span) + span) % span - 90
       cloud(ctx, x, 104 + i * 52, 62 + i * 14, pal.cloudA * a, pal.cloud)
     }
