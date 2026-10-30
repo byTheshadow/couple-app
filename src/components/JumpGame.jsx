@@ -16,7 +16,7 @@ import {
 import { questionAt, giftAt } from './jump/quiz'
 import { createSfx } from './jump/sfx'
 import { drawScene, drawBackdrop } from './jump/draw'
-import { loadState, submitStepRetry, resetRun } from '../lib/jumpStore'
+import { loadState, submitStepRetry, resetRun, takeTurn, handoffTurn, restartRun } from '../lib/jumpStore'
 import './jump.css'
 
 const W = VIEW.W
@@ -133,7 +133,7 @@ function QuizCard({ q, onPick, onClose }) {
             {q.ok
               ? <b className="ok">答对了，下一跳会吸到中心</b>
               : <b className="no">答错了，正确答案是「{q.right}」</b>}
-            {!q.ok && <span>下一块会窄一点，还是能跳</span>}
+            {!q.ok && <span>下一块会窄 35%；掉下去整条路从第 0 块重来</span>}
           </div>
         )}
         {q.done && (
@@ -154,7 +154,7 @@ export default function JumpGame({ onExit }) {
   const phaseRef = useRef('loading')
   const quizRef = useRef(null)
   const menuRef = useRef(false)
-  const confirmRef = useRef(false)
+  const confirmRef = useRef('')
   const syncRef = useRef('idle')
   const pendingRef = useRef(null)
   const answeredRef = useRef({})
@@ -162,6 +162,8 @@ export default function JumpGame({ onExit }) {
   const slotRef = useRef('u1')
   const commitRef = useRef(() => {})
   const landRef = useRef(() => {})
+  const fallRef = useRef(() => {})
+  const fallDone = useRef(false)
   const sayT = useRef(0)
 
   const [sfx] = useState(() => createSfx())
@@ -172,7 +174,7 @@ export default function JumpGame({ onExit }) {
   const [err, setErr] = useState('')
   const [quiz, setQuiz] = useState(null)
   const [menu, setMenu] = useState(false)
-  const [confirm, setConfirm] = useState(false)
+  const [confirm, setConfirm] = useState('')
   const [toast, setToast] = useState('')
 
   const say = useCallback((t) => {
@@ -245,6 +247,7 @@ export default function JumpGame({ onExit }) {
     setErr('')
     applyState(res.state)
     if (!res.ok && res.reason === 'stale') say('TA 先跳了，跟上了')
+    else if (!res.ok && res.reason === 'not_turn') say('接力棒在 TA 手里：等 TA 交棒')
     else if (!res.ok) say('这一跳没算上，重新来')
   }, [applyState, say])
 
@@ -344,6 +347,61 @@ export default function JumpGame({ onExit }) {
 
   useEffect(() => { landRef.current = onLand }, [onLand])
 
+  /* 把小人放到第 i 块（掉落重开 / 同步用），不碰服务器 */
+  const snapTo = useCallback((g, i) => {
+    const p = ensureRoad(g, i)
+    g.idx = i
+    g.x = platformX(p, g.t)
+    g.y = p.y
+    g.vx = 0
+    g.vy = 0
+    g.mode = 'idle'
+    g.power = 0
+    g.snap = -1
+    g.landAt = 0
+    g.combo = 0
+    g.trail.length = 0
+    g.narrow = {}
+    g.cam = p.x - CAM
+    const sec = sectionOf(i)
+    g.sec = sec
+    g.skyFrom = sec
+    g.skyTo = sec
+    g.skyMix = 1
+  }, [])
+
+  /* ---------- 掉下去：整条路从头开始（分数清零，best 保留） ---------- */
+  const fallReset = useCallback(async (from) => {
+    const g = gRef.current
+    if (g) snapTo(g, 0)
+    syncRef.current = 'saving'
+    setSync('saving')
+    const seq = seqRef.current
+    const res = await restartRun()
+    if (!aliveRef.current || seq !== seqRef.current) { fallDone.current = false; return }
+    if (res.missing || res.error) {
+      // 服务端还没更新 / 网络不通：退回起跳那块，保持本地和服务端一致
+      const cur = gRef.current
+      if (cur) snapTo(cur, from)
+      syncRef.current = 'idle'
+      setSync('idle')
+      say(res.missing ? '服务端还没更新：掉落先退回上一块（记得跑 docs/jump-design.sql）' : '没同步上：这一跳退回起跳那块')
+      fallDone.current = false
+      return
+    }
+    answeredRef.current = {}
+    quizRef.current = null
+    setQuiz(null)
+    applyState(res.state)
+    setErr('')
+    syncRef.current = 'idle'
+    setSync('idle')
+    fallDone.current = false
+    say('掉下去了：整条路从头开始，分数清零')
+  }, [applyState, say, snapTo])
+
+  useEffect(() => { fallRef.current = fallReset }, [fallReset])
+
   /* ---------- 开局：读共享的路 ---------- */
   const boot = useCallback(async () => {
     if (authLoading) return
@@ -400,7 +458,9 @@ export default function JumpGame({ onExit }) {
     phaseRef.current === 'ready' &&
     syncRef.current === 'idle' &&
     gRef.current && gRef.current.mode === 'idle' &&
-    !quizRef.current && !menuRef.current && !confirmRef.current
+    !quizRef.current && !menuRef.current && !confirmRef.current &&
+    // 棒不在我手里时不能蓄力；turn 为空 = 棒悬空，谁先按谁接
+    (!hud || !hud.turn || hud.turn === myId)
   )
 
   const openQuiz = useCallback(() => {
@@ -477,7 +537,8 @@ export default function JumpGame({ onExit }) {
   /* ---------- 换一条路 ---------- */
   const openMenu = () => {
     const next = !menuRef.current
-    if (next && !canPlay()) return
+    if (next && (phaseRef.current !== 'ready' || syncRef.current !== 'idle' ||
+      quizRef.current || confirmRef.current)) return
     menuRef.current = next
     setMenu(next)
   }
@@ -490,18 +551,25 @@ export default function JumpGame({ onExit }) {
   const askReset = () => {
     menuRef.current = false
     setMenu(false)
-    confirmRef.current = true
-    setConfirm(true)
+    confirmRef.current = 'reset'
+    setConfirm('reset')
+  }
+
+  const askTake = () => {
+    menuRef.current = false
+    setMenu(false)
+    confirmRef.current = 'take'
+    setConfirm('take')
   }
 
   const cancelReset = () => {
-    confirmRef.current = false
-    setConfirm(false)
+    confirmRef.current = ''
+    setConfirm('')
   }
 
   const doReset = useCallback(async () => {
-    confirmRef.current = false
-    setConfirm(false)
+    confirmRef.current = ''
+    setConfirm('')
     const seq = ++seqRef.current
     syncRef.current = 'saving'
     setSync('saving')
@@ -520,6 +588,38 @@ export default function JumpGame({ onExit }) {
     setHud(res.state)
     say('换了一条新路，两个人从头开始')
   }, [say])
+
+  const doTake = useCallback(async () => {
+    confirmRef.current = ''
+    setConfirm('')
+    const seq = ++seqRef.current
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await takeTurn()
+    if (!aliveRef.current || seq !== seqRef.current) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没更新：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    applyState(res.state)
+    if (res.state && res.state.turn === myId) say('接到棒了，你来跳')
+  }, [applyState, say, myId])
+
+  const doHandoff = useCallback(async () => {
+    if (!partner) return
+    const seq = ++seqRef.current
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await handoffTurn(partner.id)
+    if (!aliveRef.current || seq !== seqRef.current) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没更新：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    if (!res.ok) { say('棒已经不在你手里了'); applyState(res.state); return }
+    applyState(res.state)
+    say('棒交给 ' + ((partner && partner.display_name) || 'TA') + ' 了')
+  }, [partner, applyState, say])
 
   const retry = () => {
     const p = pendingRef.current
@@ -547,20 +647,6 @@ export default function JumpGame({ onExit }) {
       g.combo = 0
       g.trail.length = 0
       sfx.play('fall')
-    }
-
-    const respawn = (g) => {
-      const p = g.road[g.from] || g.road[0]
-      g.idx = p.i
-      g.x = platformX(p, g.t)
-      g.y = p.y
-      g.vx = 0
-      g.vy = 0
-      g.mode = 'idle'
-      g.power = 0
-      g.snap = -1
-      g.landAt = 0
-      g.cam = p.x - CAM
     }
 
     const step = (g, now, dt) => {
@@ -618,7 +704,11 @@ export default function JumpGame({ onExit }) {
       if (g.mode === 'fall') {
         g.vy += PHYS.g * dt
         g.y += g.vy * dt
-        if (now - g.fallAt > PHYS.fallMs) respawn(g)
+        // 掉下去 = 从头开始：先视觉上回到第 0 块，再让服务器把整条路清零
+        if (now - g.fallAt > PHYS.fallMs && !fallDone.current) {
+          fallDone.current = true
+          fallRef.current(g.from)
+        }
       }
 
       if (g.mode === 'landed' && syncRef.current === 'idle' && now - g.landAt > 150) g.mode = 'idle'
@@ -740,6 +830,23 @@ export default function JumpGame({ onExit }) {
   const liveIdx = gRef.current ? gRef.current.idx : blocks
   const sec = SECTIONS[sectionOf(liveIdx)] || SECTIONS[0]
   const taName = (partner && partner.display_name) || 'TA'
+  const turn = hud ? hud.turn : null
+  const myTurn = !turn || turn === myId
+
+  /* 等棒的时候每 6 秒看一眼服务器：TA 跳了 / 交棒了，这边能跟上（不是 realtime） */
+  useEffect(() => {
+    if (phase !== 'ready' || myTurn) return undefined
+    let stop = false
+    const tick = async () => {
+      if (stop || document.hidden) return
+      const res = await loadState()
+      if (stop || !aliveRef.current) return
+      if (res.state) applyState(res.state)
+    }
+    tick()
+    const id = setInterval(tick, 6000)
+    return () => { stop = true; clearInterval(id) }
+  }, [phase, myTurn, applyState])
   const taJust = !!(
     hud && hud.last_uid && hud.last_uid !== myId && hud.updated_at &&
     Date.now() - new Date(hud.updated_at).getTime() < 5 * 60 * 1000
@@ -750,6 +857,7 @@ export default function JumpGame({ onExit }) {
   if (phase === 'ready' && sync === 'saving') hintText = '正在把这一跳交给 TA…'
   else if (phase === 'ready' && sync === 'error') hintText = '没同步上：点上面的「重试」，同一跳不会重复加分'
   else if (phase === 'ready' && needQuiz) hintText = '这块是问号平台：按一下，先答题'
+  else if (phase === 'ready' && !myTurn) hintText = '棒在 ' + taName + ' 手里：等 TA 交棒，或者点「我来接棒」'
   else if (phase !== 'ready') hintText = '两个人在同一条路上接力'
 
   return (
@@ -779,6 +887,7 @@ export default function JumpGame({ onExit }) {
             </button>
             {menu && (
               <div className="jp-menu">
+                {partner && turn === myId && <button type="button" onClick={doHandoff}>交给 {taName}</button>}
                 <button type="button" onClick={askReset}>换一条路</button>
               </div>
             )}
@@ -789,6 +898,7 @@ export default function JumpGame({ onExit }) {
           <span>你 <b>{myScore}</b></span>
           {partner && <span className="ta">{taName} <b>{taScore}</b></span>}
           {taJust && <span className="jp-just">TA 刚跳了</span>}
+          {!myTurn && <span className="jp-turn">轮到 {taName}</span>}
           <span className="grow" />
           {sync === 'saving' && <span className="jp-sync">同步中…</span>}
           {sync === 'error' && (
@@ -839,9 +949,17 @@ export default function JumpGame({ onExit }) {
                 </div>
               )}
 
+              {phase === 'ready' && !myTurn && (
+                <div className="jp-ov">
+                  <b>轮到 {taName} 跳</b>
+                  <span>棒在 TA 手里。TA 跳完会交给你；等不及就接过来（会把 TA 正在跳的这一下顶掉）</span>
+                  <button type="button" className="btn" onClick={askTake}>我来接棒</button>
+                </div>
+              )}
+
               {quiz && <QuizCard q={quiz} onPick={pickAnswer} onClose={closeQuiz} />}
 
-              {confirm && (
+              {confirm === 'reset' && (
                 <div className="jp-card">
                   <div className="jp-card-in jp-confirm">
                     <b>换一条路？</b>
@@ -849,6 +967,19 @@ export default function JumpGame({ onExit }) {
                     <div className="jp-confirm-acts">
                       <button type="button" className="btn ghost" onClick={cancelReset}>再想想</button>
                       <button type="button" className="btn" onClick={doReset}>换路</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {confirm === 'take' && (
+                <div className="jp-card">
+                  <div className="jp-card-in jp-confirm">
+                    <b>接过接力棒？</b>
+                    <p>如果 TA 正在跳，这一下会被顶掉、不算分。</p>
+                    <div className="jp-confirm-acts">
+                      <button type="button" className="btn ghost" onClick={cancelReset}>再等等</button>
+                      <button type="button" className="btn" onClick={doTake}>接棒</button>
                     </div>
                   </div>
                 </div>

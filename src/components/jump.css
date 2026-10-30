@@ -87,6 +87,7 @@
 .jp-stat .ta b { color: #c76a8c; }
 .jp-stat .grow { flex: 1; }
 .jp-just { color: #c76a8c; }
+.jp-turn { color: #c76a8c; font-weight: 650; }
 .jp-sync { color: var(--ink2); }
 .jp-retry {
   border: none;

@@ -113,3 +113,66 @@ export async function resetRun() {
   if (!state) return { state: null, missing: false, error: '换路没有成功，再点一次' }
   return { state, missing: false, error: null }
 }
+
+/** 接棒：把棒拿过来（TA 正在跳的时候，这一下会被顶掉） */
+export async function takeTurn() {
+  if (!supabase) return { state: null, missing: true, error: null }
+  let data = null
+  let error = null
+  try {
+    const r = await supabase.rpc('pal_jump_take')
+    data = r.data
+    error = r.error
+  } catch (e) {
+    return { state: null, missing: false, error: '网络不通' }
+  }
+  if (error) {
+    if (isMissing(error)) return { state: null, missing: true, error: null }
+    return { state: null, missing: false, error: errText(error) }
+  }
+  const state = data && data.ok ? data.state : null
+  if (!state) return { state: null, missing: false, error: '接棒没有成功，再点一次' }
+  return { state, missing: false, error: null }
+}
+
+/** 交棒：把棒交给 TA（p_uid = 对方 id），只有持棒的人能交 */
+export async function handoffTurn(toUid) {
+  if (!supabase) return { ok: false, state: null, missing: true, error: null }
+  if (!toUid) return { ok: false, state: null, missing: false, error: '没找到 TA 的账号' }
+  let data = null
+  let error = null
+  try {
+    const r = await supabase.rpc('pal_jump_handoff', { p_uid: toUid })
+    data = r.data
+    error = r.error
+  } catch (e) {
+    return { ok: false, state: null, missing: false, error: '网络不通' }
+  }
+  if (error) {
+    if (isMissing(error)) return { ok: false, state: null, missing: true, error: null }
+    return { ok: false, state: null, missing: false, error: errText(error) }
+  }
+  if (!data || !data.state) return { ok: false, state: null, missing: false, error: '交棒没有成功，再点一次' }
+  return { ok: !!data.ok, reason: data.reason || '', state: data.state, missing: false, error: null }
+}
+
+/** 掉下去：整条路回到第 0 块、分数清零、best 保留、棒悬空（谁先按谁接） */
+export async function restartRun() {
+  if (!supabase) return { state: null, missing: true, error: null }
+  let data = null
+  let error = null
+  try {
+    const r = await supabase.rpc('pal_jump_restart')
+    data = r.data
+    error = r.error
+  } catch (e) {
+    return { state: null, missing: false, error: '网络不通' }
+  }
+  if (error) {
+    if (isMissing(error)) return { state: null, missing: true, error: null }
+    return { state: null, missing: false, error: errText(error) }
+  }
+  const state = data && data.ok ? data.state : null
+  if (!state) return { state: null, missing: false, error: '重开没有成功，再试一次' }
+  return { state, missing: false, error: null }
+}
