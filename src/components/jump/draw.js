@@ -539,6 +539,190 @@ function drawPlatforms(ctx, g, cam, t, pal) {
   }
 }
 
+/* ---------- 守护特效：u1 的翅膀 / u2 的气泡 ---------- */
+const WING_ANGEL = [
+  '..........##',
+  '........####',
+  '......######',
+  '....########',
+  '...#########',
+  '..##########',
+  '..##########',
+  '.###########',
+  '.###########',
+  '.##########.',
+  '..#########.',
+  '..########..',
+  '...######...',
+  '....####....',
+]
+const WING_DEVIL = [
+  '..........##',
+  '........####',
+  '......######',
+  '....########',
+  '...####.####',
+  '..#####..###',
+  '..####....##',
+  '.#####.....#',
+  '.####.......',
+  '.####.......',
+  '..###.......',
+  '..##........',
+  '...#........',
+  '............',
+]
+const WING_PAL = {
+  angel: { main: '#fdf7e8', tip: '#ffffff', edge: '#c9a86a' },
+  devil: { main: '#3b2338', tip: '#7a3b52', edge: '#c2455f' },
+}
+
+function drawWing(ctx, cx, feetY, dir, rows, pal, alpha) {
+  const ox = Math.round(cx + dir * 6)
+  const oy = Math.round(feetY - 40)
+  // 描边：上/左右各偏一格，把白翅膀从浅天空里拎出来
+  ctx.globalAlpha = alpha * 0.45
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      if (rows[r][c] !== '#') continue
+      const x = dir > 0 ? ox + c * 2 : ox - c * 2 - 2
+      ctx.fillStyle = pal.edge
+      ctx.fillRect(x, oy + r * 2 + 2, 2, 2)
+      ctx.fillRect(x + dir * 2, oy + r * 2, 2, 2)
+    }
+  }
+  ctx.globalAlpha = alpha
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      if (rows[r][c] !== '#') continue
+      const x = dir > 0 ? ox + c * 2 : ox - c * 2 - 2
+      ctx.fillStyle = r < 2 ? pal.tip : (r >= rows.length - 2 ? pal.edge : pal.main)
+      ctx.fillRect(x, oy + r * 2, 2, 2)
+    }
+  }
+  ctx.globalAlpha = 1
+}
+
+function drawGuardBubble(ctx, cx, cy, alpha, t) {
+  ctx.globalAlpha = alpha * 0.14
+  ctx.fillStyle = '#ffd36a'
+  for (let dy = -52; dy <= 52; dy += 2) {
+    const half = Math.sqrt(Math.max(0, 52 * 52 - dy * dy))
+    ctx.fillRect(Math.round(cx - half), Math.round(cy + dy), Math.max(2, Math.round(half * 2)), 2)
+  }
+  ctx.globalAlpha = alpha * 0.26
+  for (let dy = -44; dy <= 44; dy += 2) {
+    const half = Math.sqrt(Math.max(0, 44 * 44 - dy * dy))
+    ctx.fillRect(Math.round(cx - half), Math.round(cy + dy), Math.max(2, Math.round(half * 2)), 2)
+  }
+  // 边缘：一圈亮点
+  ctx.globalAlpha = alpha * 0.95
+  ctx.fillStyle = '#ffe9a8'
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2 + (t || 0) * 0.6
+    ctx.fillRect(Math.round(cx + Math.cos(a) * 50), Math.round(cy + Math.sin(a) * 50), 2, 2)
+  }
+  ctx.globalAlpha = 1
+}
+
+/* ---------- u2 的掉落小剧场：落水 → 鲨鱼 → 顶回平台（1.8s） ---------- */
+function cutShark(ctx, x, y, s, dir, open) {
+  const u = 2 * s
+  const R = (dx, dy, w, h, c) => {
+    ctx.fillStyle = c
+    ctx.fillRect(x + dir * dx * u, y + dy * u, dir * w * u, h * u)
+  }
+  const B = '#5f7f8f', D = '#31505f', L = '#d3e7ee', M = '#2a0f18', T = '#ffffff'
+  R(0, 5, 44, 5, B)
+  R(4, 3, 38, 9, B)
+  R(12, 2, 26, 11, B)
+  R(0, 7, 8, 3, B)
+  R(6, 9, 30, 3, L)
+  R(16, -3, 10, 5, D)
+  R(19, -7, 6, 4, D)
+  R(21, -9, 3, 2, D)
+  R(42, 3, 4, 5, D)
+  R(45, -5, 5, 7, D)
+  R(45, 5, 5, 7, D)
+  R(49, 0, 4, 5, D)
+  R(0, 8, 11, 2, M)
+  if (open) {
+    R(0, 6, 11, 2, M)
+    for (let i = 0; i < 5; i++) {
+      R(1 + i * 2, 6, 1, 1, T)
+      R(1 + i * 2, 8, 1, 1, T)
+    }
+  }
+  R(9, 5, 3, 3, '#ffffff')
+  R(10, 6, 1, 1, '#101820')
+  R(16, 6, 1, 4, D)
+  R(19, 6, 1, 4, D)
+}
+
+function drawCutscene(ctx, g, age, cam) {
+  if (age < 0 || age > 1.8) return
+  const cx = Math.round(g.x - cam)
+  const py = g.y
+  const surf = 452
+  // 水面
+  ctx.globalAlpha = 0.9
+  ctx.fillStyle = '#17546f'
+  ctx.fillRect(0, surf, W, H - surf)
+  ctx.fillStyle = '#2f7f9d'
+  ctx.fillRect(0, surf, W, 4)
+  ctx.globalAlpha = 0.35
+  ctx.fillStyle = '#bfe9f5'
+  for (let i = 0; i < 8; i++) ctx.fillRect((i * 47 + 11) % W, surf + 4 + (i % 2) * 4, 20, 2)
+  ctx.globalAlpha = 1
+
+  // 鲨鱼：0.55 从水底升上来，1.5 之后沉回去
+  let sharkY = H + 70
+  if (age > 0.55 && age < 1.5) sharkY = surf + 8 - (age - 0.55) * 60
+  else if (age >= 1.5) sharkY = surf - 40 + (age - 1.5) * 260
+  if (age > 0.55 && age < 1.8) {
+    ctx.globalAlpha = 0.95
+    cutShark(ctx, cx + 54, Math.round(sharkY), 1.5, -1, age > 0.95 && age < 1.45)
+    ctx.globalAlpha = 1
+  }
+
+  // 小人
+  let y = py
+  let alpha = 1
+  if (age < 0.45) {
+    y = py + (surf - 8 - py) * (age / 0.45)
+  } else if (age < 0.9) {
+    y = surf - 8 + 30 * ((age - 0.45) / 0.45)
+    alpha = 0.75
+  } else if (age < 1.5) {
+    const u = (age - 0.9) / 0.6
+    y = surf + 22 - 118 * u * u
+    alpha = 0.85
+  } else {
+    const u = Math.min(1, (age - 1.5) / 0.3)
+    y = surf - 96 - (surf - 96 - py) * u
+    alpha = 1
+  }
+  ctx.globalAlpha = alpha
+  drawFigure(ctx, cx, y, 'u2', 1, alpha, false)
+  ctx.globalAlpha = 1
+
+  // 水花
+  const hit = age >= 0.45 ? (age - 0.45) : -1
+  const out = age >= 1.5 ? (age - 1.5) : -1
+  const drop = (t0) => {
+    if (t0 < 0 || t0 > 0.5) return
+    ctx.globalAlpha = Math.max(0, 0.9 - t0 * 1.8)
+    ctx.fillStyle = '#cfeffb'
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2
+      ctx.fillRect(Math.round(cx + Math.cos(a) * (14 + t0 * 70)), Math.round(surf - 6 + Math.sin(a) * (8 + t0 * 36)), 4, 4)
+    }
+    ctx.globalAlpha = 1
+  }
+  drop(hit)
+  drop(out)
+}
+
 /* ---------- 小人 ---------- */
 export function drawFigure(ctx, cx, feetY, slot, squash, alpha, blink) {
   const f = FIG[slot] || FIG.u1
@@ -683,12 +867,32 @@ export function drawScene(ctx, g, opts) {
 
   drawPlatforms(ctx, g, cam, animT, pal)
   if (g.combo >= 3) drawTrail(ctx, g, cam)
+
+  // 守护特效：保住的那 1.1 秒
+  const guardAge = g.guard ? g.t - g.guard.at : 9
+  const guardOn = guardAge < 1.1
+  if (guardOn && g.guard.kind !== 'bubble') {
+    const rows = g.guard.kind === 'devil' ? WING_DEVIL : WING_ANGEL
+    const pal = g.guard.kind === 'devil' ? WING_PAL.devil : WING_PAL.angel
+    const flap = reduce ? 0 : (Math.sin(guardAge * 14) > 0 ? 2 : 0)
+    const fade = Math.min(1, (1.1 - guardAge) / 0.25)
+    const fy = g.y + flap
+    drawWing(ctx, g.x - cam, fy, 1, rows, pal, fade)
+    drawWing(ctx, g.x - cam, fy, -1, rows, pal, fade)
+  }
+
   const blink = !reduce && (g.mode === 'idle' || g.mode === 'charge' || g.mode === 'landed') && (g.t % 4.6) < 0.11
-  drawFigure(ctx, g.x - cam, g.y, o.slot, squashOf(g), g.mode === 'fall' ? 0.7 : 1, blink)
+  if (!g.cut) drawFigure(ctx, g.x - cam, g.y, o.slot, squashOf(g), g.mode === 'fall' ? 0.7 : 1, blink)
+
+  if (guardOn && g.guard.kind === 'bubble') {
+    const fade = Math.min(1, (1.1 - guardAge) / 0.25)
+    drawGuardBubble(ctx, g.x - cam, g.y - 22, fade, reduce ? 0 : guardAge)
+  }
   drawParticles(ctx, g, cam)
   drawFloats(ctx, g, cam)
   drawBar(ctx, g)
   if (o.quizHint) drawQuizHint(ctx, g, cam)
+  if (g.cut) drawCutscene(ctx, g, g.t - g.cut.at, cam)
 }
 
 /** 还没有路的时候（登录中 / 报错）画个背景，别留一块黑 */

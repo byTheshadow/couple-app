@@ -88,6 +88,93 @@
 .jp-stat .grow { flex: 1; }
 .jp-just { color: #c76a8c; }
 .jp-turn { color: #c76a8c; font-weight: 650; }
+
+/* 道具条：背包 / 冻结卡 / 今日守护 */
+.jp-items {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--ink2);
+}
+.jp-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--win2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.jp-item:disabled { opacity: .45; cursor: default; }
+.jp-item.use:active { transform: scale(.96); }
+
+/* 守护提示：古早金匾 */
+.jp-guard {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 54px;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  animation: jp-guard-in .42s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+.jp-guard-inner {
+  position: relative;
+  padding: 10px 30px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #5d1428, #2a0713);
+  border: 2px solid #f6c650;
+  box-shadow: 0 0 0 1px #7a4a12, 0 10px 26px rgba(0, 0, 0, .55), 0 0 30px rgba(255, 190, 60, .45);
+}
+.jp-guard-inner::before,
+.jp-guard-inner::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 30px;
+  margin-top: -15px;
+  background: #3a0f1e;
+  border: 2px solid #f6c650;
+}
+.jp-guard-inner::before { left: -20px; border-right: 0; border-radius: 4px 0 0 4px; }
+.jp-guard-inner::after { right: -20px; border-left: 0; border-radius: 0 4px 4px 0; }
+.jp-guard-title {
+  display: block;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-align: center;
+  background: linear-gradient(180deg, #fffdf0 4%, #ffe27a 44%, #ffb43a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 9px rgba(255, 200, 70, .95)) drop-shadow(0 2px 0 rgba(42, 10, 18, .95));
+}
+.jp-guard-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  text-align: center;
+  color: #ffe6a8;
+  letter-spacing: .16em;
+}
+@keyframes jp-guard-in {
+  from { transform: scale(.86); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jp-guard { animation: none; }
+}
 .jp-sync { color: var(--ink2); }
 .jp-retry {
   border: none;

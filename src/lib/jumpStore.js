@@ -44,7 +44,7 @@ export async function loadState() {
   }
   const state = data && data.ok ? data.state : null
   if (!state) return { state: null, missing: false, error: '服务端没有返回这条路' }
-  return { state, missing: false, error: null }
+  return { state, me: (data && data.me) || null, missing: false, error: null }
 }
 
 /**
@@ -175,4 +175,55 @@ export async function restartRun() {
   const state = data && data.ok ? data.state : null
   if (!state) return { state: null, missing: false, error: '重开没有成功，再试一次' }
   return { state, missing: false, error: null }
+}
+
+/** 掉落时掷一次守护：{ ok, kind: 'guard'|'freeze', reason, me } */
+export async function guardFall() {
+  if (!supabase) return { ok: false, reason: 'offline', me: null, missing: true, error: null }
+  let data = null
+  let error = null
+  try {
+    const r = await supabase.rpc('pal_jump_guard')
+    data = r.data
+    error = r.error
+  } catch (e) {
+    return { ok: false, reason: 'network', me: null, missing: false, error: '网络不通' }
+  }
+  if (error) {
+    if (isMissing(error)) return { ok: false, reason: 'missing', me: null, missing: true, error: null }
+    return { ok: false, reason: 'error', me: null, missing: false, error: errText(error) }
+  }
+  return {
+    ok: !!(data && data.ok),
+    reason: (data && data.reason) || '',
+    kind: (data && data.kind) || '',
+    me: (data && data.me) || null,
+    missing: false,
+    error: null,
+  }
+}
+
+/** 用掉一个背包：{ ok, me }；跳 3 格由客户端自己提交 */
+export async function useBag() {
+  if (!supabase) return { ok: false, me: null, missing: true, error: null }
+  let data = null
+  let error = null
+  try {
+    const r = await supabase.rpc('pal_jump_bag')
+    data = r.data
+    error = r.error
+  } catch (e) {
+    return { ok: false, me: null, missing: false, error: '网络不通' }
+  }
+  if (error) {
+    if (isMissing(error)) return { ok: false, me: null, missing: true, error: null }
+    return { ok: false, me: null, missing: false, error: errText(error) }
+  }
+  return {
+    ok: !!(data && data.ok),
+    reason: (data && data.reason) || '',
+    me: (data && data.me) || null,
+    missing: false,
+    error: null,
+  }
 }

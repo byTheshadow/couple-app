@@ -16,7 +16,7 @@ import {
 import { questionAt, giftAt } from './jump/quiz'
 import { createSfx } from './jump/sfx'
 import { drawScene, drawBackdrop } from './jump/draw'
-import { loadState, submitStepRetry, resetRun, takeTurn, handoffTurn, restartRun } from '../lib/jumpStore'
+import { loadState, submitStepRetry, resetRun, takeTurn, handoffTurn, restartRun, guardFall, useBag } from '../lib/jumpStore'
 import './jump.css'
 
 const W = VIEW.W
@@ -164,6 +164,13 @@ export default function JumpGame({ onExit }) {
   const landRef = useRef(() => {})
   const fallRef = useRef(() => {})
   const fallDone = useRef(false)
+  const guardOk = useRef(false)
+  const guardKind = useRef('')
+  const guardSettled = useRef(true)
+  const guardTry = useRef(() => {})
+  const guardT = useRef(0)
+  const bannerT = useRef(0)
+  const cutT = useRef(0)
   const sayT = useRef(0)
 
   const [sfx] = useState(() => createSfx())
@@ -176,11 +183,19 @@ export default function JumpGame({ onExit }) {
   const [menu, setMenu] = useState(false)
   const [confirm, setConfirm] = useState('')
   const [toast, setToast] = useState('')
+  const [inv, setInv] = useState(null)
+  const [banner, setBanner] = useState(null)
 
   const say = useCallback((t) => {
     setToast(t)
     clearTimeout(sayT.current)
     sayT.current = setTimeout(() => setToast(''), 2600)
+  }, [])
+
+  const showBanner = useCallback((title, sub) => {
+    setBanner({ title, sub })
+    clearTimeout(bannerT.current)
+    bannerT.current = setTimeout(() => setBanner(null), 1900)
   }, [])
 
   useEffect(() => {
@@ -190,6 +205,9 @@ export default function JumpGame({ onExit }) {
   useEffect(() => () => {
     aliveRef.current = false
     clearTimeout(sayT.current)
+    clearTimeout(bannerT.current)
+    clearTimeout(guardT.current)
+    clearTimeout(cutT.current)
     sfx.dispose()
   }, [sfx])
 
@@ -378,8 +396,43 @@ export default function JumpGame({ onExit }) {
   }, [])
 
   /* ---------- 掉下去：整条路从头开始（分数清零，best 保留） ---------- */
-  const fallReset = useCallback(async (from) => {
+  const fallReset = useCallback(async (from, guarded, serverKind) => {
     const g = gRef.current
+    if (guarded) {
+      // 守护住了：回到起跳那块，不扣分、不清零
+      const u2 = slotRef.current === 'u2'
+      if (g) snapTo(g, from)
+      if (u2) {
+        // u2：播 1.8 秒小剧场（落水 → 鲨鱼 → 顶回平台），播完再出金匾
+        if (g) g.cut = { at: g.t }
+        syncRef.current = 'saving'
+        setSync('saving')
+        clearTimeout(cutT.current)
+        cutT.current = setTimeout(() => {
+          const cur = gRef.current
+          if (cur) cur.cut = null
+          syncRef.current = 'idle'
+          setSync('idle')
+          if (!aliveRef.current) return
+          showBanner('炫少的保护', '这一下不算数')
+          sfx.play('perfect')
+          say(serverKind === 'freeze' ? '冻结卡挡了一下，鲨鱼把你顶回来了' : '鲨鱼把你顶回来了')
+        }, 1800)
+      } else {
+        if (g) {
+          const sec = sectionOf(g.idx)
+          g.guard = { at: g.t, kind: sec === 1 || sec === 4 ? 'devil' : 'angel' }
+        }
+        const sec2 = g ? sectionOf(g.idx) : 0
+        if (sec2 === 1 || sec2 === 4) showBanner('恶魔的庇护', '这一下不算数')
+        else showBanner('天使的守护', '这一下不算数')
+        sfx.play('perfect')
+        say(serverKind === 'freeze' ? '冻结卡挡了一下，这一下不算数' : '守护生效，这一下不算数')
+      }
+      fallDone.current = false
+      guardSettled.current = true
+      return
+    }
     if (g) snapTo(g, 0)
     syncRef.current = 'saving'
     setSync('saving')
@@ -405,9 +458,26 @@ export default function JumpGame({ onExit }) {
     setSync('idle')
     fallDone.current = false
     say('掉下去了：整条路从头开始，分数清零')
-  }, [applyState, say, snapTo])
+  }, [applyState, say, snapTo, showBanner, sfx])
 
   useEffect(() => { fallRef.current = fallReset }, [fallReset])
+
+  /* 掉落时问服务器：这一下有没有守护（50% + 每日 3 次 + 冻结卡） */
+  const tryGuard = useCallback(async () => {
+    try {
+      const res = await guardFall()
+      if (!aliveRef.current) return
+      guardOk.current = !!res.ok
+      guardKind.current = res.kind || ''
+      if (res.me) setInv(res.me)
+    } catch (e) {
+      guardOk.current = false
+    } finally {
+      guardSettled.current = true
+    }
+  }, [])
+
+  useEffect(() => { guardTry.current = tryGuard }, [tryGuard])
 
   /* ---------- 开局：读共享的路 ---------- */
   const boot = useCallback(async () => {
@@ -440,6 +510,7 @@ export default function JumpGame({ onExit }) {
     answeredRef.current = {}
     gRef.current = makeGame(res.state.seed, res.state.platform)
     setHud(res.state)
+    setInv(res.me || null)
     phaseRef.current = 'ready'
     setPhase('ready')
   }, [authLoading, myId])
@@ -628,6 +699,31 @@ export default function JumpGame({ onExit }) {
     say('棒交给 ' + ((partner && partner.display_name) || 'TA') + ' 了')
   }, [partner, applyState, say])
 
+  const useBagNow = useCallback(async () => {
+    const g = gRef.current
+    if (!g || !inv || inv.bags <= 0) return
+    if (phaseRef.current !== 'ready' || syncRef.current !== 'idle') return
+    if (g.mode !== 'idle' && g.mode !== 'landed') return
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await useBag()
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没更新：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    if (!res.ok) { say('背包用完了'); return }
+    if (res.me) setInv(res.me)
+    const from = g.idx
+    const to = Math.min(from + 3, g.road.length - 1)
+    if (to <= from) { say('前面没有三块了'); return }
+    const p = g.road[to]
+    burst(g, p.x, p.y - 30, '#ffd45e', 14, 120, 3)
+    addFloat(g, '飞跃 +3', p.x, p.y - 52, '#ffe6a3')
+    sfx.play('teleport')
+    say('背包：直接飞 3 格')
+    commitRef.current(from, to, 1)
+  }, [inv, say, sfx])
+
   const retry = () => {
     const p = pendingRef.current
     if (!p) return
@@ -654,6 +750,13 @@ export default function JumpGame({ onExit }) {
       g.combo = 0
       g.trail.length = 0
       sfx.play('fall')
+      // 一次掉落只掷一次守护；1.2s 没回来就当没有，别让人一直往下掉
+      guardOk.current = false
+      guardKind.current = ''
+      guardSettled.current = false
+      clearTimeout(guardT.current)
+      guardT.current = setTimeout(() => { guardSettled.current = true }, 1200)
+      guardTry.current()
     }
 
     const step = (g, now, dt) => {
@@ -711,10 +814,10 @@ export default function JumpGame({ onExit }) {
       if (g.mode === 'fall') {
         g.vy += PHYS.g * dt
         g.y += g.vy * dt
-        // 掉下去 = 从头开始：先视觉上回到第 0 块，再让服务器把整条路清零
-        if (now - g.fallAt > PHYS.fallMs && !fallDone.current) {
+        // 掉下去：先看服务器这一下有没有守护，问到了再决定保住还是清零
+        if (now - g.fallAt > PHYS.fallMs && !fallDone.current && guardSettled.current) {
           fallDone.current = true
-          fallRef.current(g.from)
+          fallRef.current(g.from, guardOk.current, guardKind.current)
         }
       }
 
@@ -913,6 +1016,16 @@ export default function JumpGame({ onExit }) {
           )}
         </div>
 
+        <div className="jp-items">
+          <button
+            type="button" className="jp-item use"
+            disabled={!inv || inv.bags <= 0 || !myTurn}
+            onClick={useBagNow}
+          >🎒 背包 ×{inv ? inv.bags : 0}</button>
+          <span className="jp-item">❄️ 冻结 ×{inv ? inv.freezes : 0}</span>
+          <span className="jp-item">🛡 守护 {inv ? inv.guard_left : 3}/3</span>
+        </div>
+
         <div className="jp-stage">
           <div className="jp-bezel">
             <div className="jp-screen">
@@ -961,6 +1074,15 @@ export default function JumpGame({ onExit }) {
                   <b>轮到 {taName} 跳</b>
                   <span>棒在 TA 手里。TA 跳完会交给你；等不及就接过来（会把 TA 正在跳的这一下顶掉）</span>
                   <button type="button" className="btn" onClick={askTake}>我来接棒</button>
+                </div>
+              )}
+
+              {banner && (
+                <div className="jp-guard">
+                  <div className="jp-guard-inner">
+                    <span className="jp-guard-title">{banner.title}</span>
+                    <span className="jp-guard-sub">{banner.sub}</span>
+                  </div>
                 </div>
               )}
 
