@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { Svg } from './Icon'
-import { buildRoad, SECTIONS, sectionOf } from './jump/gen'
+import { buildRoad, SECTIONS, sectionOf, pickupAt, PICKUP_UP, PICKUP_R } from './jump/gen'
 import {
   VIEW, PHYS, powerOf, velocityOf, widthOf, platformX, jumpGain,
   stepBall, hitPlatform, SPRING_GAIN,
@@ -16,7 +16,7 @@ import {
 import { questionAt, giftAt } from './jump/quiz'
 import { createSfx } from './jump/sfx'
 import { drawScene, drawBackdrop } from './jump/draw'
-import { loadState, submitStepRetry, resetRun, takeTurn, handoffTurn, restartRun, guardFall, useBag } from '../lib/jumpStore'
+import { loadState, submitStepRetry, resetRun, takeTurn, handoffTurn, restartRun, guardFall, useBag, buyJet, useJet } from '../lib/jumpStore'
 import './jump.css'
 
 const W = VIEW.W
@@ -56,6 +56,10 @@ function makeGame(seed, platform) {
     combo: 0,
     narrow: {},
     snap: -1,
+    // v4：这一跳吃到的拾取物 / 已经吃掉的那些块（同一局不再刷出来）
+    picked: 0,
+    got: {},
+    jet: null,
     particles: [],
     floats: [],
     trail: [],
@@ -172,6 +176,7 @@ export default function JumpGame({ onExit }) {
   const bannerT = useRef(0)
   const cutT = useRef(0)
   const sayT = useRef(0)
+  const capSaid = useRef(false)
 
   const [sfx] = useState(() => createSfx())
   const [sfxOn, setSfxOn] = useState(sfx.on)
@@ -245,15 +250,15 @@ export default function JumpGame({ onExit }) {
   }, [])
 
   /* ---------- 交一跳 ---------- */
-  const commit = useCallback(async (from, to, gain) => {
+  const commit = useCallback(async (from, to, gain, pick) => {
     if (syncRef.current === 'saving') return
     const seq = seqRef.current
     syncRef.current = 'saving'
     setSync('saving')
-    const res = await submitStepRetry(from, to, gain)
+    const res = await submitStepRetry(from, to, gain, pick)
     if (!aliveRef.current || seq !== seqRef.current) return
     if (res.missing || res.error) {
-      pendingRef.current = { from, to, gain }
+      pendingRef.current = { from, to, gain, pick }
       syncRef.current = 'error'
       setSync('error')
       setErr(res.missing ? '服务端还没有这条路：先在 Supabase 跑 docs/jump-design.sql' : res.error)
@@ -263,16 +268,23 @@ export default function JumpGame({ onExit }) {
     syncRef.current = 'idle'
     setSync('idle')
     setErr('')
+    if (res.me) setInv(res.me)
     applyState(res.state)
     if (!res.ok && res.reason === 'stale') say('TA 先跳了，跟上了')
     else if (!res.ok && res.reason === 'not_turn') say('接力棒在 TA 手里：等 TA 交棒')
     else if (!res.ok) say('这一跳没算上，重新来')
+    else if (res.legacy) say('服务端还是旧版：金币和喷气背包要跑一下 v4 的 SQL')
+    else if (res.wallet === false) say('金币没进钱包：先去像素小屋转一圈（钱包还没开户）')
+    else if (res.me && res.me.coins_today >= res.me.day_cap && !capSaid.current) {
+      capSaid.current = true
+      say('今天 ' + res.me.day_cap + ' 枚赚满了，再跳只记分数')
+    }
   }, [applyState, say])
 
   useEffect(() => { commitRef.current = commit }, [commit])
 
   /* ---------- 落地 ---------- */
-  const onLand = useCallback((p, x, auto) => {
+  const onLand = useCallback((p, x, auto, viaJet) => {
     const g = gRef.current
     if (!g || !p) return
     const now = performance.now()
@@ -289,8 +301,9 @@ export default function JumpGame({ onExit }) {
 
     const w = widthOf(p, g.narrow[p.i])
     const cx = platformX(p, g.t)
-    let perfect = !auto && Math.abs(x - cx) <= Math.max(4, w * PHYS.perfect)
-    if (!auto && g.snap === p.i) {
+    // 喷气落地和弹簧一样不算完美（不然白嫖连击）
+    let perfect = !auto && !viaJet && Math.abs(x - cx) <= Math.max(4, w * PHYS.perfect)
+    if (!auto && !viaJet && g.snap === p.i) {
       perfect = true
       g.x = cx
     }
@@ -299,6 +312,9 @@ export default function JumpGame({ onExit }) {
     if (p.type === 'magnet') g.snap = p.i + 1
     g.combo = perfect ? g.combo + 1 : 0
     const from = g.from
+    // 这一跳吃到的拾取物跟着这一跳一起交给服务器；交完就清空
+    const pick = g.picked || 0
+    g.picked = 0
 
     // 换段：天色在 0.5s 里淡过去（只在 25/50/75/100… 的休息台触发）
     const sec = sectionOf(p.i)
@@ -323,7 +339,16 @@ export default function JumpGame({ onExit }) {
       addFloat(g, '+2', g.x, p.y - 34, '#ffe9c4')
       dust(g, g.x, p.y)
       sfx.play('land')
-      commitRef.current(from, p.i, SPRING_GAIN)
+      commitRef.current(from, p.i, SPRING_GAIN, pick)
+      return
+    }
+
+    // 喷气落地：只 +1，不触发弹簧 / 传送 / 礼物，也不算完美
+    if (viaJet) {
+      dust(g, g.x, p.y)
+      sfx.play('land')
+      addFloat(g, '+1', g.x, p.y - 34, '#fff1d0')
+      commitRef.current(from, p.i, 1, pick)
       return
     }
 
@@ -341,8 +366,8 @@ export default function JumpGame({ onExit }) {
       sfx.play('teleport')
       addFloat(g, '传送 +3', g.x, p.y - 48, '#c9e8ff')
       const to = Math.min(p.i + 2, from + PHYS.maxStep)
-      if (to > p.i) commitRef.current(from, to, 3)
-      else commitRef.current(from, p.i, jumpGain({ type: 'plain', perfect, combo: g.combo }))
+      if (to > p.i) commitRef.current(from, to, 3, pick)
+      else commitRef.current(from, p.i, jumpGain({ type: 'plain', perfect, combo: g.combo }), pick)
       return
     }
 
@@ -367,7 +392,7 @@ export default function JumpGame({ onExit }) {
       sfx.play('magnet')
       addFloat(g, '吸住下一块', g.x, p.y - 50, '#d8c8ff')
     }
-    commitRef.current(from, p.i, gain)
+    commitRef.current(from, p.i, gain, pick)
   }, [say, sfx])
 
   useEffect(() => { landRef.current = onLand }, [onLand])
@@ -572,8 +597,14 @@ export default function JumpGame({ onExit }) {
   }, [])
 
   const startCharge = (e) => {
+    const gNow = gRef.current
+    // 喷气飞行中：点一下就在最近的平台落下（不用再蓄力）
+    if (gNow && gNow.mode === 'jet') {
+      landJetNow()
+      return
+    }
     if (!canPlay()) return
-    const g = gRef.current
+    const g = gNow
     const p = g.road[g.idx]
     sfx.unlock()
     if (p && p.type === 'quiz' && !answeredRef.current[g.idx]) {
@@ -600,6 +631,7 @@ export default function JumpGame({ onExit }) {
     g.vy = v.vy
     g.mode = 'fly'
     g.auto = false
+    g.picked = 0
     sfx.play('jump')
     try { navigator.vibrate?.(4) } catch (e) { /* 跟随系统 */ }
   }
@@ -632,6 +664,34 @@ export default function JumpGame({ onExit }) {
     confirmRef.current = 'reset'
     setConfirm('reset')
   }
+
+  const openShop = () => {
+    menuRef.current = false
+    setMenu(false)
+    confirmRef.current = 'shop'
+    setConfirm('shop')
+  }
+
+  const doBuy = useCallback(async () => {
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await buyJet()
+    if (!aliveRef.current) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没更新：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    if (res.ok) {
+      if (res.me) setInv(res.me)
+      sfx.play('gift')
+      say('买到一个喷气背包')
+      return
+    }
+    if (res.reason === 'poor') say('金币不够，再跳几块')
+    else if (res.reason === 'limit') say('今天买满了（2 个），明天再来')
+    else if (res.reason === 'wallet') say('钱包还没开户：先去像素小屋转一圈')
+    else say('没买成，再点一次')
+  }, [say, sfx])
 
   const askTake = () => {
     menuRef.current = false
@@ -704,6 +764,9 @@ export default function JumpGame({ onExit }) {
     if (!g || !inv || inv.bags <= 0) return
     if (phaseRef.current !== 'ready' || syncRef.current !== 'idle') return
     if (g.mode !== 'idle' && g.mode !== 'landed') return
+    // 问号平台还没答：背包也不能绕过题（和蓄力同一条规矩）
+    const stand = g.road[g.idx]
+    if (stand && stand.type === 'quiz' && !answeredRef.current[g.idx]) { openQuiz(); return }
     syncRef.current = 'saving'
     setSync('saving')
     const res = await useBag()
@@ -721,15 +784,70 @@ export default function JumpGame({ onExit }) {
     addFloat(g, '飞跃 +3', p.x, p.y - 52, '#ffe6a3')
     sfx.play('teleport')
     say('背包：直接飞 3 格')
-    commitRef.current(from, to, 1)
-  }, [inv, say, sfx])
+    commitRef.current(from, to, 1, 0)
+  }, [inv, openQuiz, say, sfx])
+
+  /* ---------- 喷气背包：点火 → 1.2 秒无重力平移 → 点一下提前落 ---------- */
+  const landJetNow = useCallback(() => {
+    const g = gRef.current
+    if (!g || g.mode !== 'jet' || !g.jet) return
+    const from = g.jet.from
+    const last = Math.min(from + PHYS.maxStep, g.road.length - 1)
+    let spot = null
+    for (let i = from + 1; i <= last; i++) {
+      const p = g.road[i]
+      if (!p) continue
+      if (platformX(p, g.t) >= g.x - 8) { spot = p; break }
+    }
+    if (!spot) spot = g.road[last]
+    g.jet = null
+    landRef.current(spot, platformX(spot, g.t), false, true)
+  }, [])
+
+  const useJetNow = useCallback(async () => {
+    const g = gRef.current
+    if (!g || !inv || inv.jets <= 0) return
+    if (phaseRef.current !== 'ready' || syncRef.current !== 'idle') return
+    if (g.mode !== 'idle' && g.mode !== 'landed') return
+    // 棒不在我手里就别点火（和蓄力同一条规矩）
+    if (hud && hud.turn && hud.turn !== myId) return
+    // 问号平台还没答：先弹题
+    const stand = g.road[g.idx]
+    if (stand && stand.type === 'quiz' && !answeredRef.current[g.idx]) { openQuiz(); return }
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await useJet()
+    if (!aliveRef.current) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没更新：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    if (!res.ok) { say('喷气背包用完了'); return }
+    if (res.me) setInv(res.me)
+    const from = g.idx
+    const last = Math.min(from + PHYS.maxStep, g.road.length - 1)
+    const end = ensureRoad(g, last)
+    g.from = from
+    g.picked = 0
+    g.mode = 'jet'
+    g.jet = {
+      t0: performance.now(),
+      from,
+      y0: g.y,
+      // 水平速度按「1.2 秒正好飞到第 3 块中心」算，不管间距多大都够得着
+      vx: (end.x - g.x) / 1.2,
+      dur: 1200,
+    }
+    sfx.play('jet')
+    say('点火！再点一下就在最近的平台落下')
+  }, [inv, hud, myId, openQuiz, say, sfx])
 
   const retry = () => {
     const p = pendingRef.current
     if (!p) return
     syncRef.current = 'idle'
     setSync('idle')
-    commitRef.current(p.from, p.to, p.gain)
+    commitRef.current(p.from, p.to, p.gain, p.pick)
   }
 
   /* ---------- 主循环 ---------- */
@@ -759,6 +877,25 @@ export default function JumpGame({ onExit }) {
       guardTry.current()
     }
 
+    // 飞行途中吃拾取物：每个子步判一次，一帧跨过去也不会漏。
+    // 从 g.from 开始算：脚下这块正上方如果还飘着一个，起跳时能顺手摘走。
+    const sweep = (g) => {
+      const last = Math.min(g.from + PHYS.maxStep, g.road.length - 1)
+      for (let i = g.from; i <= last; i++) {
+        const p = g.road[i]
+        if (!p || g.got[i]) continue
+        if (pickupAt(g.seed, i) !== 'jet') continue
+        const px = platformX(p, g.t)
+        if (Math.abs(g.x - px) > PICKUP_R) continue
+        if (Math.abs((g.y - 12) - (p.y - PICKUP_UP)) > 26) continue
+        g.got[i] = true
+        g.picked = (g.picked || 0) + 1
+        burst(g, px, p.y - PICKUP_UP, '#bfe4ff', 10, 90, 3)
+        addFloat(g, '喷气背包 +1', px, p.y - PICKUP_UP - 18, '#d8ecff')
+        sfx.play('pick')
+      }
+    }
+
     const step = (g, now, dt) => {
       if (g.mode === 'charge') {
         g.held = now - g.chargeAt
@@ -786,12 +923,27 @@ export default function JumpGame({ onExit }) {
         }
       }
 
+      if (g.mode === 'jet' && g.jet) {
+        const age = now - g.jet.t0
+        g.x += g.jet.vx * dt
+        const endP = g.road[Math.min(g.jet.from + PHYS.maxStep, g.road.length - 1)]
+        const targetY = Math.min(g.jet.y0, (endP ? endP.y : g.y) - 30)
+        g.y += (targetY - g.y) * Math.min(1, dt * 6)
+        g.vy = -60
+        sweep(g)
+        if (age >= g.jet.dur) {
+          landJetNow()
+          return
+        }
+      }
+
       if (g.mode === 'fly') {
         const sub = Math.min(4, Math.max(1, Math.ceil(dt / (1 / 120))))
         const h = dt / sub
         for (let s = 0; s < sub; s++) {
           const prevY = g.y
           stepBall(g, h)
+          sweep(g)
           if (g.vy > 0) {
             const last = Math.min(g.from + PHYS.maxStep, g.road.length - 1)
             for (let i = g.from + 1; i <= last; i++) {
@@ -966,6 +1118,7 @@ export default function JumpGame({ onExit }) {
   let hintText = '按住蓄力，松手起跳'
   if (phase === 'ready' && sync === 'saving') hintText = '正在把这一跳交给 TA…'
   else if (phase === 'ready' && sync === 'error') hintText = '没同步上：点上面的「重试」，同一跳不会重复加分'
+  else if (phase === 'ready' && gRef.current && gRef.current.mode === 'jet') hintText = '喷气飞行中：点一下就在最近的平台落下'
   else if (phase === 'ready' && needQuiz) hintText = '这块是问号平台：按一下，先答题'
   else if (phase === 'ready' && !myTurn) hintText = '棒在 ' + taName + ' 手里：等 TA 交棒，或者点「我来接棒」'
   else if (phase !== 'ready') hintText = '两个人在同一条路上接力'
@@ -998,6 +1151,7 @@ export default function JumpGame({ onExit }) {
             {menu && (
               <div className="jp-menu">
                 {partner && turn === myId && <button type="button" onClick={doHandoff}>交给 {taName}</button>}
+                <button type="button" onClick={openShop}>小卖部</button>
                 <button type="button" onClick={askReset}>换一条路</button>
               </div>
             )}
@@ -1007,6 +1161,7 @@ export default function JumpGame({ onExit }) {
         <div className="jp-stat">
           <span>你 <b>{myScore}</b></span>
           {partner && <span className="ta">{taName} <b>{taScore}</b></span>}
+          <span className="jp-coin">🪙 一起攒了 <b>{(hud && hud.coins) || 0}</b> 枚</span>
           {taJust && <span className="jp-just">TA 刚跳了</span>}
           {!myTurn && <span className="jp-turn">轮到 {taName}</span>}
           <span className="grow" />
@@ -1022,6 +1177,11 @@ export default function JumpGame({ onExit }) {
             disabled={!inv || inv.bags <= 0 || !myTurn}
             onClick={useBagNow}
           >🎒 背包 ×{inv ? inv.bags : 0}</button>
+          <button
+            type="button" className="jp-item use"
+            disabled={!inv || inv.jets <= 0 || !myTurn}
+            onClick={useJetNow}
+          >🚀 喷气 ×{inv ? inv.jets : 0}</button>
           <span className="jp-item">❄️ 冻结 ×{inv ? inv.freezes : 0}</span>
           <span className="jp-item">🛡 守护 {inv ? inv.guard_left : 3}/3</span>
         </div>
@@ -1110,6 +1270,30 @@ export default function JumpGame({ onExit }) {
                       <button type="button" className="btn ghost" onClick={cancelReset}>再等等</button>
                       <button type="button" className="btn" onClick={doTake}>接棒</button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {confirm === 'shop' && (
+                <div className="jp-card">
+                  <div className="jp-card-in jp-shop">
+                    <b>小卖部</b>
+                    <p>金币和小屋钱包是同一个：跳一跳、打地鼠赚的都在这儿花。</p>
+                    <div className="jp-shop-row">
+                      <span className="jp-shop-ic">🚀</span>
+                      <span className="jp-shop-nm">喷气背包<small>飞 1.2 秒，最多前进 3 块</small></span>
+                      <span className="jp-shop-pr">20 枚</span>
+                      <button
+                        type="button"
+                        className="btn jp-shop-buy"
+                        disabled={!inv || inv.coins < 20 || inv.bought >= 2 || sync === 'saving'}
+                        onClick={doBuy}
+                      >买</button>
+                    </div>
+                    <div className="jp-shop-foot">
+                      钱包 ¥{inv ? inv.coins : 0} · 今天已买 {inv ? inv.bought : 0}/2 · 库存 ×{inv ? inv.jets : 0}
+                    </div>
+                    <button type="button" className="btn ghost jp-shop-close" onClick={cancelReset}>关上</button>
                   </div>
                 </div>
               )}

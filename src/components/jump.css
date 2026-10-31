@@ -88,6 +88,8 @@
 .jp-stat .grow { flex: 1; }
 .jp-just { color: #c76a8c; }
 .jp-turn { color: #c76a8c; font-weight: 650; }
+.jp-coin { color: #a97a2a; }
+.jp-coin b { color: #8a5f14; }
 
 /* 道具条：背包 / 冻结卡 / 今日守护 */
 .jp-items {
@@ -319,6 +321,27 @@
 .jp-confirm-acts { display: flex; gap: 8px; }
 .jp-confirm-acts .btn { flex: 1; height: 38px; font-size: 13px; }
 .jp-confirm-acts .btn.ghost { background: rgba(60, 40, 30, .08); color: #2a2130; }
+
+/* ---------- 小卖部 ---------- */
+.jp-shop b { display: block; margin-bottom: 4px; font-size: 15px; }
+.jp-shop p { margin: 0 0 10px; font-size: 11.5px; line-height: 1.5; color: #6b5a4a; }
+.jp-shop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(60, 40, 30, .14);
+  border-radius: 9px;
+  background: #fffaf0;
+}
+.jp-shop-ic { font-size: 20px; line-height: 1; }
+.jp-shop-nm { flex: 1; display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; font-weight: 650; }
+.jp-shop-nm small { font-size: 10px; font-weight: 400; color: #8a7462; }
+.jp-shop-pr { flex-shrink: 0; font-family: var(--mono); font-size: 11.5px; color: #9a6a12; }
+.jp-shop-buy { flex-shrink: 0; height: 30px; padding: 0 14px; font-size: 12px; }
+.jp-shop-buy:disabled { opacity: .45; }
+.jp-shop-foot { margin-top: 7px; font-size: 10.5px; color: #8a7462; }
+.jp-shop-close { width: 100%; height: 34px; margin-top: 10px; font-size: 12.5px; }
 
 @media (max-height: 620px) {
   .jp-ui { gap: 6px; padding-top: calc(env(safe-area-inset-top) + 6px); }
