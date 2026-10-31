@@ -260,6 +260,165 @@ export const BUILTINS = [
       ].map(w16),
     },
   },
+  {
+    id: 'b:yukata', name: '浴衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#2f3a66', '#42508a', '#f2e8d8', '#d9a441', '#b9313c'],
+      rows: [
+        '...aabbbbbbaa...',
+        '..aabcbbbbcbaa..',
+        '..aabbcbbcbbaa..',
+        '..aabbbccbbbaa..',
+        '..aabbbccbbbaa..',
+        '..dddddddddddd..',
+        '..ddddccccdddd..',
+        '..bbbbbbbbbbbb..',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:haori', name: '羽织', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#232b45', '#39446b', '#f0ece4'],
+      rows: [
+        '...aabbbbbbaa...',
+        '..aabbbccbbbaa..',
+        '..aabbbccbbbaa..',
+        '..aabbbccbbbaa..',
+        '..aabbbccbbbaa..',
+        '..aabbbccbbbaa..',
+        '..bbbbbccbbbbb..',
+        '..bbbbbccbbbbb..',
+        '..bbbbbccbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:turtleneck', name: '高领毛衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#3f6b6b', '#355a5a', '#2a4848'],
+      rows: [
+        '....cccccccc....',
+        '..cbaaaaaaaabc..',
+        '..cbaaaaaaaabc..',
+        '..cbaaaaaaaabc..',
+        '..cbaaaaaaaabc..',
+        '..cbbbbbbbbbbc..',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:coat', name: '双排扣大衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#b8935f', '#8f6f45', '#d8c6a8', '#3a2b22'],
+      rows: [
+        '...aabbbbbbaa...',
+        '..aabcbbbbcbaa..',
+        '..aabbcbbcbbaa..',
+        '..aabdbbbbdbaa..',
+        '..aabbbbbbbbaa..',
+        '..aabbbbbbbbaa..',
+        '..bbbbbbbbbbbb..',
+        '..aabbbbbbbbaa..',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:cardigan', name: '针织开衫', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#c9a04a', '#a87f34', '#f4f0e6', '#5a4327'],
+      rows: [
+        '...aabbbbbbaa...',
+        '..aabbccccbbaa..',
+        '..aabbccccbbaa..',
+        '..aabdccccbbaa..',
+        '..aabbccccbbaa..',
+        '..aabdccccbbaa..',
+        '..bbbbccccbbbb..',
+        '..bbbbccccbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:jeans', name: '牛仔裤', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#3f5d8c', '#2b4166', '#d9c89a'],
+      rows: [
+        '....caaaaaac....',
+        '....aaaaaaaa....',
+        '....aab..baa....',
+        '....bbb..bbb....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:longskirt', name: '长裙', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#8e3b52', '#6a2a3c', '#d8b48a'],
+      rows: [
+        '....aaaaaaaa....',
+        '...aaabbbbaaa...',
+        '..aaaaaaaaaaaa..',
+        '..cccccccccccc..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:geta', name: '木屐', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#8a6a4a', '#5a4327', '#c0392b'],
+      rows: [
+        '...aaca..acaa...',
+        '...bbbb..bbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:maryjane', name: '玛丽珍鞋', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#2f2f3a', '#4a4a5c', '#e0c06a'],
+      rows: [
+        '....aca..aca....',
+        '...bbbb..bbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:ribbon', name: '蝴蝶结', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 0,
+      pal: ['#e05a7a', '#b03a58'],
+      rows: [
+        '....aabbaa......',
+        '.....abba.......',
+        '......bb........',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:bowtie', name: '领结', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 11,
+      pal: ['#b9313c', '#8d2330', '#f0ece4'],
+      rows: [
+        '.....abbbba.....',
+        '....aabccbaa....',
+        '......bccb......',
+      ].map(w16),
+    },
+  },
 ]
 
 /* ---------- 校验：返回 ''（没问题）或一句人话 ---------- */
