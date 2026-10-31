@@ -13,6 +13,7 @@ export const FLOOR = 98
 // 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
 import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, USER_SCENE_RE, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
 import { drawWeatherScene, isWeatherScene, drawLivingRoom } from './rooms'
+import { drawRainStation } from './station'
 import { resolveWorn, SLOT_KEYS } from './outfits'
 export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
 
@@ -562,7 +563,7 @@ function drawHome(ctx, m, a, hr, t) {
   const bx = sleeping ? 8 : 22
   const bw = sleeping ? 52 : 38
   R(ctx, th.blanket, bx, 76, bw, 10); R(ctx, 'rgba(255,255,255,.35)', bx, 76, bw, 1); R(ctx, 'rgba(0,0,0,.12)', bx, 85, bw, 1)
-  drawGifts(ctx, m.gifts, t) // 收到的礼物按 scenes.js 里的数据摆进房间
+  drawGifts(ctx, m.gifts, t, 'home') // 收到的礼物按 scenes.js 里的插槽摆进卧室
 }
 
 /* ---------- 小人 ---------- */
@@ -790,14 +791,15 @@ export function renderFrame(ctx, a, m, hr, t) {
   const o = { job, working: a.state === 'work', hr, t }
   if (data) drawScene(ctx, place, 'back', o)
   else if (place && isWeatherScene(place)) drawWeatherScene(ctx, place, t) // 下雨 / 雨夜 / 下雪 / 下雪夜：手写场景，雨雪要动
+  else if (place === 'rainstation') drawRainStation(ctx, t) // 雨夜车站：手写，列车会开走
   else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
-  else if (roomOf(m.settings, a.state, hr) === 'living') drawLivingRoom(ctx, hr, t) // 在家醒着：客厅
+  else if (roomOf(m.settings, a.state, hr) === 'living') drawLivingRoom(ctx, hr, t, m.gifts) // 在家醒着：客厅
   else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
   if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t, resolveWorn(m.settings && m.settings.outfit))
   if (data) drawScene(ctx, place, 'front', o)
   if (a.state === 'sleep') {
     R(ctx, 'rgba(8,10,34,.55)', 0, 0, W, H)
-    drawGiftGlows(ctx, m.gifts) // 台灯、蜡烛关灯后还亮着
+    drawGiftGlows(ctx, m.gifts, 'home') // 台灯、蜡烛、星星罐关灯后还亮着
   } else if (atHome(m.settings, a.state) && (hr >= 19 || hr < 6.5)) {
     R(ctx, 'rgba(255,170,90,.08)', 0, 0, W, H)
   }

@@ -1,4 +1,4 @@
-import { W, H, FLOOR, drawSky } from './scenes'
+import { W, H, FLOOR, drawSky, drawGifts, drawGiftGlows } from './scenes'
 
 /* ===========================================================================
    三个「天气场景」：雨夜 / 下雪夜 / 下雪白天
@@ -448,8 +448,8 @@ const LIVING = {
 /** 傍晚开灯：19:00 到第二天 6:30（和 art.js 里那层暖色滤镜同一个时间段） */
 export const isLivingDark = (hr) => hr >= 19 || hr < 6.5
 
-/** 客厅。hr = 现在的钟点，t = 秒（灯串和台灯会轻轻呼吸） */
-export function drawLivingRoom(ctx, hr, t) {
+/** 客厅。hr = 现在的钟点，t = 秒（灯串和台灯会轻轻呼吸）；gifts = 收到的礼物（摆到客厅的插槽上） */
+export function drawLivingRoom(ctx, hr, t, gifts = []) {
   const dark = isLivingDark(hr)
   const M = { ...LIVING, lamp: dark, lights: dark }
   drawRoom(ctx, M)
@@ -479,6 +479,7 @@ export function drawLivingRoom(ctx, hr, t) {
   drawSofa(ctx, M)
   drawTable(ctx, { ...M, lamp: false })
   drawPlant(ctx, M)
+  drawGifts(ctx, gifts, t, 'living')
   if (dark) {
     // 先把房间压暗，再把灯画上去——顺序反了灯也会被压暗，屋里就没有暖光了
     ctx.save()
@@ -493,5 +494,6 @@ export function drawLivingRoom(ctx, hr, t) {
     ctx.globalAlpha = 0.24 * flick
     R(ctx, 108, 96, 26, 8, '#ffb877')
     ctx.restore()
+    drawGiftGlows(ctx, gifts, 'living')
   }
 }
