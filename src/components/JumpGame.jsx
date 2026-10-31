@@ -355,6 +355,8 @@ export default function JumpGame({ onExit }) {
     if (p.type === 'spring') {
       g.mode = 'spring'
       g.springAt = now
+      // 这一跳吃到的拾取物先挂回去：250ms 后的自动落地那次 commit 才交给服务器
+      g.picked = pick
       sfx.play('spring')
       addFloat(g, '弹簧！', g.x, p.y - 48, '#b6f2cf')
       return
@@ -880,6 +882,8 @@ export default function JumpGame({ onExit }) {
     // 飞行途中吃拾取物：每个子步判一次，一帧跨过去也不会漏。
     // 从 g.from 开始算：脚下这块正上方如果还飘着一个，起跳时能顺手摘走。
     const sweep = (g) => {
+      // 一跳只收一个：p_pick 服务器只认 0/1；多碰到的不吞掉（留着下次再吃），也不重复飘字
+      if (g.picked) return
       const last = Math.min(g.from + PHYS.maxStep, g.road.length - 1)
       for (let i = g.from; i <= last; i++) {
         const p = g.road[i]
@@ -1291,7 +1295,7 @@ export default function JumpGame({ onExit }) {
                       >买</button>
                     </div>
                     <div className="jp-shop-foot">
-                      钱包 ¥{inv ? inv.coins : 0} · 今天已买 {inv ? inv.bought : 0}/2 · 库存 ×{inv ? inv.jets : 0}
+                      钱包 {inv ? inv.coins : 0} 枚 · 今天已买 {inv ? inv.bought : 0}/2 · 库存 ×{inv ? inv.jets : 0}
                     </div>
                     <button type="button" className="btn ghost jp-shop-close" onClick={cancelReset}>关上</button>
                   </div>

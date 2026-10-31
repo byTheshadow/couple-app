@@ -10,9 +10,13 @@
    第三版（GEN = 3）：加「磁铁」平台（2%），落在上面下一跳自动吸到下一块中心。
    第四版（2026-10-31）：拾取物（喷气背包）。用独立的 hash01 流，**不消耗 buildRoad 的
    rng**，所以平台布局一个像素都不变：不用升 GEN，也不用让两个人再「换一条路」。
+   第五版（2026-10-31 晚，GEN = 4）：弹簧 3% → 6%（用户说「多一些弹跳方块」）。
+   只动类型阈值：弹簧从 3% 提到 6%，后面几档整体后移 0.03、宽度不变（传送 2% / 礼物 3% /
+   移动 2%+段 / 磁铁 2% 都没少），间距 / 宽度 / 高度一个像素没动。
+   类型序列变了 → 同一条旧路会长出不同的块，两个人必须各点一次「换一条路」（best 保留）。
    =========================================================================== */
 
-export const GEN = 3
+export const GEN = 4
 
 // 平台本身：逻辑像素（画布 360 × 540），16 = 8 格 × 2px
 export const PLAT = {
@@ -128,6 +132,7 @@ export function buildRoad(seed, count = 40) {
     const y = clamp(prev.y + (rng() * 2 - 1) * jitter, PLAT.yMin, PLAT.yMax)
 
     // 一次 r 决定类型：问号没资格的时候按普通处理，不再往下顺延成特殊块
+    // 阈值（GEN 4）：问号 0.20 / 弹簧 6% / 传送 2% / 礼物 3% / 移动 2%+段 / 磁铁 2%
     const roll = rng()
     let type = 'plain'
     if (!rest && i > 2) {
@@ -136,11 +141,11 @@ export function buildRoad(seed, count = 40) {
           type = 'quiz'
           lastQuiz = i
         }
-      } else if (roll < 0.23) type = 'spring'
-      else if (roll < 0.25) type = 'teleport'
-      else if (roll < 0.28) type = 'gift'
-      else if (roll < 0.30 + 0.01 * sec) type = 'moving'
-      else if (roll < 0.32 + 0.01 * sec) type = 'magnet'
+      } else if (roll < 0.26) type = 'spring'
+      else if (roll < 0.28) type = 'teleport'
+      else if (roll < 0.31) type = 'gift'
+      else if (roll < 0.33 + 0.01 * sec) type = 'moving'
+      else if (roll < 0.35 + 0.01 * sec) type = 'magnet'
     }
 
     road.push({
