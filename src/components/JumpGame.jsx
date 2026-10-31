@@ -177,6 +177,10 @@ export default function JumpGame({ onExit }) {
   const cutT = useRef(0)
   const sayT = useRef(0)
   const capSaid = useRef(false)
+  const askedRef = useRef(false)
+  const encRef = useRef(new Set())
+  const encT = useRef(0)
+  const invRef = useRef(null)
 
   const [sfx] = useState(() => createSfx())
   const [sfxOn, setSfxOn] = useState(sfx.on)
@@ -190,6 +194,10 @@ export default function JumpGame({ onExit }) {
   const [toast, setToast] = useState('')
   const [inv, setInv] = useState(null)
   const [banner, setBanner] = useState(null)
+  const [ask, setAsk] = useState(null)
+  const [result, setResult] = useState(null)
+  const [recOpen, setRecOpen] = useState(false)
+  const [enc, setEnc] = useState(null)
 
   const say = useCallback((t) => {
     setToast(t)
@@ -197,15 +205,18 @@ export default function JumpGame({ onExit }) {
     sayT.current = setTimeout(() => setToast(''), 2600)
   }, [])
 
-  const showBanner = useCallback((title, sub) => {
-    setBanner({ title, sub })
+  const showBanner = useCallback((title, sub, o) => {
+    const opt = o || {}
+    const kind = opt.kind === 'random' ? (Math.random() < 0.5 ? 'plaque' : 'line') : (opt.kind || 'plaque')
+    setBanner({ title, sub, kind, tag: opt.tag || '', line: opt.line || sub })
     clearTimeout(bannerT.current)
-    bannerT.current = setTimeout(() => setBanner(null), 1900)
+    bannerT.current = setTimeout(() => setBanner(null), 2200)
   }, [])
 
   useEffect(() => {
     slotRef.current = (me && me.slot) || 'u1'
   }, [me])
+  useEffect(() => { invRef.current = inv }, [inv])
 
   useEffect(() => () => {
     aliveRef.current = false
@@ -422,44 +433,45 @@ export default function JumpGame({ onExit }) {
     g.skyMix = 1
   }, [])
 
-  /* ---------- 掉下去：整条路从头开始（分数清零，best 保留） ---------- */
-  const fallReset = useCallback(async (from, guarded, serverKind) => {
+  /* ---------- 守护住了：回到起跳那块，播小剧场 ---------- */
+  const protectFrom = useCallback((from, serverKind) => {
     const g = gRef.current
-    if (guarded) {
-      // 守护住了：回到起跳那块，不扣分、不清零
-      const u2 = slotRef.current === 'u2'
-      if (g) snapTo(g, from)
-      if (u2) {
-        // u2：播 1.8 秒小剧场（落水 → 鲨鱼 → 顶回平台），播完再出金匾
-        if (g) g.cut = { at: g.t }
-        syncRef.current = 'saving'
-        setSync('saving')
-        clearTimeout(cutT.current)
-        cutT.current = setTimeout(() => {
-          const cur = gRef.current
-          if (cur) cur.cut = null
-          syncRef.current = 'idle'
-          setSync('idle')
-          if (!aliveRef.current) return
-          showBanner('炫少的保护', '这一下不算数')
-          sfx.play('perfect')
-          say(serverKind === 'freeze' ? '冻结卡挡了一下，鲨鱼把你顶回来了' : '鲨鱼把你顶回来了')
-        }, 1800)
-      } else {
-        if (g) {
-          const sec = sectionOf(g.idx)
-          g.guard = { at: g.t, kind: sec === 1 || sec === 4 ? 'devil' : 'angel' }
-        }
-        const sec2 = g ? sectionOf(g.idx) : 0
-        if (sec2 === 1 || sec2 === 4) showBanner('恶魔的庇护', '这一下不算数')
-        else showBanner('天使的守护', '这一下不算数')
+    const u2 = slotRef.current === 'u2'
+    if (g) snapTo(g, from)
+    if (u2) {
+      // u2：1.8 秒小剧场（落水 → 鲨鱼 → 顶回平台），播完再出金匾
+      if (g) g.cut = { at: g.t }
+      syncRef.current = 'saving'
+      setSync('saving')
+      clearTimeout(cutT.current)
+      cutT.current = setTimeout(() => {
+        const cur = gRef.current
+        if (cur) cur.cut = null
+        syncRef.current = 'idle'
+        setSync('idle')
+        if (!aliveRef.current) return
+        showBanner('炫少的保护', '这一下不算数', { kind: 'random', tag: '第 ' + from + ' 块', line: '这一下，我替你挡了。' })
         sfx.play('perfect')
-        say(serverKind === 'freeze' ? '冻结卡挡了一下，这一下不算数' : '守护生效，这一下不算数')
+        say(serverKind === 'freeze' ? '冻结卡挡了一下，鲨鱼把你顶回来了' : '鲨鱼把你顶回来了')
+      }, 1800)
+    } else {
+      if (g) {
+        const sec = sectionOf(g.idx)
+        g.guard = { at: g.t, kind: sec === 1 || sec === 4 ? 'devil' : 'angel' }
       }
-      fallDone.current = false
-      guardSettled.current = true
-      return
+      const sec2 = g ? sectionOf(g.idx) : 0
+      if (sec2 === 1 || sec2 === 4) showBanner('恶魔的庇护', '这一下不算数')
+      else showBanner('天使的守护', '这一下不算数')
+      sfx.play('perfect')
+      say(serverKind === 'freeze' ? '冻结卡挡了一下，这一下不算数' : '守护生效，这一下不算数')
     }
+    fallDone.current = false
+    guardSettled.current = true
+  }, [say, showBanner, snapTo, sfx])
+
+  /* ---------- 真掉下去：重置整条路，再把结算页顶出来 ---------- */
+  const loseNow = useCallback(async (from, score, mine) => {
+    const g = gRef.current
     if (g) snapTo(g, 0)
     syncRef.current = 'saving'
     setSync('saving')
@@ -481,13 +493,84 @@ export default function JumpGame({ onExit }) {
     setQuiz(null)
     applyState(res.state)
     setErr('')
+    encRef.current.clear()
+    askedRef.current = false
     syncRef.current = 'idle'
     setSync('idle')
     fallDone.current = false
-    say('掉下去了：整条路从头开始，分数清零')
-  }, [applyState, say, snapTo, showBanner, sfx])
+    setResult({ from, score, mine })
+  }, [applyState, say, snapTo])
+
+  /* ---------- 掉下去：先看守护，没守住再问背包，最后才结算 ---------- */
+  const fallReset = useCallback(async (from, guarded, serverKind) => {
+    if (guarded) { protectFrom(from, serverKind); return }
+    const g = gRef.current
+    const score = Number((hud && hud.score) || 0)
+    const mine = Number((hud && hud.by_user && hud.by_user[myId]) || 0)
+    // 没守住：还有背包就先问一次（每次掉落只问一次）
+    if (!askedRef.current && invRef.current && invRef.current.bags > 0) {
+      askedRef.current = true
+      if (g) snapTo(g, from)
+      syncRef.current = 'idle'
+      setSync('idle')
+      fallDone.current = false
+      setAsk({ from, score, mine })
+      return
+    }
+    await loseNow(from, score, mine)
+  }, [hud, loseNow, myId, protectFrom, snapTo])
 
   useEffect(() => { fallRef.current = fallReset }, [fallReset])
+
+  /* ---------- 保一次：扣一个背包，回到起跳那块 ---------- */
+  const saveWithBag = useCallback(async () => {
+    const a = ask
+    if (!a) return
+    syncRef.current = 'saving'
+    setSync('saving')
+    const res = await useBag()
+    if (!aliveRef.current) return
+    syncRef.current = 'idle'
+    setSync('idle')
+    if (res.missing) { say('服务端还没更新：先跑 docs/jump-design.sql'); return }
+    if (res.error) { say(res.error); return }
+    if (!res.ok) {
+      setAsk(null)
+      say('背包用完了，这一局保不住了')
+      await loseNow(a.from, a.score, a.mine)
+      return
+    }
+    if (res.me) setInv(res.me)
+    setAsk(null)
+    protectFrom(a.from, 'bag')
+    say('背包保住了这一下')
+  }, [ask, loseNow, protectFrom, say])
+
+  const declineSave = useCallback(() => {
+    const a = ask
+    setAsk(null)
+    if (a) loseNow(a.from, a.score, a.mine)
+  }, [ask, loseNow])
+
+  /* ---------- 炫少的鼓励：u2 每跳满 25 / 50 / 75 块弹一次 ---------- */
+  useEffect(() => {
+    if (phase !== 'ready' || !hud || !hud.by_user) return
+    const mySlot = (me && me.slot) || 'u1'
+    const u2id = mySlot === 'u2' ? myId : (partner && partner.id)
+    if (!u2id) return
+    const n = Number(hud.by_user[u2id] || 0)
+    if (n < 25) { encRef.current.clear(); return }
+    const LINES = { 25: '才 25 块？……行吧，有点东西。', 50: '五十块了。别停。', 75: '七十五块。你今天有点不一样。' }
+    for (const m of [25, 50, 75]) {
+      if (n >= m && !encRef.current.has(m)) {
+        encRef.current.add(m)
+        setEnc({ n: m, line: LINES[m] })
+        clearTimeout(encT.current)
+        encT.current = setTimeout(() => setEnc(null), 5200)
+        break
+      }
+    }
+  }, [hud, phase, me, partner, myId])
 
   /* 掉落时问服务器：这一下有没有守护（50% + 每日 3 次 + 冻结卡） */
   const tryGuard = useCallback(async () => {
@@ -871,6 +954,7 @@ export default function JumpGame({ onExit }) {
       g.trail.length = 0
       sfx.play('fall')
       // 一次掉落只掷一次守护；1.2s 没回来就当没有，别让人一直往下掉
+      askedRef.current = false
       guardOk.current = false
       guardKind.current = ''
       guardSettled.current = false
@@ -1093,6 +1177,18 @@ export default function JumpGame({ onExit }) {
   const taScore = partner ? Number(byUser[partner.id] || 0) : 0
   const blocks = hud ? hud.platform : 0
   const best = hud ? hud.best : 0
+  const recRows = (() => {
+    const rec = (hud && hud.rec) || {}
+    const mySlot = (me && me.slot) || 'u1'
+    const otherId = partner && partner.id
+    const u1 = mySlot === 'u1' ? myId : otherId
+    const u2 = mySlot === 'u2' ? myId : otherId
+    const get = (uid) => (uid && rec[uid]) || {}
+    return [
+      { slot: 'u1', name: '炫少', best: Number(get(u1).best) || 0, total: Number(get(u1).total) || 0 },
+      { slot: 'u2', name: mySlot === 'u2' ? '我' : ((partner && partner.display_name) || 'TA'), best: Number(get(u2).best) || 0, total: Number(get(u2).total) || 0 },
+    ]
+  })()
   const liveIdx = gRef.current ? gRef.current.idx : blocks
   const sec = SECTIONS[sectionOf(liveIdx)] || SECTIONS[0]
   const taName = (partner && partner.display_name) || 'TA'
@@ -1124,6 +1220,8 @@ export default function JumpGame({ onExit }) {
   else if (phase === 'ready' && sync === 'error') hintText = '没同步上：点上面的「重试」，同一跳不会重复加分'
   else if (phase === 'ready' && gRef.current && gRef.current.mode === 'jet') hintText = '喷气飞行中：点一下就在最近的平台落下'
   else if (phase === 'ready' && needQuiz) hintText = '这块是问号平台：按一下，先答题'
+  else if (ask) hintText = '要掉下去了：用背包保一次？'
+  else if (result) hintText = '掉下去了：再来一次，或者回小物'
   else if (phase === 'ready' && !myTurn) hintText = '棒在 ' + taName + ' 手里：等 TA 交棒，或者点「我来接棒」'
   else if (phase !== 'ready') hintText = '两个人在同一条路上接力'
 
@@ -1156,6 +1254,7 @@ export default function JumpGame({ onExit }) {
               <div className="jp-menu">
                 {partner && turn === myId && <button type="button" onClick={doHandoff}>交给 {taName}</button>}
                 <button type="button" onClick={openShop}>小卖部</button>
+                <button type="button" onClick={() => { setMenu(false); setRecOpen(true) }}>记录</button>
                 <button type="button" onClick={askReset}>换一条路</button>
               </div>
             )}
@@ -1241,11 +1340,86 @@ export default function JumpGame({ onExit }) {
                 </div>
               )}
 
-              {banner && (
+              {banner && (banner.kind === 'line' ? (
+                <div className="jp-guard jp-guard--line">
+                  <div className="jp-gl">
+                    {banner.tag && <span className="jp-gl-tag">{banner.tag}</span>}
+                    <span className="jp-gl-title">{banner.title}</span>
+                    <span className="jp-gl-line">{banner.line}</span>
+                  </div>
+                </div>
+              ) : (
                 <div className="jp-guard">
                   <div className="jp-guard-inner">
                     <span className="jp-guard-title">{banner.title}</span>
                     <span className="jp-guard-sub">{banner.sub}</span>
+                  </div>
+                </div>
+              ))}
+
+              {ask && (
+                <div className="jp-card">
+                  <div className="jp-card-in jp-ask">
+                    <div className="jp-ask-kicker">🎒 背包 ×{inv ? inv.bags : 0} · 用掉 1 个保一次</div>
+                    <b className="jp-ask-title">要掉下去了</b>
+                    <p>用背包保一次？你会回到起跳的那块，这一下不算数，分数不清零。</p>
+                    <div className="jp-confirm-acts">
+                      <button type="button" className="btn ghost" onClick={declineSave}>算了</button>
+                      <button type="button" className="btn" onClick={saveWithBag} disabled={sync === 'saving'}>用背包保一次</button>
+                    </div>
+                    <div className="jp-ask-note">不用的话，这一局就结束了。</div>
+                  </div>
+                </div>
+              )}
+
+              {result && (
+                <div className="jp-card">
+                  <div className="jp-card-in jp-result">
+                    <b className="jp-result-title">掉下去了</b>
+                    <div className="jp-res-nums">
+                      <div><b>{result.score}</b><span>本局 · 一起跳的</span></div>
+                      <div><b>{best}</b><span>最高纪录</span></div>
+                    </div>
+                    {recRows.map((r) => (
+                      <div className="jp-rec-row" key={r.slot}>
+                        <span className="nm">{r.name}</span>
+                        <span className="vv">最多 {r.best} 块</span>
+                        <span className="tt">{r.total} 跳</span>
+                      </div>
+                    ))}
+                    <div className="jp-confirm-acts" style={{ marginTop: 10 }}>
+                      <button type="button" className="btn ghost" onClick={() => onExit && onExit()}>回小物</button>
+                      <button type="button" className="btn" onClick={() => setResult(null)}>再来一次</button>
+                    </div>
+                    <div className="jp-ask-note">再来一次：从第一块重新开始，两个人的分数清零，最高分保留。</div>
+                  </div>
+                </div>
+              )}
+
+              {recOpen && (
+                <div className="jp-card">
+                  <div className="jp-card-in jp-result">
+                    <b className="jp-result-title">记录</b>
+                    {recRows.map((r) => (
+                      <div className="jp-rec-row" key={r.slot}>
+                        <span className="nm">{r.name}</span>
+                        <span className="vv">最多 {r.best} 块</span>
+                        <span className="tt">{r.total} 跳</span>
+                      </div>
+                    ))}
+                    <div className="jp-rec-line">这条路：一起跳到第 {blocks} 块 · 一起攒了 {(hud && hud.coins) || 0} 枚</div>
+                    <button type="button" className="btn jp-cont" onClick={() => setRecOpen(false)}>继续跳</button>
+                  </div>
+                </div>
+              )}
+
+              {enc && (
+                <div className="jp-enc-wrap" onClick={() => setEnc(null)}>
+                  <div className="jp-enc">
+                    <span className="jp-enc-badge">{enc.n}</span>
+                    <span className="jp-enc-title">炫少的鼓励</span>
+                    <span className="jp-enc-line">{enc.line}</span>
+                    <button type="button" className="btn jp-enc-ok" onClick={() => setEnc(null)}>继续</button>
                   </div>
                 </div>
               )}

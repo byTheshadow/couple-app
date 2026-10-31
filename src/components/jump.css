@@ -353,3 +353,36 @@
 @media (prefers-reduced-motion: reduce) {
   .jp-opt:active { transform: none; }
 }
+
+/* ---------- 第六轮：保一次 / 结算 / 记录 / 炫少的鼓励 ---------- */
+.jp-ask, .jp-result { max-width: 300px; margin: 0 auto; }
+.jp-ask-title, .jp-result-title { display: block; font-size: 21px; font-weight: 800; }
+.jp-ask p { margin: 7px 0 12px; font-size: 12.5px; line-height: 1.6; color: #6b5a4a; }
+.jp-ask-kicker { margin-bottom: 6px; font-size: 10.5px; letter-spacing: .04em; color: #9a7a58; }
+.jp-ask-note { margin-top: 9px; font-size: 10.5px; line-height: 1.5; color: #8a7462; }
+.jp-res-nums { display: flex; gap: 8px; margin: 10px 0 12px; }
+.jp-res-nums > div { flex: 1; padding: 9px 11px 8px; border-radius: 10px; background: #fffaf0; border: 1px solid rgba(60,40,30,.12); }
+.jp-res-nums b { display: block; font-family: var(--mono); font-size: 25px; line-height: 1; }
+.jp-res-nums span { display: block; margin-top: 4px; font-size: 10px; color: #8a7462; }
+.jp-rec-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 9px; background: #fffaf0; border: 1px solid rgba(60,40,30,.1); margin-top: 6px; font-size: 12px; }
+.jp-rec-row .nm { flex: 1; font-weight: 650; }
+.jp-rec-row .vv { color: #9a6a12; font-family: var(--mono); font-size: 12px; }
+.jp-rec-row .tt { color: #8a7462; font-size: 10.5px; }
+.jp-rec-line { margin-top: 10px; font-size: 11px; color: #6b5a4a; }
+
+/* 炫少的保护 · B 台词版（和 A 黑金匾 50/50 随机） */
+.jp-guard--line { top: 34px; padding: 0 12px; }
+.jp-gl { position: relative; width: 100%; padding: 13px 18px 14px; background: linear-gradient(180deg, rgba(28,7,13,.94), rgba(72,14,27,.94)); border-top: 1px solid #e8c06a; border-bottom: 1px solid #e8c06a; box-shadow: 0 12px 30px rgba(0,0,0,.55); }
+.jp-gl-tag { position: absolute; left: 16px; top: -10px; padding: 1px 8px; background: #e8c06a; color: #2a0713; font-size: 9px; letter-spacing: .12em; }
+.jp-gl-title { display: block; font-family: "STSong", "SimSun", serif; font-size: 13px; letter-spacing: .32em; color: #e8c06a; text-align: center; }
+.jp-gl-line { display: block; margin-top: 5px; font-family: "STSong", "SimSun", serif; font-size: 22px; font-weight: 900; letter-spacing: .05em; color: #fff6e2; text-align: center; text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 18px rgba(255,190,90,.35); }
+
+/* 炫少的鼓励 */
+.jp-enc-wrap { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12,6,16,.55); animation: jp-enc-in .34s ease both; }
+.jp-enc { position: relative; width: 262px; padding: 16px 16px 14px; border-radius: 14px; background: linear-gradient(180deg, #2a0713, #4a0f1e); border: 1.5px solid #f6c650; box-shadow: 0 18px 42px rgba(0,0,0,.6), 0 0 34px rgba(255,190,60,.28); text-align: center; color: #ffe6a8; }
+.jp-enc-badge { position: absolute; left: 12px; top: -12px; padding: 2px 9px; border-radius: 20px; background: linear-gradient(180deg, #ffe27a, #f0a92a); color: #3a1a06; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.jp-enc-title { display: block; font-family: "STSong", "SimSun", serif; font-size: 20px; letter-spacing: .2em; color: #ffd34d; text-shadow: 0 2px 0 rgba(30,6,10,.9); }
+.jp-enc-line { display: block; margin: 8px 0 12px; font-size: 12px; line-height: 1.6; }
+.jp-enc-ok { width: 100%; height: 34px; font-size: 12.5px; }
+@keyframes jp-enc-in { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .jp-enc-wrap { animation: none; } }
