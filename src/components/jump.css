@@ -91,7 +91,38 @@
 .jp-coin { color: #a97a2a; }
 .jp-coin b { color: #8a5f14; }
 
-/* 道具条：背包 / 冻结卡 / 今日守护 */
+/* 状态条：守护 + 交棒（轮到谁、棒在谁手里一眼看到） */
+.jp-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--ink2);
+}
+.jp-bar .grow { flex: 1; }
+.jp-shield { display: inline-flex; align-items: center; gap: 4px; }
+.jp-give {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 15px;
+  border: none;
+  border-radius: 13px;
+  background: var(--btn);
+  color: var(--btnInk);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(14, 14, 16, .16);
+  transition: transform .18s ease, opacity .18s ease;
+}
+.jp-give:active { transform: scale(.95); }
+.jp-give[disabled] { opacity: .45; cursor: default; box-shadow: none; }
+
+/* 道具条：背包 / 喷气 / 冻结（数量为 0 的整条不显示） */
 .jp-items {
   display: flex;
   gap: 6px;
@@ -201,6 +232,10 @@
   background: #17171c;
   box-shadow: inset 0 3px 10px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
 }
+/* 道具条那行只在有道具时出现：多占 32px（24 + 间距），画布相应收一点，别把一屏挤爆 */
+.jp-ui.has-items .jp-bezel {
+  width: min(100%, calc((100dvh - 230px) * 0.6667 + 14px));
+}
 .jp-screen {
   position: relative;
   width: 100%;
@@ -262,6 +297,20 @@
 .jp-ov b { font-size: 15px; font-weight: 700; }
 .jp-ov span { max-width: 250px; color: rgba(255,255,255,.72); }
 .jp-ov .btn { height: 38px; margin-top: 6px; padding: 0 20px; font-size: 13px; background: #ffd34d; color: #2a1a20; }
+/* 接棒：等 TA 的时候唯一的动作，做大做亮 */
+.jp-ov .btn.jp-take {
+  height: 48px;
+  margin-top: 12px;
+  padding: 0 34px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  background: #ffd34d;
+  color: #2a1a20;
+  box-shadow: 0 0 0 3px rgba(255, 211, 77, .26), 0 10px 24px rgba(0, 0, 0, .45);
+}
+.jp-ov .btn.jp-take:active { transform: scale(.96); }
 
 /* ---------- 答题卡 / 换路确认 ---------- */
 .jp-card {
@@ -369,6 +418,7 @@
 .jp-rec-row .vv { color: #9a6a12; font-family: var(--mono); font-size: 12px; }
 .jp-rec-row .tt { color: #8a7462; font-size: 10.5px; }
 .jp-rec-line { margin-top: 10px; font-size: 11px; color: #6b5a4a; }
+.jp-rec-last { margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(60, 40, 30, .18); }
 
 /* 炫少的保护 · B 台词版（和 A 黑金匾 50/50 随机） */
 .jp-guard--line { top: 34px; padding: 0 12px; }

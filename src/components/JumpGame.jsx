@@ -181,6 +181,7 @@ export default function JumpGame({ onExit }) {
   const encRef = useRef(new Set())
   const encT = useRef(0)
   const invRef = useRef(null)
+  const savesRef = useRef(0)
 
   const [sfx] = useState(() => createSfx())
   const [sfxOn, setSfxOn] = useState(sfx.on)
@@ -197,6 +198,7 @@ export default function JumpGame({ onExit }) {
   const [ask, setAsk] = useState(null)
   const [result, setResult] = useState(null)
   const [recOpen, setRecOpen] = useState(false)
+  const [lastRun, setLastRun] = useState(null)
   const [enc, setEnc] = useState(null)
 
   const say = useCallback((t) => {
@@ -469,8 +471,9 @@ export default function JumpGame({ onExit }) {
     guardSettled.current = true
   }, [say, showBanner, snapTo, sfx])
 
-  /* ---------- 真掉下去：重置整条路，再把结算页顶出来 ---------- */
-  const loseNow = useCallback(async (from, score, mine) => {
+  /* ---------- 真掉下去：重置整条路；有背包时弹结算页，没有就直接回第一块 ---------- */
+  const loseNow = useCallback(async (from, score, mine, opts) => {
+    const opt = opts || {}
     const g = gRef.current
     if (g) snapTo(g, 0)
     syncRef.current = 'saving'
@@ -498,7 +501,12 @@ export default function JumpGame({ onExit }) {
     syncRef.current = 'idle'
     setSync('idle')
     fallDone.current = false
-    setResult({ from, score, mine })
+    const end = { platform: Number(opt.platform) || 0, saves: savesRef.current }
+    savesRef.current = 0
+    setLastRun(end)
+    // 没有背包可问：不弹结算卡，直接回到第一块，结果只留在「记录」里
+    if (opt.silent) say('掉下去了：第 ' + end.platform + ' 块，没有背包，从第一块再来')
+    else setResult({ from, score, mine })
   }, [applyState, say, snapTo])
 
   /* ---------- 掉下去：先看守护，没守住再问背包，最后才结算 ---------- */
@@ -507,17 +515,21 @@ export default function JumpGame({ onExit }) {
     const g = gRef.current
     const score = Number((hud && hud.score) || 0)
     const mine = Number((hud && hud.by_user && hud.by_user[myId]) || 0)
-    // 没守住：还有背包就先问一次（每次掉落只问一次）
-    if (!askedRef.current && invRef.current && invRef.current.bags > 0) {
+    // 没守住：还有背包才问（每次掉落只问一次）；一个都没有就直接回第一块，不弹卡
+    const bags = (invRef.current && invRef.current.bags) || 0
+    if (!askedRef.current && bags > 0) {
       askedRef.current = true
       if (g) snapTo(g, from)
       syncRef.current = 'idle'
       setSync('idle')
       fallDone.current = false
-      setAsk({ from, score, mine })
+      setAsk({ from, score, mine, platform: Number((hud && hud.platform) || 0) })
       return
     }
-    await loseNow(from, score, mine)
+    await loseNow(from, score, mine, {
+      platform: Number((hud && hud.platform) || 0),
+      silent: bags === 0,
+    })
   }, [hud, loseNow, myId, protectFrom, snapTo])
 
   useEffect(() => { fallRef.current = fallReset }, [fallReset])
@@ -537,10 +549,11 @@ export default function JumpGame({ onExit }) {
     if (!res.ok) {
       setAsk(null)
       say('背包用完了，这一局保不住了')
-      await loseNow(a.from, a.score, a.mine)
+      await loseNow(a.from, a.score, a.mine, { platform: a.platform })
       return
     }
     if (res.me) setInv(res.me)
+    savesRef.current += 1
     setAsk(null)
     protectFrom(a.from, 'bag')
     say('背包保住了这一下')
@@ -549,7 +562,7 @@ export default function JumpGame({ onExit }) {
   const declineSave = useCallback(() => {
     const a = ask
     setAsk(null)
-    if (a) loseNow(a.from, a.score, a.mine)
+    if (a) loseNow(a.from, a.score, a.mine, { platform: a.platform })
   }, [ask, loseNow])
 
   /* ---------- 炫少的鼓励：u2 每跳满 25 / 50 / 75 块弹一次 ---------- */
@@ -843,6 +856,15 @@ export default function JumpGame({ onExit }) {
     applyState(res.state)
     say('棒交给 ' + ((partner && partner.display_name) || 'TA') + ' 了')
   }, [partner, applyState, say])
+
+  /* 交棒按钮：人得站住了才能交，半空中交会把这一跳弄丢 */
+  const giveTurn = useCallback(async () => {
+    if (!partner) return
+    if (phaseRef.current !== 'ready' || syncRef.current !== 'idle') return
+    const g = gRef.current
+    if (g && g.mode !== 'idle' && g.mode !== 'landed') { say('这一跳还没站稳，等落地再交棒'); return }
+    await doHandoff()
+  }, [doHandoff, partner, say])
 
   const useBagNow = useCallback(async () => {
     const g = gRef.current
@@ -1177,6 +1199,12 @@ export default function JumpGame({ onExit }) {
   const taScore = partner ? Number(byUser[partner.id] || 0) : 0
   const blocks = hud ? hud.platform : 0
   const best = hud ? hud.best : 0
+  const lastRunText = (() => {
+    if (!lastRun) return ''
+    const where = lastRun.platform > 0 ? `第 ${lastRun.platform} 块 · ` : ''
+    const how = lastRun.saves > 0 ? `用背包保了 ${lastRun.saves} 次` : '没用背包'
+    return `最近一局：${where}${how}`
+  })()
   const recRows = (() => {
     const rec = (hud && hud.rec) || {}
     const mySlot = (me && me.slot) || 'u1'
@@ -1194,6 +1222,12 @@ export default function JumpGame({ onExit }) {
   const taName = (partner && partner.display_name) || 'TA'
   const turn = hud ? hud.turn : null
   const myTurn = !turn || turn === myId
+  const invBags = inv ? Number(inv.bags) || 0 : 0
+  const invJets = inv ? Number(inv.jets) || 0 : 0
+  const invFreezes = inv ? Number(inv.freezes) || 0 : 0
+  const guardLeft = inv ? Number(inv.guard_left) || 0 : 3
+  const showItems = invBags > 0 || invJets > 0 || invFreezes > 0
+  const canGive = !!partner && turn === myId && phase === 'ready'
 
   /* 等棒的时候每 6 秒看一眼服务器：TA 跳了 / 交棒了，这边能跟上（不是 realtime） */
   useEffect(() => {
@@ -1227,7 +1261,7 @@ export default function JumpGame({ onExit }) {
 
   return (
     <div className="jp-root">
-      <div className="jp-ui">
+      <div className={`jp-ui${showItems ? ' has-items' : ''}`}>
         <div className="jp-top">
           <button type="button" className="jp-ic tap" onClick={() => onExit && onExit()} aria-label="返回小物">
             <Svg name="back" size={18} />
@@ -1252,7 +1286,6 @@ export default function JumpGame({ onExit }) {
             </button>
             {menu && (
               <div className="jp-menu">
-                {partner && turn === myId && <button type="button" onClick={doHandoff}>交给 {taName}</button>}
                 <button type="button" onClick={openShop}>小卖部</button>
                 <button type="button" onClick={() => { setMenu(false); setRecOpen(true) }}>记录</button>
                 <button type="button" onClick={askReset}>换一条路</button>
@@ -1274,20 +1307,37 @@ export default function JumpGame({ onExit }) {
           )}
         </div>
 
-        <div className="jp-items">
-          <button
-            type="button" className="jp-item use"
-            disabled={!inv || inv.bags <= 0 || !myTurn}
-            onClick={useBagNow}
-          >🎒 背包 ×{inv ? inv.bags : 0}</button>
-          <button
-            type="button" className="jp-item use"
-            disabled={!inv || inv.jets <= 0 || !myTurn}
-            onClick={useJetNow}
-          >🚀 喷气 ×{inv ? inv.jets : 0}</button>
-          <span className="jp-item">❄️ 冻结 ×{inv ? inv.freezes : 0}</span>
-          <span className="jp-item">🛡 守护 {inv ? inv.guard_left : 3}/3</span>
+        <div className="jp-bar">
+          <span className="jp-shield" title="守护：每天 3 次，掉落时自动挡一下">🛡 守护 {guardLeft}/3</span>
+          <span className="grow" />
+          {canGive && (
+            <button
+              type="button" className="jp-give"
+              disabled={sync === 'saving'}
+              onClick={giveTurn}
+            >交给 {taName} →</button>
+          )}
         </div>
+
+        {showItems && (
+          <div className="jp-items">
+            {invBags > 0 && (
+              <button
+                type="button" className="jp-item use"
+                disabled={!myTurn}
+                onClick={useBagNow}
+              >🎒 背包 ×{invBags}</button>
+            )}
+            {invJets > 0 && (
+              <button
+                type="button" className="jp-item use"
+                disabled={!myTurn}
+                onClick={useJetNow}
+              >🚀 喷气 ×{invJets}</button>
+            )}
+            {invFreezes > 0 && <span className="jp-item">❄️ 冻结 ×{invFreezes}</span>}
+          </div>
+        )}
 
         <div className="jp-stage">
           <div className="jp-bezel">
@@ -1333,10 +1383,10 @@ export default function JumpGame({ onExit }) {
               )}
 
               {phase === 'ready' && !myTurn && (
-                <div className="jp-ov">
+                <div className="jp-ov jp-ov--wait">
                   <b>轮到 {taName} 跳</b>
                   <span>棒在 TA 手里。TA 跳完会交给你；等不及就接过来（会把 TA 正在跳的这一下顶掉）</span>
-                  <button type="button" className="btn" onClick={askTake}>我来接棒</button>
+                  <button type="button" className="btn jp-take" onClick={askTake}>我来接棒</button>
                 </div>
               )}
 
@@ -1408,6 +1458,9 @@ export default function JumpGame({ onExit }) {
                       </div>
                     ))}
                     <div className="jp-rec-line">这条路：一起跳到第 {blocks} 块 · 一起攒了 {(hud && hud.coins) || 0} 枚</div>
+                    {lastRunText && (
+                      <div className="jp-rec-line jp-rec-last">{lastRunText}</div>
+                    )}
                     <button type="button" className="btn jp-cont" onClick={() => setRecOpen(false)}>继续跳</button>
                   </div>
                 </div>

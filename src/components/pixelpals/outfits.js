@@ -419,6 +419,148 @@ export const BUILTINS = [
       ].map(w16),
     },
   },
+  {
+    id: 'b:knitvest', name: '针织背心', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#c9a24a', '#a8832f', '#e0c078'],
+      rows: [
+        '....cabbbbac....',
+        '....caabbaac....',
+        '....caaaaaac....',
+        '....caaaaaac....',
+        '....baaaaaab....',
+        '....bbbbbbbb....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:cape', name: '连帽斗篷', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#5a4a7a', '#43355c', '#7a68a0'],
+      rows: [
+        '....bbbbbbbb....',
+        '...bbbbbbbbbb...',
+        '..aaabaaaabaaa..',
+        '..aaabaaaabaaa..',
+        '.aaaabaaaabaaaa.',
+        '.caaaaaaaaaaaac.',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:workshirt', name: '工装衬衫', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#7a8a5a', '#5d6b42', '#e8dca8'],
+      rows: [
+        '...aaaccccaaa...',
+        '..aaaaabbaaaaa..',
+        '..aabbabbabbaa..',
+        '..aaaaabbaaaaa..',
+        '..aaaaabbaaaaa..',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:cargo', name: '工装裤', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#6b6b4a', '#4f4f36', '#a8a480'],
+      rows: [
+        '....aaaccaaa....',
+        '....baaaaaab....',
+        '....bbaaaabb....',
+        '....bbb..bbb....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:sweatpants', name: '卫裤', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#8a8f9a', '#6b707a', '#c8ccd4'],
+      rows: [
+        '....aaaccaaa....',
+        '....aaaaaaaa....',
+        '....aaaaaaaa....',
+        '....bbb..bbb....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:aline', name: 'A 字短裙', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#d98a5a', '#b86a3e', '#e8b08a'],
+      rows: [
+        '....aaaaaaaa....',
+        '...aaaaaaaaaa...',
+        '..aaaaaaaaaaaa..',
+        '..bcbbbbbbbbcb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:loafer', name: '乐福鞋', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#5a3a2a', '#3a2418', '#d9b06a'],
+      rows: [
+        '....aaa..aaa....',
+        '...bcbb..bcbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:snowboot', name: '雪地靴', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#c8a27a', '#9a7a56', '#f0e4d0'],
+      rows: [
+        '....ccc..ccc....',
+        '...baab..baab...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:ballcap', name: '棒球帽', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 0,
+      pal: ['#2f4a7a', '#1f3358', '#e8e2d0'],
+      rows: [
+        '.....aaaaaa.....',
+        '....aaaccaaa....',
+        '...bbbbbbbbbb...',
+        '..bbbbbbbbbbbb..',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:headband', name: '发带', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 2,
+      pal: ['#c94a6a', '#9a2f4a'],
+      rows: [
+        '...aaaaaaaaaa...',
+        '...bbbbbbbbbb...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:neckerchief', name: '领巾', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 11,
+      pal: ['#3a6b8a', '#2a4f66', '#e8e2d0'],
+      rows: [
+        '.....aaaaaa.....',
+        '......baab......',
+        '.......cc.......',
+      ].map(w16),
+    },
+  },
 ]
 
 /* ---------- 校验：返回 ''（没问题）或一句人话 ---------- */

@@ -181,6 +181,8 @@ import { london } from './scenedata/london.js'
 import { tokyo } from './scenedata/tokyo.js'
 import { paris } from './scenedata/paris.js'
 import { kyoto } from './scenedata/kyoto.js'
+import { nyc } from './scenedata/nyc.js'
+import { hongkong } from './scenedata/hongkong.js'
 
 export const SCENE_DATA = {
   store,
@@ -200,6 +202,8 @@ export const SCENE_DATA = {
   tokyo,
   paris,
   kyoto,
+  nyc,
+  hongkong,
 }
 
 /* 所有场景：办公室、咖啡馆是手写画法，其余走上面的数据。上班和放空都能选 */
@@ -224,6 +228,8 @@ export const SCENE_LIST = [
   { k: 'tokyo', n: '东京塔', e: '🗼', tip: '适合放空' },
   { k: 'paris', n: '巴黎', e: '🥐', tip: '适合放空' },
   { k: 'kyoto', n: '京都', e: '⛩️', tip: '适合放空' },
+  { k: 'nyc', n: '纽约', e: '🗽', tip: '适合放空' },
+  { k: 'hongkong', n: '香港', e: '🚋', tip: '适合放空' },
   { k: 'rain_day', n: '下雨', e: '🌦️', tip: '适合放空' },
   { k: 'rain', n: '雨夜', e: '🌧️', tip: '适合放空' },
   { k: 'snow_day', n: '下雪', e: '❄️', tip: '适合放空' },
