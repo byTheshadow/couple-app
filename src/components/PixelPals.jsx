@@ -21,6 +21,7 @@ import Diary from './pixelpals/Diary'
 import Studio from './pixelpals/Studio'
 import AiSettings from './pixelpals/AiSettings'
 import PersonaEditor from './pixelpals/PersonaEditor'
+import PalBoot from './pixelpals/Boot'
 import './pixelpals.css'
 
 /* ===========================================================================
@@ -1188,6 +1189,9 @@ export default function PixelPals({ onExit }) {
   }
 
   const err = tab === 'mine' ? myPal.error : taPal.error
+
+  // 服务器上的设置还没到：先顶加载页。否则会拿 DEFAULT_SETTINGS 先画一遍，等数据到了再跳一次
+  if (myPal.loading && !myPal.error) return (<PalBoot stage="data" />)
 
   return (
     <main className="page pp-page">

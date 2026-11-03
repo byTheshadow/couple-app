@@ -5,6 +5,7 @@ import { useScrollFx } from '../lib/scrollfx'
 import { Svg } from '../components/Icon'
 import TabBar from '../components/TabBar'
 import DoodlePad, { DOODLE_DRAFT_KEY } from '../components/DoodlePad'
+import PalBoot from '../components/pixelpals/Boot'
 import './toys.css'
 
 // 奶茶店带着 three.js，单独拆成一个懒加载块：不进奶茶店就不会下载它
@@ -320,7 +321,7 @@ export default function Toys() {
           <Crystal onExit={exitDoodle} incoming={location.state && location.state.crystal} />
         </Suspense>
       ) : inPixel ? (
-        <Suspense fallback={<div className="page center"><div className="h-sub">正在开机…</div></div>}>
+        <Suspense fallback={<PalBoot stage="script" />}>
           <PixelPals onExit={exitDoodle} />
         </Suspense>
       ) : inWhack ? (
