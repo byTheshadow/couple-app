@@ -1,0 +1,120 @@
+/* ===========================================================================
+   日历：全站都是玻璃和窗口，这一页多一点「能摸到」的东西——
+   卡片底下垫两张、封条是一枚盖上去的章、日期数字用衬线。
+   颜色只认这里的变量，三个主题各一组。
+   =========================================================================== */
+
+.cal {
+  --foil: #eceef2;
+  --cal-pic: #c0703a;
+  --cal-mail: #4a6c8c;
+  --cal-love: #ab4a4f;
+  --cal-lift: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -1px 0 rgba(0, 0, 0, .05);
+  --cal-stamp: rgba(14, 14, 16, .7);
+}
+:root[data-theme='dark'] .cal {
+  --foil: #2e2f36;
+  --cal-pic: #d99460;
+  --cal-mail: #7fa3c4;
+  --cal-love: #d97076;
+  --cal-lift: inset 0 1px 0 rgba(255, 255, 255, .09), inset 0 -1px 0 rgba(0, 0, 0, .28);
+  --cal-stamp: rgba(245, 245, 247, .7);
+}
+:root[data-theme='dusk'] .cal {
+  --foil: #f3efe6;
+  --cal-pic: #a8582a;
+  --cal-mail: #3f6486;
+  --cal-love: #9e3a40;
+}
+
+/* ---------- 今天这张卡 ---------- */
+.cal-hero { position: relative; padding-bottom: 9px; }
+.cal-stack { position: absolute; inset: 0; pointer-events: none; }
+.cal-stack i { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--win); }
+.cal-stack i:first-child { transform: translateY(5px) scale(.99); opacity: .5; }
+.cal-stack i:last-child { transform: translateY(10px) scale(.978); opacity: .26; }
+
+.cal-card { position: relative; z-index: 1; padding: 13px 15px 15px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--chip);
+  box-shadow: var(--cal-lift), 0 12px 26px -20px rgba(0, 0, 0, .55); }
+.cal-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--ink2); text-transform: uppercase; }
+.cal-face { position: relative; padding-top: 10px; }
+.cal-hero.locked .cal-face { min-height: 148px; }
+
+.cal-seal { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 2px; text-align: center; }
+.cal-stamp { width: 76px; height: 76px; border-radius: 14px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px; color: var(--cal-stamp);
+  border: 1.5px solid currentColor; transform: rotate(-6deg);
+  box-shadow: inset 0 0 0 3px var(--chip), inset 0 0 0 4px currentColor; }
+.cal-stamp b { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: .1em; }
+.cal-stamp span { font-family: var(--mono); font-size: 7px; letter-spacing: .14em; opacity: .8; }
+.cal-seal-t { font-size: 12.5px; line-height: 1.6; color: var(--ink2); margin: 2px 0 0; }
+.cal-main { height: 34px; padding: 0 16px; border: 0; border-radius: 10px;
+  background: var(--btn); color: var(--btnInk); font-size: 12.5px; }
+
+/* 刮开层：canvas 擦除，盖在正文上 */
+.cal-scratch { position: absolute; inset: 0; z-index: 4; border-radius: 12px; overflow: hidden;
+  cursor: crosshair; touch-action: none; transition: opacity .2s ease; }
+.cal-scratch canvas { display: block; width: 100%; height: 100%; }
+.cal-scratch-lbl { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; pointer-events: none; color: var(--ink2); }
+.cal-scratch-lbl b { font-family: var(--mono); font-size: 10px; letter-spacing: .34em; text-indent: .34em; }
+.cal-scratch-lbl small { font-family: var(--mono); font-size: 8px; opacity: .7; }
+
+/* ---------- 正文 ---------- */
+.cal-t { font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; margin: 0 0 6px; }
+.cal-sub { margin: 0 0 10px; font-size: 12px; line-height: 1.65; color: var(--ink2); }
+.cal-p { margin: 0 0 10px; font-size: 13px; line-height: 1.85; }
+.cal-p:last-of-type { margin-bottom: 0; }
+.cal-more { margin: 12px 0 0; border-top: 1px dashed var(--line); padding-top: 9px; }
+.cal-more summary { cursor: pointer; list-style: none; font-family: var(--mono);
+  font-size: 9px; letter-spacing: .08em; color: var(--ink2); }
+.cal-more summary::-webkit-details-marker { display: none; }
+.cal-more summary::after { content: ' +'; }
+.cal-more[open] summary::after { content: ' −'; }
+.cal-fest { margin: 8px 0 0; padding-left: 14px; font-size: 11.5px; line-height: 1.7; color: var(--ink2); }
+.cal-fest li { margin-bottom: 3px; }
+.cal-src { margin: 10px 0 0; font-family: var(--mono); font-size: 8.5px; line-height: 1.6; color: var(--ink2); opacity: .75; }
+
+/* ---------- 月历 ---------- */
+.cal-sheet { position: relative; border: 1.5px solid var(--bd); border-radius: 18px;
+  background: var(--win); box-shadow: var(--shadow); overflow: hidden; }
+.cal-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 12px 14px 9px; }
+.cal-head b { font-family: var(--serif); font-size: 22px; font-weight: 600; letter-spacing: .05em; line-height: 1; }
+.cal-head-meta { font-family: var(--mono); font-size: 8.5px; letter-spacing: .1em; color: var(--ink2); }
+.cal-ar { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 8px;
+  background: transparent; color: var(--ink2); display: grid; place-items: center; font-size: 14px; line-height: 1; }
+.cal-ar:active { background: var(--chip); }
+.cal-wk { display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 10px 4px; }
+.cal-wk span { text-align: center; font-family: var(--mono); font-size: 9px; letter-spacing: .08em; color: var(--ink2); }
+.cal-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 0 10px; }
+.cal-d { position: relative; aspect-ratio: 1 / 1; border: 0; border-radius: 9px; background: transparent;
+  color: var(--ink); padding: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.cal-d.out { opacity: .24; }
+.cal-d.sel { box-shadow: inset 0 0 0 1.5px var(--bd); }
+.cal-d.today { background: var(--btn); color: var(--btnInk); box-shadow: 0 3px 8px -4px rgba(0, 0, 0, .5); }
+.cal-n { font-family: var(--serif); line-height: 1; }
+.cal-mk { display: flex; align-items: center; justify-content: center; gap: 2.5px; height: 5px; }
+.cal-dot { width: 3.5px; height: 3.5px; border-radius: 50%; background: var(--ink); }
+.cal-dot.p { background: var(--cal-pic); }
+.cal-dot.m { background: var(--cal-mail); }
+.cal-dot.l { background: var(--cal-love); }
+.cal-dot.faint { opacity: .3; }
+.cal-d.today .cal-dot { background: var(--btnInk); }
+.cal-ok { font-family: var(--mono); font-size: 7px; line-height: 1; font-weight: 700; color: var(--ink2); }
+.cal-d.today .cal-ok { color: var(--btnInk); }
+.cal-sheet-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px;
+  padding: 8px 14px; border-top: 1px solid var(--line); font-family: var(--mono);
+  font-size: 9px; color: var(--ink2); }
+
+/* ---------- 当天清单 ---------- */
+.cal-row { display: flex; align-items: center; gap: 9px; padding: 9px 2px; border-bottom: 1px dashed var(--line); }
+.cal-row:last-child { border-bottom: 0; }
+.cal-ic { width: 14px; height: 14px; flex: none; color: var(--ink2); }
+.cal-row .t { flex: 1; font-size: 12.5px; line-height: 1.45; }
+.cal-row .s { font-family: var(--mono); font-size: 9px; color: var(--ink2); white-space: nowrap; }
+.cal-thumbs { display: flex; gap: 6px; padding: 0 0 8px 23px; }
+.cal-th { width: 46px; height: 46px; border-radius: 9px; object-fit: cover; border: 1px solid var(--line); }
+.cal-empty { padding: 16px 2px 10px; text-align: center; font-size: 12.5px; color: var(--ink2); line-height: 1.7; }

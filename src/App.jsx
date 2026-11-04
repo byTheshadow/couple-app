@@ -13,6 +13,7 @@ const Chat = lazy(() => import('./pages/Chat'))
 const Toys = lazy(() => import('./pages/Toys'))
 const Grudge = lazy(() => import('./pages/Grudge')) // 新增:记仇本
 const IconSets = lazy(() => import('./pages/IconSets')) // 换主屏图标
+const Calendar = lazy(() => import('./pages/Calendar')) // 日历：一天一张
 
 
 function Loading() {
@@ -51,9 +52,8 @@ export default function App() {
           <Route path="/chat" element={<Protected><Sandbox><Chat /></Sandbox></Protected>} />
           <Route path="/toys" element={<Protected><Sandbox><Toys /></Sandbox></Protected>} />
           <Route path="/icons" element={<Protected><Sandbox><IconSets /></Sandbox></Protected>} />
+          <Route path="/calendar" element={<Protected><Sandbox><Calendar /></Sandbox></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </HashRouter>
-  )
-}

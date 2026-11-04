@@ -266,7 +266,7 @@ export default function Home() {
         {/* 头部 */}
         <div className="top hdr" data-sp>
           <div className="col" style={{ gap: 6 }}>
-            <div className="date">{date}<span className="clk">{clock}</span></div>
+            <Link to="/calendar" className="date tap" aria-label="打开日历">{date}<span className="clk">{clock}</span></Link>
             <h1 className="h-title">{greeting()}，{me?.display_name || ''}</h1>
           </div>
           <div className="row" style={{ gap: 8 }}>
