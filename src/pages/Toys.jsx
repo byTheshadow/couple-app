@@ -2,8 +2,11 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
+import { useAuth } from '../lib/auth'
+import { useOutfitBadge } from '../lib/badges'
 import { Svg } from '../components/Icon'
 import TabBar from '../components/TabBar'
+import NoticeDot from '../components/NoticeDot'
 import DoodlePad, { DOODLE_DRAFT_KEY } from '../components/DoodlePad'
 import PalBoot from '../components/pixelpals/Boot'
 import './toys.css'
@@ -253,6 +256,8 @@ export default function Toys() {
   const [open, setOpen] = useState(null) // 当前拉开的抽屉 id，一次只开一个
   const [touched, setTouched] = useState(false) // 动过抽屉之后，第一格就不再做「提示一下」的小动画
   const [hasDraft, setHasDraft] = useState(readDraft)
+  const { me } = useAuth()
+  const pixelPending = useOutfitBadge(me && me.id) // 像素小屋有几件换装请求等我回话（和底部导航的圆点是同一个数）
   const [toast, setToast] = useState('')
   const toastT = useRef(0)
 
@@ -382,10 +387,13 @@ export default function Toys() {
                           </span>
                         </button>
                       </div>
-                      <button type="button" className="dw-front" aria-expanded={isOpen} onClick={() => toggleDrawer(d.id)}>
+                      <button type="button" className="dw-front" aria-expanded={isOpen}
+                        aria-label={d.id === 'pixel' && pixelPending > 0 ? `${d.name}，${pixelPending} 个换装请求` : undefined}
+                        onClick={() => toggleDrawer(d.id)}>
                         <span className="dw-plate"><i>{d.no}</i>{d.name}</span>
                         <span className="dw-handle" />
                         {d.id === 'doodle' && hasDraft && <span className="badge">有草稿</span>}
+                        {d.id === 'pixel' && pixelPending > 0 && <NoticeDot n={pixelPending} />}
                       </button>
                     </div>
                   )

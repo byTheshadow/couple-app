@@ -39,6 +39,7 @@
   box-shadow: 0 3px 6px rgba(0,0,0,.3), inset 0 1px 0 #fff; transition: transform .4s cubic-bezier(.3,1.4,.4,1); }
 .dw.open .dw-handle { transform: translateY(2px) scaleX(1.12); }
 .dw-front .badge { position: absolute; right: 10px; top: 10px; }
+.dw-front > .bdg { right: 9px; top: 9px; }
 
 /* 第一格：页面刚打开时轻轻晃一下，提示「这是个抽屉，可以拉」 */
 @keyframes dwHint { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(5px); } 55% { transform: translateY(-1px); } 75% { transform: translateY(2px); } }
