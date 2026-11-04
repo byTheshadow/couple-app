@@ -467,6 +467,9 @@ export default function Home() {
                 </button>
               </footer>
             </div>
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <Link to="/icons" className="mini tap"><Svg name="phones" size={13} stroke={1.8} />装到手机 · 换图标</Link>
+            </div>
           </section>
         )}
       </div>

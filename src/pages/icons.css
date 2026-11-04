@@ -1,0 +1,9 @@
+/* 换图标页（src/pages/IconSets.jsx） */
+.ics-tip { margin: 0 0 2px; }
+.ics { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.ics:first-of-type { border-top: none; }
+.ics img { width: 56px; height: 56px; border-radius: 14px; background: var(--chip); flex-shrink: 0; box-shadow: 0 3px 10px rgba(0,0,0,.2); }
+.ics-txt { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.ics-txt b { font-size: 15px; font-weight: 600; }
+.ics-txt small { font-size: 12px; color: var(--ink2); }
+.ics-now { font-family: var(--mono); font-size: 11px; color: var(--ink2); border: 1px dashed var(--ink2); border-radius: 999px; padding: 2px 10px; flex-shrink: 0; }
