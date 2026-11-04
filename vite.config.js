@@ -10,6 +10,12 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
+      workbox: {
+        // 图标安装入口（ink.html / night.html…）是构建完成后才生成的，不在预缓存里。
+        // 不挡住的话 navigateFallback 会把它们替换成缓存里的 index.html：
+        // 地址栏变了但页面还是原来那份，iOS 读到的 apple-touch-icon 也就是默认图标。
+        navigateFallbackDenylist: [/\.html$/],
+      },
       manifest: {
               name: 'US',
         short_name: 'US',
