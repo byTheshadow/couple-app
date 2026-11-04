@@ -13,7 +13,7 @@ import './icons.css'
 export default function IconSets() {
   const navigate = useNavigate()
   const [broken, setBroken] = useState([])
-  const sets = ICON_SETS.filter((s) => !broken.includes(s.id))
+  const sets = ICON_SETS
 
   const install = (id) => {
     // 整页跳转：让浏览器真的去加载 <id>.html，那一刻它才读得到这套图标的 apple-touch-icon / manifest
@@ -21,7 +21,16 @@ export default function IconSets() {
   }
 
   return (
-    <main className="page">
+    <div className="shell">
+      <div className="bg">
+        <div className="blobs">
+          <div className="blob a" /><div className="blob b" /><div className="blob c" />
+          <div className="blob d" /><div className="blob e" />
+        </div>
+        <div className="aurora" />
+      </div>
+
+      <main className="page">
       <div className="top">
         <div className="col" style={{ gap: 6 }}>
           <div className="date">设置</div>
@@ -41,26 +50,35 @@ export default function IconSets() {
         </header>
         <div className="wb">
           <p className="h-sub ics-tip">挑一套，从这一页装到主屏，图标就是它。</p>
-          {sets.map((s) => (
-            <div className="ics" key={s.id}>
-              <img
-                src={s.builtin ? './icon-192.png' : `./icon-sets/${s.id}/icon-192.png`}
-                alt=""
-                width={56}
-                height={56}
-                onError={() => setBroken((b) => (b.includes(s.id) ? b : [...b, s.id]))}
-              />
-              <div className="ics-txt">
-                <b>{s.name}</b>
-                <small>{s.desc}</small>
+          {sets.map((s) => {
+            const miss = broken.includes(s.id)
+            return (
+              <div className="ics" key={s.id}>
+                {miss ? (
+                  <span className="ics-miss" aria-hidden="true">?</span>
+                ) : (
+                  <img
+                    src={s.builtin ? './icon-192.png' : `./icon-sets/${s.id}/icon-192.png`}
+                    alt=""
+                    width={56}
+                    height={56}
+                    onError={() => setBroken((b) => (b.includes(s.id) ? b : [...b, s.id]))}
+                  />
+                )}
+                <div className="ics-txt">
+                  <b>{s.name}</b>
+                  <small>{miss ? `没找到图：icon-sets/${s.id}/` : s.desc}</small>
+                </div>
+                {s.builtin ? (
+                  <span className="ics-now">默认</span>
+                ) : miss ? (
+                  <span className="ics-now">图没放</span>
+                ) : (
+                  <button type="button" className="mini tap" onClick={() => install(s.id)}>用这套装</button>
+                )}
               </div>
-              {s.builtin ? (
-                <span className="ics-now">默认</span>
-              ) : (
-                <button type="button" className="mini tap" onClick={() => install(s.id)}>用这套装</button>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
         <footer className="wf">iOS：分享 → 添加到主屏幕　·　安卓：菜单 → 安装应用</footer>
       </section>
@@ -74,6 +92,7 @@ export default function IconSets() {
       </section>
 
       <TabBar />
-    </main>
+      </main>
+    </div>
   )
 }
