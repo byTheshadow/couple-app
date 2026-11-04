@@ -28,6 +28,12 @@ function readBaseManifest(dist) {
   return null
 }
 
+/** 在安装入口页顶部插一条提示：让人确认「现在这页装的是哪一套」；装到主屏（standalone）后自动消失 */
+export function withHint(html, name) {
+  const css = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:10px 14px;background:#e5484d;color:#fff;font:13px/1.45 -apple-system,system-ui,sans-serif;text-align:center'
+  const tag = `<div id="icon-hint" style="${css}">这一页装出来的是「${name}」图标 · 在 Safari 里点分享 → 添加到主屏幕<style>@media (display-mode:standalone){#icon-hint{display:none}}</style></div>`
+  return html.replace(/<body([^>]*)>/, (m, attrs) => `<body${attrs}>${tag}`)
+}
 export function stampIconEntries({ dist = 'dist', publicDir = 'public', sets = ICON_SETS, log = console.log, warn = console.warn } = {}) {
   const index = path.join(dist, 'index.html')
   if (!fs.existsSync(index)) {
@@ -51,7 +57,7 @@ export function stampIconEntries({ dist = 'dist', publicDir = 'public', sets = I
     }
     const touch = has('apple-touch-icon.png') ? `./icon-sets/${s.id}/apple-touch-icon.png` : `./icon-sets/${s.id}/icon-192.png`
     const out = setLink(setLink(html, 'apple-touch-icon', touch), 'manifest', `./manifest-${s.id}.webmanifest`)
-    fs.writeFileSync(path.join(dist, `${s.id}.html`), out)
+    fs.writeFileSync(path.join(dist, `${s.id}.html`), withHint(out, s.name))
 
     const icons = [
       { src: `./icon-sets/${s.id}/icon-192.png`, sizes: '192x192', type: 'image/png' },
