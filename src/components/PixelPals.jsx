@@ -22,6 +22,7 @@ import Studio from './pixelpals/Studio'
 import AiSettings from './pixelpals/AiSettings'
 import PersonaEditor from './pixelpals/PersonaEditor'
 import PalBoot from './pixelpals/Boot'
+import Sleep from './pixelpals/Sleep'
 import './pixelpals.css'
 
 /* ===========================================================================
@@ -973,6 +974,7 @@ export default function PixelPals({ onExit }) {
   const [sec, setSec] = useState('preset') // 设置面板当前翻到哪一页（信封角标要能直接跳到换装）
 
   const [tab, setTab] = useState('mine')
+  const [sleepOpen, setSleepOpen] = useState(false)
   const [sim, setSim] = useState(null) // null = 用真实时间
   const [real, setReal] = useState(realHour)
   const [draft, setDraft] = useState(null)
@@ -1213,6 +1215,8 @@ export default function PixelPals({ onExit }) {
         <button type="button" role="tab" aria-selected={tab === 'ta'} className={tab === 'ta' ? 'on' : ''} onClick={() => setTab('ta')}>{taName}的小屋</button>
       </div>
 
+      <button type="button" className="btn ghost pp-sleep-entry" onClick={() => setSleepOpen(true)}>🌙 哄睡 · 陪兔兔钓鱼</button>
+
       {myPending > 0 && (
         <button type="button" className="pp-mail" onClick={() => { setTab('mine'); setSec('wear') }}>
           ✉ {taName} 想让你穿点什么（{myPending}）
@@ -1300,6 +1304,17 @@ export default function PixelPals({ onExit }) {
           mySettings={myPal.settings}
           taSettings={taPal.settings}
           onClear={onClearLog}
+        />
+      )}
+
+      {sleepOpen && (
+        <Sleep
+          open={sleepOpen}
+          onClose={() => setSleepOpen(false)}
+          myId={me && me.id}
+          taId={partner && partner.id}
+          taName={taName}
+          hr={hr}
         />
       )}
     </main>
