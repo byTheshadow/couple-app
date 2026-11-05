@@ -133,6 +133,12 @@
 .cal-kinds { display: flex; gap: 8px; }
 .cal-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink2); }
 .cal-check input { width: 16px; height: 16px; accent-color: var(--ink); }
+/* 「哪天」+ 验收留言：都是表单里的一格，跟着 .field 走 */
+.cal-fld { display: flex; flex-direction: column; gap: 6px; }
+.cal-fld > span { padding: 0 6px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .1em; color: var(--ink2); }
+.cal-again { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.cal-again .field { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 12px; font-size: 13px; }
 
 /* ---------- 月历 ---------- */
 .cal-sheet { position: relative; border: 1.5px solid var(--bd); border-radius: 18px;

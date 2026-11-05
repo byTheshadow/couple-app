@@ -155,6 +155,9 @@ async function saveImage(cv, name) {
 /** 那天有我或 TA 布置的卡：做完、验收都在这一行里发生 */
 function DayCards({ cards, me, progress, onDone, onJudge }) {
   const [openId, setOpenId] = useState('')
+  /* 点「再来一次」先展开一个输入框：那句话不是必填，但总得给人地方写 */
+  const [againFor, setAgainFor] = useState('')
+  const [note, setNote] = useState('')
   return (
     <div className="cal-cc">
       {cards.map((c) => {
@@ -190,7 +193,13 @@ function DayCards({ cards, me, progress, onDone, onJudge }) {
                   {iMade && theirs && theirs.state === 'done' && (
                     <>
                       <button className="cal-mini" type="button" onClick={() => onJudge(c, 'pass')}>通过</button>
-                      <button className="cal-mini ghost" type="button" onClick={() => onJudge(c, 'again')}>再来一次</button>
+                      <button
+                        className="cal-mini ghost"
+                        type="button"
+                        onClick={() => { setAgainFor(againFor === c.id ? '' : c.id); setNote('') }}
+                      >
+                        再来一次
+                      </button>
                     </>
                   )}
                   {!iMade && (!mine || mine.state === 'again') && (
@@ -201,7 +210,28 @@ function DayCards({ cards, me, progress, onDone, onJudge }) {
                   {iMade && !theirs && <span className="cal-cc-wait">TA 做完，这里会写「等你验收」</span>}
                   {!iMade && mine && mine.state === 'done' && <span className="cal-cc-wait">交了，等 TA 验收</span>}
                   {!iMade && mine && mine.state === 'pass' && <span className="cal-cc-wait">这个我给过了</span>}
+                  {!iMade && mine && mine.state === 'again' && mine.note && (
+                    <span className="cal-cc-wait">TA 说：{mine.note}</span>
+                  )}
                 </div>
+                {againFor === c.id && (
+                  <div className="cal-again">
+                    <input
+                      className="field"
+                      value={note}
+                      maxLength={80}
+                      placeholder="跟 TA 说一句（可以不写）"
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                    <button
+                      className="cal-mini"
+                      type="button"
+                      onClick={() => { onJudge(c, 'again', note); setAgainFor(''); setNote('') }}
+                    >
+                      发过去
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -427,19 +457,25 @@ export default function Calendar() {
     try { localStorage.setItem(FS_KEY, String(v)) } catch { /* 隐身模式，这次而已 */ }
   }
 
-  /* 布置卡：表单塞在底部那条 sheet 里，布到当前选中的那天 */
+  /* 布置卡：表单塞在底部那条 sheet 里，默认布到当前选中的那天，也能在里面改 */
   const [postOpen, setPostOpen] = useState(false)
   const [posting, setPosting] = useState(false)
-  const [form, setForm] = useState({ kind: 'task', title: '', body: '', needCheck: true })
+  const [form, setForm] = useState({ day: '', kind: 'task', title: '', body: '', needCheck: true })
   const { cards, progress, post, markDone, judge } = useCalCards(me && me.id, partner && partner.id)
 
+  const openPost = () => {
+    setForm({ day: sel, kind: 'task', title: '', body: '', needCheck: true })
+    setPostOpen(true)
+  }
+
   const submitCard = async () => {
+    if (!form.day) { say('先选一天'); return }
     setPosting(true)
-    const r = await post({ day: sel, ...form })
+    const r = await post({ ...form })
     setPosting(false)
     if (!r.ok) { say('没布置上：' + r.error); return }
     setPostOpen(false)
-    setForm({ kind: 'task', title: '', body: '', needCheck: true })
+    setForm({ day: '', kind: 'task', title: '', body: '', needCheck: true })
     say('布置好了，那天到了 TA 才看得到')
   }
 
@@ -448,8 +484,8 @@ export default function Calendar() {
     say(r.ok ? '记下了' : '没记上：' + r.error)
   }
 
-  const onJudgeCard = async (c, state) => {
-    const r = await judge(c, state)
+  const onJudgeCard = async (c, state, note) => {
+    const r = await judge(c, state, note)
     say(r.ok ? (state === 'pass' ? '通过了' : '让它再来一次') : '没记上：' + r.error)
   }
 
@@ -691,7 +727,7 @@ export default function Calendar() {
           <header className="tb">
             <b>{fmtMD(sel)}.清单</b>
             <span className="grow" />
-            <button className="cal-postbtn tap" type="button" onClick={() => setPostOpen(true)}>
+            <button className="cal-postbtn tap" type="button" onClick={openPost}>
               布置一张
               {pendingVerdicts > 0 && <NoticeDot n={pendingVerdicts} />}
             </button>
@@ -768,7 +804,10 @@ export default function Calendar() {
           <div className="sheet cal-form" onClick={(e) => e.stopPropagation()}>
             <div className="cal-form-t">
               给 TA 留一张卡
-              <small>{fmtMD(sel)} · 到了那天才给 TA 看</small>
+              <small>
+                {form.day ? `${fmtMD(form.day)} · 周${WEEKDAY_CN[weekdayOf(form.day)]}` : '还没选哪天'}
+                {' · 到了那天才给 TA 看'}
+              </small>
             </div>
             <div className="cal-kinds">
               {[['task', '任务'], ['egg', '彩蛋'], ['quiz', '问答']].map(([k, label]) => (
@@ -782,6 +821,15 @@ export default function Calendar() {
                 </button>
               ))}
             </div>
+            <label className="cal-fld">
+              <span>哪天</span>
+              <input
+                className="field"
+                type="date"
+                value={form.day}
+                onChange={(e) => setForm({ ...form, day: e.target.value })}
+              />
+            </label>
             <input
               className="field"
               value={form.title}
@@ -805,7 +853,7 @@ export default function Calendar() {
               />
               <span>做完要我验收</span>
             </label>
-            <button className="btn" type="button" disabled={!form.title.trim() || posting} onClick={submitCard}>
+            <button className="btn" type="button" disabled={!form.title.trim() || !form.day || posting} onClick={submitCard}>
               {posting ? '放着…' : '布置'}
             </button>
           </div>
