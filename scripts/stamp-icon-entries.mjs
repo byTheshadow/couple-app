@@ -30,8 +30,12 @@ function readBaseManifest(dist) {
 
 /** 在安装入口页顶部插一条提示：让人确认「现在这页装的是哪一套」；装到主屏（standalone）后自动消失 */
 export function withHint(html, name) {
-  const css = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:10px 14px;background:#e5484d;color:#fff;font:13px/1.45 -apple-system,system-ui,sans-serif;text-align:center'
-  const tag = `<div id="icon-hint" style="${css}">这一页装出来的是「${name}」图标 · 在 Safari 里点分享 → 添加到主屏幕<style>@media (display-mode:standalone){#icon-hint{display:none}}</style></div>`
+  // 这条提示只在「还没装到主屏」时有用。两个要点：
+  //   1. 能关掉——以前只有装到主屏（standalone）才隐藏，浏览器标签页里一直挂着；
+  //   2. 除了 × 之外不拦点击（pointer-events:none），免得压住首页的日期那行点不动。
+  const css = 'position:fixed;left:0;right:0;top:0;z-index:9999;display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;background:#e5484d;color:#fff;font:12.5px/1.45 -apple-system,system-ui,sans-serif;text-align:left;pointer-events:none'
+  const btnCss = 'flex:none;width:28px;height:28px;border:0;border-radius:8px;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1;cursor:pointer;pointer-events:auto'
+  const tag = `<div id="icon-hint" style="${css}"><span style="flex:1">这一页装出来的是「${name}」图标 · 点分享 → 添加到主屏幕<style>@media (display-mode:standalone){#icon-hint{display:none}}</style></span><button type="button" aria-label="关掉这条提示" style="${btnCss}" onclick="var h=document.getElementById('icon-hint');h&&h.remove()">×</button></div>`
   return html.replace(/<body([^>]*)>/, (m, attrs) => `<body${attrs}>${tag}`)
 }
 export function stampIconEntries({ dist = 'dist', publicDir = 'public', sets = ICON_SETS, log = console.log, warn = console.warn } = {}) {
