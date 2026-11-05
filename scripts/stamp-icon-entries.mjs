@@ -28,14 +28,15 @@ function readBaseManifest(dist) {
   return null
 }
 
-/** 在安装入口页顶部插一条提示：让人确认「现在这页装的是哪一套」；装到主屏（standalone）后自动消失 */
+/** 在安装入口页顶部插一条提示：这一页装出来是哪套图标。
+ *  只在「浏览器里、还没装到主屏」时出现：
+ *    - 装到主屏后整页就是 App，这条提示不该再出现（iOS 的 display-mode 有时不认，所以用 JS 再判一次）；
+ *    - × 用内联 onclick 直接关，不依赖外层的 pointer-events。
+ */
 export function withHint(html, name) {
-  // 这条提示只在「还没装到主屏」时有用。两个要点：
-  //   1. 能关掉——以前只有装到主屏（standalone）才隐藏，浏览器标签页里一直挂着；
-  //   2. 除了 × 之外不拦点击（pointer-events:none），免得压住首页的日期那行点不动。
-  const css = 'position:fixed;left:0;right:0;top:0;z-index:9999;display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;background:#e5484d;color:#fff;font:12.5px/1.45 -apple-system,system-ui,sans-serif;text-align:left;pointer-events:none'
-  const btnCss = 'flex:none;width:28px;height:28px;border:0;border-radius:8px;background:rgba(255,255,255,.18);color:#fff;font-size:15px;line-height:1;cursor:pointer;pointer-events:auto'
-  const tag = `<div id="icon-hint" style="${css}"><span style="flex:1">这一页装出来的是「${name}」图标 · 点分享 → 添加到主屏幕<style>@media (display-mode:standalone){#icon-hint{display:none}}</style></span><button type="button" aria-label="关掉这条提示" style="${btnCss}" onclick="var h=document.getElementById('icon-hint');h&&h.remove()">×</button></div>`
+  const css = 'display:none;position:fixed;left:0;right:0;top:0;z-index:9999;align-items:center;gap:8px;padding:8px 8px 8px 14px;background:#e5484d;color:#fff;font:12.5px/1.45 -apple-system,system-ui,sans-serif;text-align:left'
+  const btnCss = 'flex:none;width:30px;height:30px;border:0;border-radius:8px;background:rgba(255,255,255,.2);color:#fff;font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation'
+  const tag = `<div id="icon-hint" style="${css}"><span style="flex:1">这一页装出来的是「${name}」图标 · 点分享 → 添加到主屏幕</span><button type="button" aria-label="关掉这条提示" style="${btnCss}" onclick="this.parentNode.style.display='none'">×</button></div><script>(function(){var h=document.getElementById('icon-hint');if(!h)return;var n=window.navigator||{};var m=window.matchMedia;var sd=n.standalone===true||(m&&(m('(display-mode: standalone)').matches||m('(display-mode: fullscreen)').matches||m('(display-mode: minimal-ui)').matches));if(!sd)h.style.display='flex';})();</script>`
   return html.replace(/<body([^>]*)>/, (m, attrs) => `<body${attrs}>${tag}`)
 }
 export function stampIconEntries({ dist = 'dist', publicDir = 'public', sets = ICON_SETS, log = console.log, warn = console.warn } = {}) {
