@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { fmtTime, greeting, useActivityLog, useLetterArrivals, useLetterStats, useLetters, usePokes, useStatus } from '../lib/hooks'
+import { fmtTime, greeting, useActivityLog, useCalPendingCount, useLetterArrivals, useLetterStats, useLetters, usePokes, useStatus } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
 import { useScrollFx } from '../lib/scrollfx'
 import { StatusIcon, Svg } from '../components/Icon'
@@ -14,6 +14,7 @@ import LetterArrival from '../components/LetterArrival'
 import Album from '../components/Album'
 import Anniversaries from '../components/Anniversaries'
 import TabBar from '../components/TabBar'
+import NoticeDot from '../components/NoticeDot'
 import Badge from '../components/Badge'
 import IdCard from '../components/IdCard'
 import ChatEntry from '../components/ChatEntry'
@@ -91,6 +92,8 @@ export default function Home() {
   const { letters, reload } = useLetters(me?.id)
   const { items: activityLog } = useActivityLog(me?.id, LOG_MAX)
   const { stats } = useLetterStats(me?.id, partner?.id)
+  /* 日期那行点进日历；有卡等我验收时，日期后面挂一个小红点（跟主屏角标同一个数） */
+  const calPending = useCalPendingCount(me?.id)
   const [tab, setTab] = useState(0)
     const [openLetter, setOpenLetter] = useState(null)
   const [composeOpen, setComposeOpen] = useState(false)
@@ -266,7 +269,7 @@ export default function Home() {
         {/* 头部 */}
         <div className="top hdr" data-sp>
           <div className="col" style={{ gap: 6 }}>
-            <Link to="/calendar" className="date tap" aria-label="打开日历">{date}<span className="clk">{clock}</span></Link>
+            <Link to="/calendar" className="date tap" aria-label="打开日历">{date}{calPending > 0 && <i className="cal-pend-dot" aria-hidden="true" />}<span className="clk">{clock}</span></Link>
             <h1 className="h-title">{greeting()}，{me?.display_name || ''}</h1>
           </div>
           <div className="row" style={{ gap: 8 }}>

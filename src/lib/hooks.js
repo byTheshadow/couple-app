@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { UNLOCK_METHODS, canSetCover, todayKey, unlockMapFromRows, unlockRowsFromLocal } from './calendar'
+import { countPendingVerdicts } from './badgeCount'
 
 /** 某个人的状态（明面 + 暗面），实时更新 */
 export function useStatus(userId) {
@@ -601,4 +602,39 @@ export function useCalCards(myId, partnerId) {
   }, [myId, progress, reload])
 
   return { cards, progress, loading, post, markDone, judge, reload }
+}
+
+/**
+ * 主屏图标角标用：TA 交了、等我验收的卡有几张。
+ * 只取「我布置的卡」和「state = done 的完成记录」这几列，不拉正文、不拉照片。
+ * 跟页面上那个角标用同一条规则（badgeCount 的 countPendingVerdicts），别写第二套判断。
+ * 通道名带序号：首页和 TabBar 会同时挂这个 hook，同名 channel 会互相顶掉回调。
+ */
+let calPendingSeq = 0
+
+export function useCalPendingCount(myId) {
+  const [n, setN] = useState(0)
+
+  const refresh = useCallback(async () => {
+    if (!myId) { setN(0); return }
+    const today = todayKey()
+    const [cards, progress] = await Promise.all([
+      supabase.from('cal_cards').select('id, day, created_by').eq('created_by', myId).lte('day', today),
+      supabase.from('cal_progress').select('card_id, user_id, state').eq('state', 'done'),
+    ])
+    setN(countPendingVerdicts(cards.data || [], progress.data || [], myId, today))
+  }, [myId])
+
+  useEffect(() => {
+    if (!myId) { setN(0); return }
+    refresh()
+    const ch = supabase
+      .channel(`cal-pending-${myId}-${++calPendingSeq}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cal_progress' }, () => refresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cal_cards' }, () => refresh())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, refresh])
+
+  return n
 }

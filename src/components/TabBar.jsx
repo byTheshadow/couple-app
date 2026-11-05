@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { useChatUnread } from '../lib/chat'
 import { useOutfitBadge } from '../lib/badges'
 import { useAppBadge } from '../lib/appBadge'
+import { useCalPendingCount } from '../lib/hooks'
 import { appBadgeCount } from '../lib/badgeCount'
 
 // 画板 / 小游戏做完后在这里加一行即可
@@ -21,8 +22,9 @@ export default function TabBar({ hidden = false }) {
   const { me } = useAuth()
   const pending = useOutfitBadge(me && me.id) // 小物里有几件事等着处理（目前只有像素小屋的换装请求）
   const unread = useChatUnread(me && me.id) // 没读的聊天
-  // 手机主屏图标上那个角标：两边加起来。只想要小物的话，把 unread 去掉
-  useAppBadge(appBadgeCount(pending, unread))
+  const calPending = useCalPendingCount(me && me.id) // 日历里 TA 交了、等我验收的卡
+  // 手机主屏图标上那个角标：三样加起来。只想要小物的话，把 unread / calPending 去掉
+  useAppBadge(appBadgeCount(pending, unread, calPending))
   return (
     <nav className={`tabbar glass${hidden ? ' hide' : ''}`} aria-label="主导航" aria-hidden={hidden || undefined}>
       {TABS.map((t) => {
