@@ -8,6 +8,7 @@ import {
   keyOf, monthGrid, pad2, parseDay, todayKey, weekdayOf,
 } from '../lib/calendar'
 import { dailyCard } from '../lib/stories'
+import QuestPopup from '../components/QuestPopup'
 import './calendar.css'
 
 /* 拆没拆记在本机：一个人一台手机，这个状态本来就只跟自己有关。
@@ -22,7 +23,7 @@ function saveUnlocks(next) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(next)) } catch { /* 隐身模式写不进去，忽略 */ }
 }
 
-const DOT_CLASS = { card: '', pic: ' p', mail: ' m', anniv: ' l' }
+const DOT_CLASS = { card: '', pic: ' p', mail: ' m', anniv: ' l', hollow: ' hollow' }
 
 /** 正文：标题 / 一句话 / 两段故事 / 折叠的节日清单 / 来源 */
 function StoryBody({ c }) {
@@ -51,17 +52,20 @@ function Seal({ date, onOpen }) {
     <div className="cal-seal">
       <div className="cal-stamp"><b>未拆</b><span>{pad2(m)}.{pad2(d)}</span></div>
       <p className="cal-seal-t">今天不用过暗号<br />点一下就看</p>
-      <button className="cal-main" type="button" onClick={onOpen}>打开</button>
+      <button className="cal-main" type="button" onClick={() => onOpen()}>打开</button>
     </div>
   )
 }
 
-/** 刮开：canvas 擦除，抹掉四成就整片淡出 */
+/** 按住多久算「跳过」：0.6 秒，期间手指一动就取消（那就是在刮） */
+const HOLD_MS = 600
+
+/** 刮开：canvas 擦除，抹掉两成就整片淡出；按住 0.6 秒直接看 */
 function Scratch({ onDone }) {
   const wrapRef = useRef(null)
   const cvRef = useRef(null)
   const lblRef = useRef(null)
-  const st = useRef({ down: false, prev: null, moves: 0, done: false, timer: 0 })
+  const st = useRef({ down: false, prev: null, moves: 0, done: false, timer: 0, hold: 0, x0: 0, y0: 0 })
 
   const paint = useCallback(() => {
     const cv = cvRef.current
@@ -89,7 +93,7 @@ function Scratch({ onDone }) {
   useEffect(() => {
     paint()
     const s = st.current
-    return () => { if (s.timer) clearTimeout(s.timer) }
+    return () => { if (s.timer) clearTimeout(s.timer); if (s.hold) clearTimeout(s.hold) }
   }, [paint])
 
   const pos = (e) => {
@@ -100,13 +104,20 @@ function Scratch({ onDone }) {
   const erase = (a, b) => {
     const ctx = cvRef.current.getContext('2d')
     ctx.globalCompositeOperation = 'destination-out'
-    ctx.lineWidth = 34
+    ctx.lineWidth = 52
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.beginPath()
     ctx.moveTo(a.x, a.y)
     ctx.lineTo(b.x, b.y)
     ctx.stroke()
+  }
+
+  /* 手指一动就是「在刮」，不是「按住」 */
+  const cancelHold = () => {
+    const s = st.current
+    if (s.hold) { clearTimeout(s.hold); s.hold = 0 }
+    if (wrapRef.current) wrapRef.current.classList.remove('holding')
   }
 
   const ratio = () => {
@@ -125,8 +136,8 @@ function Scratch({ onDone }) {
     const s = st.current
     if (s.done) return
     const p = ratio()
-    if (lblRef.current) lblRef.current.style.opacity = String(Math.max(0, 1 - p * 2.2))
-    if (p > 0.42) {
+    if (lblRef.current) lblRef.current.style.opacity = String(Math.max(0, 1 - p * 4))
+    if (p > 0.2) {
       s.done = true
       if (wrapRef.current) wrapRef.current.style.opacity = '0'
       s.timer = setTimeout(onDone, 180)
@@ -137,22 +148,38 @@ function Scratch({ onDone }) {
     if (st.current.done) return
     e.preventDefault()
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (err) { /* 旧浏览器忽略 */ }
-    st.current.down = true
-    st.current.prev = pos(e)
-    erase(st.current.prev, st.current.prev)
+    const s = st.current
+    const p0 = pos(e)
+    s.down = true
+    s.prev = p0
+    s.x0 = p0.x
+    s.y0 = p0.y
+    erase(p0, p0)
+    if (wrapRef.current) wrapRef.current.classList.add('holding')
+    s.hold = setTimeout(() => {
+      if (!s.down || s.done) return
+      /* 按住不放：直接开，记 method=skip */
+      s.done = true
+      if (wrapRef.current) wrapRef.current.style.opacity = '0'
+      s.timer = setTimeout(() => onDone('skip'), 180)
+    }, HOLD_MS)
   }
 
   const move = (e) => {
     if (!st.current.down || st.current.done) return
     const p = pos(e)
+    const dx = p.x - st.current.x0
+    const dy = p.y - st.current.y0
+    if (dx * dx + dy * dy > 64) cancelHold()
     erase(st.current.prev, p)
     st.current.prev = p
     st.current.moves++
-    if (st.current.moves % 8 === 0) check()
+    if (st.current.moves % 4 === 0) check()
   }
 
   const up = () => {
     if (!st.current.down) return
+    cancelHold()
     st.current.down = false
     st.current.prev = null
     check()
@@ -169,7 +196,7 @@ function Scratch({ onDone }) {
       onPointerLeave={up}
     >
       <canvas ref={cvRef} />
-      <div className="cal-scratch-lbl" ref={lblRef}><b>刮开</b><small>划两下就开了</small></div>
+      <div className="cal-scratch-lbl" ref={lblRef}><b>刮开</b><small>划两下 · 或按住不放</small></div>
     </div>
   )
 }
@@ -187,12 +214,15 @@ export default function Calendar() {
     return { y: p.y, m: p.m }
   })
   const [sel, setSel] = useState(today)
+  const [quest, setQuest] = useState(false)
   const [unlocks, setUnlocks] = useState(loadUnlocks)
 
   const grid = useMemo(() => monthGrid(view.y, view.m), [view])
   const todayCardData = dailyCard(today)
   const gate = gateFor(today)
   const isOpen = Boolean(unlocks[today])
+  /* 未来的日子整块不给看：既不露标题，也不露纪念日 / 照片 / 信 */
+  const isFuture = sel > today
 
   /* 格子上点颜色：故事 / 照片 / 信 / 纪念日 */
   const marks = useMemo(() => {
@@ -221,8 +251,8 @@ export default function Calendar() {
     [letters, sel],
   )
 
-  const openCard = () => setUnlocks((prev) => {
-    const next = { ...prev, [today]: gate }
+  const openCard = (method) => setUnlocks((prev) => {
+    const next = { ...prev, [today]: method || gate }
     saveUnlocks(next)
     return next
   })
@@ -235,6 +265,8 @@ export default function Calendar() {
   }
 
   const dotsFor = (cell) => {
+    /* 未来的日子不给内容：只有这天确实有东西（照片/信/纪念日/布置的卡），才留一个空心圈 */
+    if (cell.key > today) return (marks[cell.key] || []).length ? ['hollow'] : []
     const list = []
     if (dailyCard(cell.key).kind === 'story') list.push('card')
     for (const k of marks[cell.key] || []) {
@@ -331,7 +363,7 @@ export default function Calendar() {
                   <span className="cal-n">{cell.d}</span>
                   <span className="cal-mk">
                     {dotsFor(cell).map((k, i) => (
-                      <i key={i} className={`cal-dot${DOT_CLASS[k]}${cell.key > today ? ' faint' : ''}`} />
+                      <i key={i} className={`cal-dot${DOT_CLASS[k] || ''}${cell.key > today && k !== 'hollow' ? ' faint' : ''}`} />
                     ))}
                   </span>
                 </button>
@@ -352,13 +384,25 @@ export default function Calendar() {
             <span className="mono">周{WEEKDAY_CN[weekdayOf(sel)]}{sel === today ? ' · 今天' : ''}</span>
           </header>
           <div className="wb">
-            <div className="cal-row">
-              <Svg name="note" size={14} />
-              <span className="t">{dailyCard(sel).title}</span>
-              <span className="s">{dailyCard(sel).kind === 'story' ? '故事' : '冷知识'}</span>
-            </div>
+            {isFuture ? (
+              <div className="cal-empty">那天还没到。到了那天，这条才给你看。</div>
+            ) : (
+              <div className="cal-row">
+                <Svg name="note" size={14} />
+                <span className="t">{dailyCard(sel).title}</span>
+                <span className="s">{dailyCard(sel).kind === 'story' ? '故事' : '冷知识'}</span>
+              </div>
+            )}
 
-            {selAnnivs.map((a) => (
+            {sel === today && todayCardData.challenge && (
+              <button className="cal-row cal-task tap" type="button" onClick={() => setQuest(true)}>
+                <Svg name="note" size={14} />
+                <span className="t">今天的任务：{(todayCardData.challenge && todayCardData.challenge.task) || '还没排上'}</span>
+                <span className="s">去看看</span>
+              </button>
+            )}
+
+            {!isFuture && selAnnivs.map((a) => (
               <div className="cal-row" key={a.id}>
                 <Svg name="heart" size={14} />
                 <span className="t">{a.title}</span>
@@ -366,20 +410,20 @@ export default function Calendar() {
               </div>
             ))}
 
-            {selPics.length > 0 && (
+            {!isFuture && selPics.length > 0 && (
               <div className="cal-row">
                 <Svg name="camera" size={14} />
                 <span className="t">{selPics.length} 张照片</span>
                 <span className="s">{fmtTime(selPics[0].created_at)}</span>
               </div>
             )}
-            {selPics.length > 0 && (
+            {!isFuture && selPics.length > 0 && (
               <div className="cal-thumbs">
                 {selPics.slice(0, 4).map((p) => <img className="cal-th" src={p.url} alt="" key={p.id} />)}
               </div>
             )}
 
-            {selMails.map((l) => (
+            {!isFuture && selMails.map((l) => (
               <div className="cal-row" key={l.id}>
                 <Svg name="mail" size={14} />
                 <span className="t">{l.title || '一封信'}</span>
@@ -387,12 +431,14 @@ export default function Calendar() {
               </div>
             ))}
 
-            {selAnnivs.length + selPics.length + selMails.length === 0 && (
+            {!isFuture && selAnnivs.length + selPics.length + selMails.length === 0 && (
               <div className="cal-empty">这天只有上面那一条，没有别的记录</div>
             )}
           </div>
         </section>
       </main>
+
+      {quest && <QuestPopup day={today} card={todayCardData} onClose={() => setQuest(false)} />}
     </div>
   )
 }

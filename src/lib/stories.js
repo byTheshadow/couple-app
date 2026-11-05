@@ -40,7 +40,8 @@ export function dailyCard(key) {
       sub: story.sub,
       body: story.story,
       festivals: story.festivals,
-      sources: story.sources
+      sources: story.sources,
+      challenge: story.challenge
     }
   }
   return {

@@ -318,3 +318,35 @@ export function useGrudgeComments() {
 
   return { comments, loading, reload }
 }
+/** 系统每日任务的完成记录（一天一行，两个人各一条）。互相看得见交没交，实时更新 */
+export function useSystemProgress(day, myId, partnerId) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!day || !myId) { setLoading(false); return }
+    const { data } = await supabase.from('cal_system_progress').select('*').eq('day', day)
+    setRows(data || [])
+    setLoading(false)
+  }, [day, myId])
+
+  useEffect(() => {
+    if (!day || !myId) { setLoading(false); return }
+    reload()
+    const ch = supabase
+      .channel('sysprog-' + day)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'cal_system_progress', filter: 'day=eq.' + day },
+        () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [day, myId, reload])
+
+  return {
+    rows,
+    loading,
+    reload,
+    mine: rows.find((r) => r.user_id === myId) || null,
+    theirs: partnerId ? rows.find((r) => r.user_id === partnerId) || null : null,
+  }
+}

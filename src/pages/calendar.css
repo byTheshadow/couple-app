@@ -55,8 +55,14 @@
 
 /* 刮开层：canvas 擦除，盖在正文上 */
 .cal-scratch { position: absolute; inset: 0; z-index: 4; border-radius: 12px; overflow: hidden;
-  cursor: crosshair; touch-action: none; transition: opacity .2s ease; }
+  cursor: crosshair; touch-action: none; transition: opacity .2s ease;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .cal-scratch canvas { display: block; width: 100%; height: 100%; }
+/* 按住不放时从底部涨一条进度，涨满就开 */
+.cal-scratch.holding::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px; background: var(--ink2); opacity: .8; transform: scaleX(0); transform-origin: left;
+  animation: cal-hold .6s linear forwards; }
+@keyframes cal-hold { to { transform: scaleX(1); } }
 .cal-scratch-lbl { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 3px; pointer-events: none; color: var(--ink2); }
 .cal-scratch-lbl b { font-family: var(--mono); font-size: 10px; letter-spacing: .34em; text-indent: .34em; }
@@ -102,6 +108,8 @@
 .cal-dot.m { background: var(--cal-mail); }
 .cal-dot.l { background: var(--cal-love); }
 .cal-dot.faint { opacity: .3; }
+/* 未来的日子：只留一个空心圈，说明「这天有东西」，不给内容 */
+.cal-dot.hollow { background: transparent; box-shadow: inset 0 0 0 1px var(--ink2); opacity: .55; }
 .cal-d.today .cal-dot { background: var(--btnInk); }
 .cal-ok { font-family: var(--mono); font-size: 7px; line-height: 1; font-weight: 700; color: var(--ink2); }
 .cal-d.today .cal-ok { color: var(--btnInk); }
@@ -118,3 +126,8 @@
 .cal-thumbs { display: flex; gap: 6px; padding: 0 0 8px 23px; }
 .cal-th { width: 46px; height: 46px; border-radius: 9px; object-fit: cover; border: 1px solid var(--line); }
 .cal-empty { padding: 16px 2px 10px; text-align: center; font-size: 12.5px; color: var(--ink2); line-height: 1.7; }
+/* 当天清单里那条「今天的任务」：整行是个按钮，点开任务弹窗 */
+.cal-task { width: 100%; padding: 9px 2px; text-align: left; background: none; border: 0;
+  border-bottom: 1px dashed var(--line); color: inherit; font: inherit; }
+.cal-task .t { color: var(--ink); }
+.cal-task:active { opacity: .7; }
