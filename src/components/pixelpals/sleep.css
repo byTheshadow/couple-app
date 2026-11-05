@@ -38,7 +38,7 @@
 .sl-card b { display: block; font-size: 12px; margin-top: 4px; }
 .sl-card small { display: block; font-size: 10px; color: #7a8a9a; min-height: 12px; }
 .sl-book-f { margin-top: 12px; font-size: 11px; color: #6a7a8a; text-align: center; }
-.pp-sleep-entry { width: 100%; margin: 8px 0 0; }
+.pp-sleep-btn { font-size: 15px; line-height: 1; }
 @media (max-width: 520px) {
   .sl-grid { grid-template-columns: repeat(3, 1fr); }
   .sl-title small { display: none; }
