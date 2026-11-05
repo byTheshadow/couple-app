@@ -178,6 +178,7 @@ import { onsen } from './scenedata/onsen.js'
 import { onsen_snow } from './scenedata/onsen_snow.js'
 import { booth } from './scenedata/booth.js'
 import { london } from './scenedata/london.js'
+import { london_rain } from './scenedata/london_rain.js'
 import { tokyo } from './scenedata/tokyo.js'
 import { paris } from './scenedata/paris.js'
 import { kyoto } from './scenedata/kyoto.js'
@@ -199,6 +200,7 @@ export const SCENE_DATA = {
   onsen_snow,
   booth,
   london,
+  london_rain,
   tokyo,
   paris,
   kyoto,
@@ -225,6 +227,7 @@ export const SCENE_LIST = [
   { k: 'onsen_snow', n: '温泉·雪', e: '🧖', tip: '适合放空' },
   { k: 'booth', n: '电话亭', e: '☎️', tip: '适合放空' },
   { k: 'london', n: '伦敦', e: '🎡', tip: '适合放空' },
+  { k: 'london_rain', n: '伦敦·雨季', e: '☔', tip: '适合放空' },
   { k: 'tokyo', n: '东京塔', e: '🗼', tip: '适合放空' },
   { k: 'paris', n: '巴黎', e: '🥐', tip: '适合放空' },
   { k: 'kyoto', n: '京都', e: '⛩️', tip: '适合放空' },
