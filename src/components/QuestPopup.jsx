@@ -203,11 +203,6 @@ export default function QuestPopup({ day, card, onClose }) {
 
           {both && <p className="qp-sum">两个人都交了。这一天的任务，算过。</p>}
 
-          <h4 className="qp-h4">奖励</h4>
-          <div className="qp-rewards">
-            <div className="qp-rslot"><span className="qp-num">★</span></div>
-            <div className="qp-rslot">小结</div>
-          </div>
         </div>
 
         <footer className="qp-foot">
