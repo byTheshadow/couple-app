@@ -2,26 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Svg } from '../components/Icon'
 import { useAuth } from '../lib/auth'
-import { fmtTime, useAnniversaries, useLetters, usePhotos } from '../lib/hooks'
+import { fmtTime, useAnniversaries, useCalCards, useCover, useLetters, usePhotos, useUnlocks } from '../lib/hooks'
 import {
-  WEEKDAY_CN, addMonth, dayKey, daysInMonth, expandYearly, fmtMD, gateFor,
-  keyOf, monthGrid, pad2, parseDay, todayKey, weekdayOf,
+  WEEKDAY_CN, addMonth, canSetCover, dayKey, daysInMonth, expandYearly, fmtMD, gateFor,
+  keyOf, monthGrid, normalizeZoom, pad2, parseDay, todayKey, weekdayOf,
 } from '../lib/calendar'
 import { dailyCard } from '../lib/stories'
+import { countPendingVerdicts } from '../lib/badgeCount'
+import NoticeDot from '../components/NoticeDot'
 import QuestPopup from '../components/QuestPopup'
 import './calendar.css'
 
-/* 拆没拆记在本机：一个人一台手机，这个状态本来就只跟自己有关。
-   以后要跨设备同步，换成 cal_unlocks 表（docs/calendar-schema.sql）。 */
-const LS_KEY = 'cal.unlock.v1'
-
-function loadUnlocks() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {} } catch { return {} }
-}
-
-function saveUnlocks(next) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(next)) } catch { /* 隐身模式写不进去，忽略 */ }
-}
+/* 字号三档记在本机：这是「我看得清不舒服」的问题，不该跟着账号走 */
+const FS_KEY = 'cal.fs.v1'
 
 const DOT_CLASS = { card: '', pic: ' p', mail: ' m', anniv: ' l', hollow: ' hollow' }
 
@@ -53,6 +46,167 @@ function Seal({ date, onOpen }) {
       <div className="cal-stamp"><b>未拆</b><span>{pad2(m)}.{pad2(d)}</span></div>
       <p className="cal-seal-t">今天不用过暗号<br />点一下就看</p>
       <button className="cal-main" type="button" onClick={() => onOpen()}>打开</button>
+    </div>
+  )
+}
+
+const KIND_CN = { task: '任务', egg: '彩蛋', quiz: '问答' }
+
+/* ---------- 存成图片：canvas 手绘，不引 html2canvas ---------- */
+const CV_W = 1080
+const SERIF = '"Songti SC", "Noto Serif CJK SC", "SimSun", serif'
+const SANS = 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
+
+/** 中文按字断行：一行装不下就换行，标点不讲究（够用） */
+function wrapLines(ctx, text, maxW) {
+  const out = []
+  let line = ''
+  for (const ch of String(text || '')) {
+    if (ch === '\n') { out.push(line); line = ''; continue }
+    const next = line + ch
+    if (line && ctx.measureText(next).width > maxW) { out.push(line); line = ch } else line = next
+  }
+  if (line) out.push(line)
+  return out
+}
+
+/** 排一遍量高度、再按量好的高度画：canvas 一改尺寸就清空，不能边量边画 */
+function paintCard(card, dateStr) {
+  const measure = document.createElement('canvas').getContext('2d')
+  const padX = 92
+  const maxW = CV_W - padX * 2
+  const blocks = []
+  let y = 168
+
+  blocks.push({ type: 'meta', text: dateStr, y })
+  y += 52
+
+  measure.font = `600 48px ${SERIF}`
+  for (const line of wrapLines(measure, card.title, maxW)) {
+    blocks.push({ type: 'title', text: line, y })
+    y += 68
+  }
+  y += 6
+  if (card.sub) {
+    measure.font = `24px ${SANS}`
+    for (const line of wrapLines(measure, card.sub, maxW)) {
+      blocks.push({ type: 'sub', text: line, y })
+      y += 42
+    }
+  }
+  y += 26
+  for (const p of card.body) {
+    measure.font = `27px ${SANS}`
+    for (const line of wrapLines(measure, p, maxW)) {
+      blocks.push({ type: 'body', text: line, y })
+      y += 50
+    }
+    y += 20
+  }
+  y += 26
+  blocks.push({ type: 'foot', text: '十一月 · 每天一个真事', y })
+
+  const cv = document.createElement('canvas')
+  cv.width = CV_W
+  cv.height = y + 120
+  const ctx = cv.getContext('2d')
+
+  ctx.fillStyle = '#f6f1e6'
+  ctx.fillRect(0, 0, cv.width, cv.height)
+  ctx.strokeStyle = 'rgba(27, 26, 23, .14)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(40, 40, cv.width - 80, cv.height - 80)
+
+  for (const b of blocks) {
+    if (b.type === 'title') { ctx.font = `600 48px ${SERIF}`; ctx.fillStyle = '#1b1a17' }
+    else if (b.type === 'body') { ctx.font = `27px ${SANS}`; ctx.fillStyle = '#1b1a17' }
+    else if (b.type === 'sub') { ctx.font = `24px ${SANS}`; ctx.fillStyle = 'rgba(27, 26, 23, .66)' }
+    else { ctx.font = '20px "Courier New", monospace'; ctx.fillStyle = 'rgba(27, 26, 23, .5)' }
+    ctx.fillText(b.text, padX, b.y)
+  }
+  return cv
+}
+
+/** iOS 走分享面板才能进相册；别的浏览器退成下载 */
+async function saveImage(cv, name) {
+  const blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/png'))
+  if (!blob) return { ok: false, error: '画不出来' }
+  const file = new File([blob], name, { type: 'image/png' })
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: name })
+      return { ok: true }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return { ok: false, error: 'cancel' }
+      /* 分享失败就往下走下载 */
+    }
+  }
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
+  return { ok: true }
+}
+
+/** 那天有我或 TA 布置的卡：做完、验收都在这一行里发生 */
+function DayCards({ cards, me, progress, onDone, onJudge }) {
+  const [openId, setOpenId] = useState('')
+  return (
+    <div className="cal-cc">
+      {cards.map((c) => {
+        const mine = progress.find((r) => r.card_id === c.id && r.user_id === me.id)
+        const theirs = progress.find((r) => r.card_id === c.id && r.user_id !== me.id)
+        const iMade = c.created_by === me.id
+        let right = KIND_CN[c.kind] || '卡'
+        if (iMade) {
+          if (!theirs) right = 'TA 还没做'
+          else if (theirs.state === 'done') right = '等你验收'
+          else if (theirs.state === 'pass') right = '通过了'
+          else right = '让 TA 再来'
+        } else if (mine) {
+          right = mine.state === 'again' ? '再来一次' : mine.state === 'pass' ? '通过' : '等 TA 验收'
+        }
+        const open = openId === c.id
+        return (
+          <div className="cal-cc-i" key={c.id}>
+            <button
+              className="cal-row cal-cc-h tap"
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpenId(open ? '' : c.id)}
+            >
+              <Svg name="note" size={14} />
+              <span className="t">{c.title}</span>
+              <span className="s">{right}</span>
+            </button>
+            {open && (
+              <div className="cal-cc-b">
+                {c.body ? <p className="cal-p">{c.body}</p> : null}
+                <div className="cal-cc-act">
+                  {iMade && theirs && theirs.state === 'done' && (
+                    <>
+                      <button className="cal-mini" type="button" onClick={() => onJudge(c, 'pass')}>通过</button>
+                      <button className="cal-mini ghost" type="button" onClick={() => onJudge(c, 'again')}>再来一次</button>
+                    </>
+                  )}
+                  {!iMade && (!mine || mine.state === 'again') && (
+                    <button className="cal-mini" type="button" onClick={() => onDone(c)}>
+                      {mine && mine.state === 'again' ? '再做一次' : '做完了'}
+                    </button>
+                  )}
+                  {iMade && !theirs && <span className="cal-cc-wait">TA 做完，这里会写「等你验收」</span>}
+                  {!iMade && mine && mine.state === 'done' && <span className="cal-cc-wait">交了，等 TA 验收</span>}
+                  {!iMade && mine && mine.state === 'pass' && <span className="cal-cc-wait">这个我给过了</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -203,7 +357,7 @@ function Scratch({ onDone }) {
 
 export default function Calendar() {
   const navigate = useNavigate()
-  const { me } = useAuth()
+  const { me, partner } = useAuth()
   const { items: annivs } = useAnniversaries()
   const { photos } = usePhotos(90)
   const { letters } = useLetters(me && me.id)
@@ -215,16 +369,125 @@ export default function Calendar() {
   })
   const [sel, setSel] = useState(today)
   const [quest, setQuest] = useState(false)
-  const [unlocks, setUnlocks] = useState(loadUnlocks)
+  const [fs, setFs] = useState(() => {
+    try { return normalizeZoom(localStorage.getItem(FS_KEY)) } catch { return 2 }
+  })
+  const [toast, setToast] = useState('')
+  const [coverOpen, setCoverOpen] = useState(false)
+  const [coverBig, setCoverBig] = useState(false)
+  const fileRef = useRef(null)
+  const toastT = useRef(0)
+  const { unlocks, loading: unlockLoading, error: unlockErr, mark } = useUnlocks(me && me.id)
+  const { cover, loading: coverLoading, give: giveCover, clear: clearCover } = useCover(me && me.id, partner && partner.id)
+
+  const say = useCallback((t) => {
+    setToast(t)
+    clearTimeout(toastT.current)
+    toastT.current = setTimeout(() => setToast(''), 3200)
+  }, [])
+  useEffect(() => () => clearTimeout(toastT.current), [])
+
+  /* 拆卡记录写库失败：说一句，不拦着他看——卡已经看到了 */
+  useEffect(() => {
+    if (unlockErr) say('拆卡记录没存上，换设备会丢：' + unlockErr)
+  }, [unlockErr, say])
+
+  /* 只有对方那行能写；自己那行点了也不给换 */
+  const canGive = Boolean(me && partner && canSetCover(me.id, partner.id, partner.id))
+  const coverToday = Boolean(cover && cover.set_at && keyOf(new Date(cover.set_at)) === today)
+
+  const pickCover = () => {
+    if (!canGive) { say('还没看到 TA 的账号，等一下再试'); return }
+    if (fileRef.current) fileRef.current.click()
+  }
+
+  const onCoverFile = async (e) => {
+    const f = e.target.files && e.target.files[0]
+    e.target.value = ''            // 同一张图连选两次也要能触发 change
+    if (!f) return
+    const r = await giveCover(f)
+    say(r.ok ? '换好了，TA 打开日历就能看到' : '版头没换成：' + r.error)
+  }
+
+  const dropCover = async () => {
+    setCoverOpen(false)
+    const r = await clearCover()
+    say(r.ok ? '版头撤下了' : '撤不掉：' + r.error)
+  }
+
+  const toggleCover = () => {
+    if (!cover) { pickCover(); return }
+    if (!canGive) { setCoverBig(true); return }   // 没对方账号也能看大图
+    setCoverOpen(true)
+  }
+
+  const setZoom = (n) => {
+    const v = normalizeZoom(n)
+    setFs(v)
+    try { localStorage.setItem(FS_KEY, String(v)) } catch { /* 隐身模式，这次而已 */ }
+  }
+
+  /* 布置卡：表单塞在底部那条 sheet 里，布到当前选中的那天 */
+  const [postOpen, setPostOpen] = useState(false)
+  const [posting, setPosting] = useState(false)
+  const [form, setForm] = useState({ kind: 'task', title: '', body: '', needCheck: true })
+  const { cards, progress, post, markDone, judge } = useCalCards(me && me.id, partner && partner.id)
+
+  const submitCard = async () => {
+    setPosting(true)
+    const r = await post({ day: sel, ...form })
+    setPosting(false)
+    if (!r.ok) { say('没布置上：' + r.error); return }
+    setPostOpen(false)
+    setForm({ kind: 'task', title: '', body: '', needCheck: true })
+    say('布置好了，那天到了 TA 才看得到')
+  }
+
+  const onDoneCard = async (c) => {
+    const r = await markDone(c)
+    say(r.ok ? '记下了' : '没记上：' + r.error)
+  }
+
+  const onJudgeCard = async (c, state) => {
+    const r = await judge(c, state)
+    say(r.ok ? (state === 'pass' ? '通过了' : '让它再来一次') : '没记上：' + r.error)
+  }
+
+  /* 存成图片：iOS 走分享面板（才进得了相册），别的浏览器退成下载 */
+  const [saving, setSaving] = useState(false)
+  const onSaveImage = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const stamp = `${fmtMD(viewDay)} · 周${WEEKDAY_CN[weekdayOf(viewDay)]}`
+      const cv = paintCard(cardData, stamp)
+      const r = await saveImage(cv, `日历-${viewDay}.png`)
+      if (r.error !== 'cancel') say(r.ok ? '存好了，去相册或下载里找' : '没存成：' + r.error)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const grid = useMemo(() => monthGrid(view.y, view.m), [view])
   const todayCardData = dailyCard(today)
   const gate = gateFor(today)
   const isOpen = Boolean(unlocks[today])
+  /* 卡片跟着选中的日子走：过去的日子翻出来读，未来的日子还是停在今天 */
+  const viewDay = sel > today ? today : sel
+  const cardData = viewDay === today ? todayCardData : dailyCard(viewDay)
+  const cardOpen = viewDay !== today || isOpen
   /* 未来的日子整块不给看：既不露标题，也不露纪念日 / 照片 / 信 */
   const isFuture = sel > today
 
-  /* 格子上点颜色：故事 / 照片 / 信 / 纪念日 */
+  /* 能看见的卡：给两个人看的（for_user 空）、给我的、我自己布置的 */
+  const myCards = useMemo(() => {
+    const mid = me && me.id
+    return cards.filter((c) => !c.for_user || c.for_user === mid || c.created_by === mid)
+  }, [cards, me])
+  const dayCards = myCards.filter((c) => c.day === sel)
+  const pendingVerdicts = countPendingVerdicts(cards, progress, me && me.id, today)
+
+  /* 格子上点颜色：故事 / 照片 / 信 / 纪念日 / 布置的卡 */
   const marks = useMemo(() => {
     const map = {}
     const add = (k, kind) => {
@@ -235,8 +498,9 @@ export default function Calendar() {
     for (const p of photos) if (p.created_at) add(keyOf(new Date(p.created_at)), 'pic')
     for (const l of letters) if (l.created_at) add(keyOf(new Date(l.created_at)), 'mail')
     for (const a of expandYearly(annivs, view.y)) add(a.date, 'anniv')
+    for (const c of myCards) add(c.day, 'card')
     return map
-  }, [photos, letters, annivs, view.y])
+  }, [photos, letters, annivs, view.y, myCards])
 
   const selAnnivs = useMemo(
     () => expandYearly(annivs, parseDay(sel).y).filter((a) => a.date === sel),
@@ -251,11 +515,7 @@ export default function Calendar() {
     [letters, sel],
   )
 
-  const openCard = (method) => setUnlocks((prev) => {
-    const next = { ...prev, [today]: method || gate }
-    saveUnlocks(next)
-    return next
-  })
+  const openCard = (method) => mark(today, method || gate)
 
   const shift = (delta) => {
     const next = addMonth(view.y, view.m, delta)
@@ -285,7 +545,7 @@ export default function Calendar() {
         <div className="aurora" />
       </div>
 
-      <main className="page cal">
+      <main className={`page cal cal-fs${fs}`}>
         <div className="top">
           <div className="col" style={{ gap: 6 }}>
             <div className="date">
@@ -299,37 +559,87 @@ export default function Calendar() {
           </button>
         </div>
 
-        {/* 今天这张卡 */}
+        {/* 今天这张卡：翻到过去某天时它显示那天，不用再拆 */}
         <section className="win">
           <header className="tb">
-            <b>今天.card</b>
+            <b>{viewDay === today ? '今天.card' : '那天.card'}</b>
             <span className="grow" />
-            <span className="mono">{fmtMD(today)} · 周{WEEKDAY_CN[weekdayOf(today)]}</span>
+            <span className="mono">{fmtMD(viewDay)} · 周{WEEKDAY_CN[weekdayOf(viewDay)]}</span>
+            <span className="cal-fs" role="group" aria-label="正文字号">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`cal-fs-b${fs === n ? ' on' : ''}`}
+                  aria-pressed={fs === n}
+                  aria-label={`字号${['小', '中', '大'][n - 1]}`}
+                  onClick={() => setZoom(n)}
+                >
+                  {['小', '中', '大'][n - 1]}
+                </button>
+              ))}
+            </span>
           </header>
           <div className="wb" style={{ padding: 12 }}>
-            <div className={`cal-hero${isOpen ? '' : ' locked'}`}>
+            <div className={`cal-hero${cardOpen ? '' : ' locked'}`}>
               <div className="cal-stack" aria-hidden="true"><i /><i /></div>
               <article className="cal-card">
                 <div className="cal-card-h">
-                  <span>{todayCardData.kind === 'story' ? '今日故事' : '冷知识'}</span>
-                  <span>{isOpen ? '已拆' : gate === 'free' ? '直接开' : '刮开'}</span>
+                  <span>{cardData.kind === 'story' ? '今日故事' : '冷知识'}</span>
+                  <span>{viewDay !== today ? '翻出来的' : isOpen ? '已拆' : gate === 'free' ? '直接开' : '刮开'}</span>
                 </div>
                 <div className="cal-face">
-                  {isOpen || gate !== 'free' ? <StoryBody c={todayCardData} /> : null}
-                  {!isOpen && gate === 'free' && <Seal date={today} onOpen={openCard} />}
-                  {!isOpen && gate === 'scratch' && <Scratch onDone={openCard} />}
+                  {viewDay === today && unlockLoading ? (
+                    <div className="cal-empty">正在核对这张卡…</div>
+                  ) : (
+                    <>
+                      {cardOpen || gate !== 'free' ? <StoryBody c={cardData} /> : null}
+                      {viewDay === today && !isOpen && gate === 'free' && <Seal date={today} onOpen={openCard} />}
+                      {viewDay === today && !isOpen && gate === 'scratch' && <Scratch onDone={openCard} />}
+                      {cardOpen && (
+                        <div className="cal-card-tools">
+                          <button className="cal-back" type="button" onClick={onSaveImage} disabled={saving}>
+                            {saving ? '画着…' : '存成图片'}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </article>
             </div>
           </div>
           <footer className="wf">
-            <span>{todayCardData.kind === 'story' ? '十一月 · 每天一个真事' : '系统自带，每天一条'}</span>
-            <span>{isOpen ? '明天换一张' : gate === 'free' ? '周末不用过暗号' : '刮开，或者长按跳过'}</span>
+            <span>{cardData.kind === 'story' ? '十一月 · 每天一个真事' : '系统自带，每天一条'}</span>
+            {viewDay !== today && (
+              <button className="cal-back" type="button" onClick={() => setSel(today)}>回到今天</button>
+            )}
+            <span>{viewDay !== today ? '翻回去读的，不用再拆'
+              : isOpen ? '明天换一张'
+                : gate === 'free' ? '周末不用过暗号' : '刮开，或者长按跳过'}</span>
           </footer>
         </section>
 
-        {/* 月历 */}
+        {/* 月历：版头是这块板的顶边，跟板同一圈圆角、同一条墨边，中间不留缝 */}
         <section className="cal-sheet">
+          <div
+            className={`cal-cover${cover ? '' : ' empty'}`}
+            role="button"
+            tabIndex={0}
+            aria-label={cover ? '版头，点开可以换一张' : '点一下，放一张版头'}
+            onClick={toggleCover}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCover() }
+            }}
+          >
+            {cover ? <img src={cover.url} alt="" /> : null}
+            {!cover && !coverLoading && (
+              <div className="cal-cover-hint">点一下，放一张版头<small>TA 打开日历就能看到</small></div>
+            )}
+            {cover && <span className="cal-cover-act">{canGive ? '换一张' : '看大图'}</span>}
+            {cover && coverToday && <span className="cal-cover-chip">TA 今天换的</span>}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onCoverFile} />
           <div className="cal-head">
             <div className="col" style={{ gap: 2 }}>
               <b>{view.m} 月</b>
@@ -381,17 +691,32 @@ export default function Calendar() {
           <header className="tb">
             <b>{fmtMD(sel)}.清单</b>
             <span className="grow" />
+            <button className="cal-postbtn tap" type="button" onClick={() => setPostOpen(true)}>
+              布置一张
+              {pendingVerdicts > 0 && <NoticeDot n={pendingVerdicts} />}
+            </button>
             <span className="mono">周{WEEKDAY_CN[weekdayOf(sel)]}{sel === today ? ' · 今天' : ''}</span>
           </header>
           <div className="wb">
             {isFuture ? (
               <div className="cal-empty">那天还没到。到了那天，这条才给你看。</div>
             ) : (
-              <div className="cal-row">
-                <Svg name="note" size={14} />
-                <span className="t">{dailyCard(sel).title}</span>
-                <span className="s">{dailyCard(sel).kind === 'story' ? '故事' : '冷知识'}</span>
-              </div>
+              <>
+                <div className="cal-row">
+                  <Svg name="note" size={14} />
+                  <span className="t">{dailyCard(sel).title}</span>
+                  <span className="s">{dailyCard(sel).kind === 'story' ? '故事' : '冷知识'}</span>
+                </div>
+                {dayCards.length > 0 && (
+                  <DayCards
+                    cards={dayCards}
+                    me={me}
+                    progress={progress}
+                    onDone={onDoneCard}
+                    onJudge={onJudgeCard}
+                  />
+                )}
+              </>
             )}
 
             {sel === today && todayCardData.challenge && (
@@ -438,7 +763,76 @@ export default function Calendar() {
         </section>
       </main>
 
+      {postOpen && (
+        <div className="overlay" onClick={() => setPostOpen(false)} role="presentation">
+          <div className="sheet cal-form" onClick={(e) => e.stopPropagation()}>
+            <div className="cal-form-t">
+              给 TA 留一张卡
+              <small>{fmtMD(sel)} · 到了那天才给 TA 看</small>
+            </div>
+            <div className="cal-kinds">
+              {[['task', '任务'], ['egg', '彩蛋'], ['quiz', '问答']].map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`pill${form.kind === k ? ' on' : ''}`}
+                  onClick={() => setForm({ ...form, kind: k })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <input
+              className="field"
+              value={form.title}
+              maxLength={60}
+              placeholder="一句话：那天要 TA 做什么"
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+            <textarea
+              className="field"
+              rows={3}
+              value={form.body}
+              maxLength={500}
+              placeholder="想说的话、怎么做（可以空着）"
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+            />
+            <label className="cal-check">
+              <input
+                type="checkbox"
+                checked={form.needCheck}
+                onChange={(e) => setForm({ ...form, needCheck: e.target.checked })}
+              />
+              <span>做完要我验收</span>
+            </label>
+            <button className="btn" type="button" disabled={!form.title.trim() || posting} onClick={submitCard}>
+              {posting ? '放着…' : '布置'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {coverOpen && (
+        <div className="overlay" onClick={() => setCoverOpen(false)} role="presentation">
+          <div className="sheet cal-cv-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="cal-cv-t">版头 · 我换的只出现在 TA 那边</div>
+            <button className="cal-cv-btn" type="button" onClick={() => { setCoverOpen(false); setCoverBig(true) }}>看大图</button>
+            <button className="cal-cv-btn" type="button" onClick={() => { setCoverOpen(false); pickCover() }}>换一张</button>
+            <button className="cal-cv-btn danger" type="button" onClick={dropCover}>撤下</button>
+            <button className="cal-cv-btn ghost" type="button" onClick={() => setCoverOpen(false)}>算了</button>
+          </div>
+        </div>
+      )}
+
+      {coverBig && cover && (
+        <div className="cal-cv-big" onClick={() => setCoverBig(false)} role="presentation">
+          <img src={cover.url} alt="" />
+          <span className="cal-cv-big-hint">点一下关掉</span>
+        </div>
+      )}
+
       {quest && <QuestPopup day={today} card={todayCardData} onClose={() => setQuest(false)} />}
+      {toast && <div className="toast glass">{toast}</div>}
     </div>
   )
 }

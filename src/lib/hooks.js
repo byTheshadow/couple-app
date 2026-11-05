@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
+import { UNLOCK_METHODS, canSetCover, todayKey, unlockMapFromRows, unlockRowsFromLocal } from './calendar'
 
 /** 某个人的状态（明面 + 暗面），实时更新 */
 export function useStatus(userId) {
@@ -349,4 +350,255 @@ export function useSystemProgress(day, myId, partnerId) {
     mine: rows.find((r) => r.user_id === myId) || null,
     theirs: partnerId ? rows.find((r) => r.user_id === partnerId) || null : null,
   }
+}
+
+/* ===========================================================================
+   拆卡记录：cal_unlocks（一天一行，跨设备）。
+   以前记在 localStorage['cal.unlock.v1']；第一次挂载把那份旧记录 upsert 上去
+   （on conflict do nothing：库里已有的不动），成功后才删本机那份。
+   本机留着就是双写，两边状态会打架，所以只迁一次、迁完不回头。
+   =========================================================================== */
+const LS_UNLOCK_KEY = 'cal.unlock.v1'
+
+export function useUnlocks(myId) {
+  const [unlocks, setUnlocks] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const reload = useCallback(async () => {
+    if (!myId) { setUnlocks({}); setLoading(false); return }
+    const { data, error: err } = await supabase
+      .from('cal_unlocks').select('day, method').eq('user_id', myId)
+    if (err) { setError(err.message); setLoading(false); return }
+    setUnlocks(unlockMapFromRows(data))
+    setLoading(false)
+  }, [myId])
+
+  useEffect(() => {
+    if (!myId) { setLoading(false); return }
+    setLoading(true)
+    reload()
+    const ch = supabase
+      .channel(`cal-unlocks-${myId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'cal_unlocks', filter: `user_id=eq.${myId}` },
+        () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, reload])
+
+  /* 一次性迁移：读旧记录 → upsert（已有就跳过）→ 删本机那份 */
+  useEffect(() => {
+    if (!myId) return
+    let raw = null
+    try { raw = localStorage.getItem(LS_UNLOCK_KEY) } catch { return }
+    if (!raw) return
+    const rows = unlockRowsFromLocal(raw, myId)
+    if (!rows.length) {
+      try { localStorage.removeItem(LS_UNLOCK_KEY) } catch { /* 隐身模式，无视 */ }
+      return
+    }
+    ;(async () => {
+      const { error: err } = await supabase
+        .from('cal_unlocks')
+        .upsert(rows, { onConflict: 'user_id,day', ignoreDuplicates: true })
+      if (err) { setError(err.message); return }   // 旧记录留着，下次开页面再迁
+      try { localStorage.removeItem(LS_UNLOCK_KEY) } catch { /* 隐身模式，无视 */ }
+      reload()
+    })()
+  }, [myId, reload])
+
+  /* 记一次拆开：先改本地（点完立刻算开），写库失败就报一句，不回滚——卡已经给他看了 */
+  const mark = useCallback(async (day, method) => {
+    if (!myId || !day) return
+    const m = UNLOCK_METHODS.includes(method) ? method : 'scratch'
+    setUnlocks((prev) => ({ ...prev, [day]: m }))
+    const { error: err } = await supabase
+      .from('cal_unlocks')
+      .upsert({ user_id: myId, day, method: m }, { onConflict: 'user_id,day' })
+    if (err) setError(err.message)
+  }, [myId])
+
+  return { unlocks, loading, error, mark, reload }
+}
+
+/* ===========================================================================
+   版头：cal_covers + bucket covers。
+   我看到的永远是我 owner 的那行（TA 给我换的）；我换的永远写对方 owner 那行。
+   所以「我换的版头只出现在 TA 那边」不是前端藏的，是表结构就这么写的。
+   =========================================================================== */
+const COVER_MAX = 6 * 1024 * 1024
+const COVER_SRC = 'covers'
+
+/** 上传前压小：最长边 1440、JPEG 0.82（和 Album 同一套，尺寸小一号——版头只有 158px 高） */
+async function compressImage(file, maxDim, quality) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+    const w = Math.round(bitmap.width * scale)
+    const h = Math.round(bitmap.height * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+    return blob || file
+  } catch {
+    return file
+  }
+}
+
+export function useCover(myId, partnerId) {
+  const [cover, setCover] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!myId) { setLoading(false); return }
+    const { data } = await supabase
+      .from('cal_covers').select('url, set_by, set_at').eq('owner_id', myId).maybeSingle()
+    setCover(data || null)
+    setLoading(false)
+  }, [myId])
+
+  useEffect(() => {
+    if (!myId) { setLoading(false); return }
+    reload()
+    const ch = supabase
+      .channel(`cal-cover-${myId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'cal_covers', filter: `owner_id=eq.${myId}` },
+        () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, reload])
+
+  /** 换：图传到 covers/{对方 id}.jpg（覆盖同一个 key），行写对方 owner、set_by 是我 */
+  const give = useCallback(async (file) => {
+    if (!myId || !partnerId) return { ok: false, error: '还没看到对方的账号' }
+    if (!canSetCover(myId, partnerId, partnerId)) return { ok: false, error: '只能换对方的版头' }
+    if (!file) return { ok: false, error: '没选到图' }
+    const blob = await compressImage(file, 1440, 0.82)
+    if (blob.size > COVER_MAX) {
+      return { ok: false, error: '压完还有 ' + Math.round(blob.size / 1024) + ' KB，换张小点的' }
+    }
+    const path = partnerId + '.jpg'
+    const { error: upErr } = await supabase.storage
+      .from(COVER_SRC).upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+    if (upErr) return { ok: false, error: upErr.message }
+    const { data } = supabase.storage.from(COVER_SRC).getPublicUrl(path)
+    const url = data.publicUrl + '?v=' + Date.now()   // 同一个 key 覆盖，不拼时间戳就是旧图
+    const { error: insErr } = await supabase.from('cal_covers').upsert(
+      { owner_id: partnerId, url, set_by: myId, set_at: new Date().toISOString() },
+      { onConflict: 'owner_id' },
+    )
+    if (insErr) return { ok: false, error: insErr.message }
+    return { ok: true }
+  }, [myId, partnerId])
+
+  /** 撤下：先删对方 owner 那行，再删图；图删不掉不影响表 */
+  const clear = useCallback(async () => {
+    if (!partnerId) return { ok: false, error: '还没看到对方的账号' }
+    const { error: delErr } = await supabase.from('cal_covers').delete().eq('owner_id', partnerId)
+    if (delErr) return { ok: false, error: delErr.message }
+    await supabase.storage.from(COVER_SRC).remove([partnerId + '.jpg'])
+    return { ok: true }
+  }, [partnerId])
+
+  return { cover, loading, give, clear, reload }
+}
+
+/* ===========================================================================
+   TA 布置的卡：cal_cards（卡本身）+ cal_progress（谁做完、谁验收）。
+   两个人、几十张，一次全取，页面里按天分；不建聚合表 / 视图 / RPC。
+   =========================================================================== */
+const CARD_KINDS = ['task', 'egg', 'quiz']
+
+export function useCalCards(myId, partnerId) {
+  const [cards, setCards] = useState([])
+  const [progress, setProgress] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async () => {
+    if (!myId) { setLoading(false); return }
+    /* 未来的卡只取「那天有东西」这几列（够画空心圈），正文压根不到这台设备上 */
+    const [meta, full, p] = await Promise.all([
+      supabase.from('cal_cards').select('id, day, kind, for_user, created_by'),
+      supabase.from('cal_cards').select('*').lte('day', todayKey()),
+      supabase.from('cal_progress').select('*'),
+    ])
+    const byId = new Map((full.data || []).map((r) => [r.id, r]))
+    setCards((meta.data || []).map((r) => byId.get(r.id) || r))
+    setProgress(p.data || [])
+    setLoading(false)
+  }, [myId])
+
+  useEffect(() => {
+    if (!myId) { setLoading(false); return }
+    reload()
+    const ch = supabase
+      .channel('cal-cards-' + myId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cal_cards' }, () => reload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cal_progress' }, () => reload())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [myId, reload])
+
+  /** 布置：默认只给 TA 看（for_user = 对方）；没取到对方账号就两个人都能看 */
+  const post = useCallback(async ({ day, kind, title, body, needCheck }) => {
+    if (!myId) return { ok: false, error: '没登录' }
+    if (!day) return { ok: false, error: '没选日子' }
+    if (!title || !title.trim()) return { ok: false, error: '标题要写' }
+    const { error } = await supabase.from('cal_cards').insert({
+      day,
+      kind: CARD_KINDS.includes(kind) ? kind : 'task',
+      title: title.trim().slice(0, 60),
+      body: (body || '').trim().slice(0, 500) || null,
+      payload: { need_check: Boolean(needCheck) },
+      for_user: partnerId || null,
+      created_by: myId,
+    })
+    if (error) return { ok: false, error: error.message }
+    await reload()
+    return { ok: true }
+  }, [myId, partnerId, reload])
+
+  /** 做完了：自己布置给自己的，完成即通过（免得死锁）；TA 布置的留着等验收 */
+  const markDone = useCallback(async (card) => {
+    if (!myId || !card) return { ok: false, error: '没有这张卡' }
+    const mine = card.created_by === myId && card.for_user === myId
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('cal_progress').upsert({
+      card_id: card.id,
+      user_id: myId,
+      state: mine ? 'pass' : 'done',
+      verdict_by: mine ? myId : null,
+      verdict_at: mine ? now : null,
+      updated_at: now,
+    }, { onConflict: 'card_id,user_id' })
+    if (error) return { ok: false, error: error.message }
+    await reload()
+    return { ok: true }
+  }, [myId, reload])
+
+  /** 验收：pass / again（again 可带一句话），写的是对方那条 progress */
+  const judge = useCallback(async (card, state, note) => {
+    if (!myId || !card) return { ok: false, error: '没有这张卡' }
+    const row = progress.find((r) => r.card_id === card.id && r.user_id !== myId)
+    if (!row) return { ok: false, error: 'TA 还没交' }
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('cal_progress').upsert({
+      card_id: card.id,
+      user_id: row.user_id,
+      state: state === 'again' ? 'again' : 'pass',
+      note: (note || '').trim() || null,
+      verdict_by: myId,
+      verdict_at: now,
+      updated_at: now,
+    }, { onConflict: 'card_id,user_id' })
+    if (error) return { ok: false, error: error.message }
+    await reload()
+    return { ok: true }
+  }, [myId, progress, reload])
+
+  return { cards, progress, loading, post, markDone, judge, reload }
 }

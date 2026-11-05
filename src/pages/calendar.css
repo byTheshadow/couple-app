@@ -71,7 +71,7 @@
 /* ---------- 正文 ---------- */
 .cal-t { font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; margin: 0 0 6px; }
 .cal-sub { margin: 0 0 10px; font-size: 12px; line-height: 1.65; color: var(--ink2); }
-.cal-p { margin: 0 0 10px; font-size: 13px; line-height: 1.85; }
+.cal-p { margin: 0 0 10px; font-size: var(--cal-fs, 13px); line-height: 1.85; }
 .cal-p:last-of-type { margin-bottom: 0; }
 .cal-more { margin: 12px 0 0; border-top: 1px dashed var(--line); padding-top: 9px; }
 .cal-more summary { cursor: pointer; list-style: none; font-family: var(--mono);
@@ -82,6 +82,57 @@
 .cal-fest { margin: 8px 0 0; padding-left: 14px; font-size: 11.5px; line-height: 1.7; color: var(--ink2); }
 .cal-fest li { margin-bottom: 3px; }
 .cal-src { margin: 10px 0 0; font-family: var(--mono); font-size: 8.5px; line-height: 1.6; color: var(--ink2); opacity: .75; }
+
+/* 字号三档：只动正文段落，标题/来源不跟着涨 */
+.cal-fs1 { --cal-fs: 12.5px; }
+.cal-fs2 { --cal-fs: 13px; }
+.cal-fs3 { --cal-fs: 14.5px; }
+
+/* 卡片右上角那三个字：小 / 中 / 大 */
+.cal-fs { display: flex; gap: 1px; margin-left: 2px; }
+.cal-fs-b { font-family: var(--mono); font-size: 8.5px; line-height: 1; padding: 3px 4px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--ink2); }
+.cal-fs-b.on { background: var(--chip); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.cal-fs-b:active { opacity: .7; }
+
+/* 翻到过去某天时，卡片脚上那条回今天的路 */
+.cal-back { padding: 0; border: 0; background: none; color: var(--ink); font-family: var(--mono);
+  font-size: 9px; text-decoration: underline; text-underline-offset: 2px; }
+.cal-back:active { opacity: .7; }
+
+/* 卡片底下那条存图的按钮 */
+.cal-card-tools { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.cal-card-tools .cal-back:disabled { opacity: .45; }
+
+/* ---------- 布置与验收（C） ---------- */
+.cal-postbtn { position: relative; padding: 2px 8px; border: 0; border-radius: 999px;
+  background: var(--chip); color: var(--ink); font-size: 10.5px; line-height: 1.7; }
+.cal-postbtn > .bdg { top: -6px; right: -5px; }
+.cal-postbtn:active { opacity: .7; }
+
+.cal-cc { margin-top: 2px; }
+.cal-cc-i { border-bottom: 1px dashed var(--line); }
+.cal-cc-i:last-child { border-bottom: 0; }
+/* 这行本身是按钮：点开才看正文和「做完了 / 通过」 */
+.cal-cc-h { width: 100%; padding: 9px 2px; border: 0; background: none; color: inherit;
+  font: inherit; text-align: left; }
+.cal-cc-h .t { font-weight: 550; }
+.cal-cc-b { padding: 2px 2px 10px 23px; }
+.cal-cc-act { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.cal-mini { height: 30px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: var(--btn); color: var(--btnInk); font-size: 12px; }
+.cal-mini.ghost { background: var(--chip); color: var(--ink); }
+.cal-mini:active { opacity: .72; }
+.cal-cc-wait { font-size: 11.5px; line-height: 1.5; color: var(--ink2); }
+
+/* 布置表单：走全站那套玻璃表单，不另起一套 */
+.cal-form { gap: 12px; }
+.cal-form-t { display: flex; flex-direction: column; gap: 3px; font-size: 16px; font-weight: 600; }
+.cal-form-t small { font-family: var(--mono); font-size: 8.5px; font-weight: 400;
+  letter-spacing: .06em; color: var(--ink2); }
+.cal-kinds { display: flex; gap: 8px; }
+.cal-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink2); }
+.cal-check input { width: 16px; height: 16px; accent-color: var(--ink); }
 
 /* ---------- 月历 ---------- */
 .cal-sheet { position: relative; border: 1.5px solid var(--bd); border-radius: 18px;
@@ -116,6 +167,46 @@
 .cal-sheet-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px;
   padding: 8px 14px; border-top: 1px solid var(--line); font-family: var(--mono);
   font-size: 9px; color: var(--ink2); }
+
+/* ---------- 版头：月历这块板的顶边（同一圈圆角、同一条墨边，中间不留缝） ---------- */
+.cal-cover { position: relative; height: 158px; overflow: hidden; background: #141417;
+  transition: height .3s ease; }
+.cal-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 上下压一点，白字压在图上才不飘 */
+.cal-cover::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .34) 0%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .58) 100%); }
+/* 空着：一个深色虚线槽，比有图矮一截，不占版面 */
+.cal-cover.empty { height: 92px; background: linear-gradient(160deg, #24242a, #141417); }
+.cal-cover.empty::before { content: ''; position: absolute; inset: 8px; z-index: 1;
+  border: 1.5px dashed rgba(255, 255, 255, .4); border-radius: 12px; }
+.cal-cover-hint { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-62%); z-index: 2;
+  text-align: center; color: #fff; font-size: 12.5px; line-height: 1.6; text-shadow: 0 1px 8px rgba(0, 0, 0, .45); }
+.cal-cover-hint small { display: block; margin-top: 3px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .08em; opacity: .75; }
+.cal-cover-chip { position: absolute; top: 12px; right: 12px; z-index: 3; height: 24px; padding: 0 9px;
+  display: inline-flex; align-items: center; border-radius: 999px; background: rgba(18, 18, 20, .42);
+  color: #fff; font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.cal-cover-act { position: absolute; right: 12px; bottom: 12px; z-index: 3; height: 30px; padding: 0 12px;
+  display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .45);
+  background: rgba(18, 18, 20, .32); color: #fff; font-size: 11.5px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.cal-cover:active .cal-cover-act { background: rgba(18, 18, 20, .6); }
+
+/* 点开的小面板：看大图 / 换一张 / 撤下 */
+.cal-cv-sheet { gap: 8px; }
+.cal-cv-t { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--ink2); }
+.cal-cv-btn { height: 44px; border: 0; border-radius: 12px; background: var(--chip); color: var(--ink); font-size: 14px; }
+.cal-cv-btn.danger { color: var(--cal-love); }
+.cal-cv-btn.ghost { background: transparent; color: var(--ink2); }
+.cal-cv-btn:active { opacity: .7; }
+
+/* 看大图：整屏黑，点一下关 */
+.cal-cv-big { position: fixed; inset: 0; z-index: 70; background: #0b0b0c; display: flex;
+  align-items: center; justify-content: center; }
+.cal-cv-big img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.cal-cv-big-hint { position: absolute; bottom: calc(env(safe-area-inset-bottom) + 18px);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: rgba(255, 255, 255, .6); }
 
 /* ---------- 当天清单 ---------- */
 .cal-row { display: flex; align-items: center; gap: 9px; padding: 9px 2px; border-bottom: 1px dashed var(--line); }

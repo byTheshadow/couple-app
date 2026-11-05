@@ -21,3 +21,16 @@ export function countPendingReqs(rows, myId, now = Date.now()) {
 export function appBadgeCount(...ns) {
   return Math.max(0, Math.floor(ns.reduce((sum, n) => sum + (Number(n) || 0), 0)))
 }
+
+/**
+ * 日历：TA 做完了、等着我验收的卡有几张。
+ * 只数我布置的（created_by = 我）、已经到日子（day <= 今天）、TA 交了（state = 'done'）的那几张。
+ */
+export function countPendingVerdicts(cards, progress, myId, today) {
+  if (!myId || !Array.isArray(cards) || !Array.isArray(progress)) return 0
+  const submitted = new Set(
+    progress.filter((r) => r && r.state === 'done' && r.user_id !== myId).map((r) => r.card_id),
+  )
+  return cards.filter((c) => c && c.created_by === myId
+    && (!today || c.day <= today) && submitted.has(c.id)).length
+}
