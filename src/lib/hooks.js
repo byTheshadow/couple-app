@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
-import { UNLOCK_METHODS, canSetCover, todayKey, unlockMapFromRows, unlockRowsFromLocal } from './calendar'
+import { UNLOCK_METHODS, canSetCover, receiptPath, todayKey, unlockMapFromRows, unlockRowsFromLocal } from './calendar'
 import { countPendingVerdicts } from './badgeCount'
 
 /** 某个人的状态（明面 + 暗面），实时更新 */
@@ -601,7 +601,36 @@ export function useCalCards(myId, partnerId) {
     return { ok: true }
   }, [myId, progress, reload])
 
-  return { cards, progress, loading, post, markDone, judge, reload }
+  /** 交一张回执照片：压完传到 receipts/card/{卡 id}/{我的 id}.jpg，同时把进度写成 done */
+  const attachPhoto = useCallback(async (card, file) => {
+    if (!myId || !card) return { ok: false, error: '没有这张卡' }
+    if (!file) return { ok: false, error: '没选到图' }
+    const blob = await compressImage(file, 1440, 0.82)
+    if (blob.size > 6 * 1024 * 1024) {
+      return { ok: false, error: '压完还有 ' + Math.round(blob.size / 1024) + ' KB，换张小点的' }
+    }
+    const path = receiptPath(card.id, myId)
+    if (!path) return { ok: false, error: '路径拼不出来' }
+    const { error: upErr } = await supabase.storage
+      .from('receipts').upload(path, blob, { contentType: 'image/jpeg', upsert: true })
+    if (upErr) return { ok: false, error: upErr.message }
+    const { data } = supabase.storage.from('receipts').getPublicUrl(path)
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('cal_progress').upsert({
+      card_id: card.id,
+      user_id: myId,
+      state: 'done',
+      photo_url: data.publicUrl + '?v=' + Date.now(),
+      verdict_by: null,          // 重交一次，上一轮的「再来一次」作废
+      verdict_at: null,
+      updated_at: now,
+    }, { onConflict: 'card_id,user_id' })
+    if (error) return { ok: false, error: error.message }
+    await reload()
+    return { ok: true }
+  }, [myId, reload])
+
+  return { cards, progress, loading, post, markDone, judge, attachPhoto, reload }
 }
 
 /**

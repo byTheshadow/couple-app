@@ -155,3 +155,9 @@ export function canSetCover(myId, partnerId, ownerId) {
   if (!myId || !partnerId || !ownerId) return false
   return ownerId === partnerId && ownerId !== myId
 }
+
+/** 卡的回执照片放这儿：跟「每日任务」那套 {day}/{user}.jpg 分开，不会撞 key */
+export function receiptPath(cardId, userId) {
+  if (!cardId || !userId) return ''
+  return `card/${cardId}/${userId}.jpg`
+}

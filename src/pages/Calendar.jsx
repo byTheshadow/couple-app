@@ -153,11 +153,18 @@ async function saveImage(cv, name) {
 }
 
 /** 那天有我或 TA 布置的卡：做完、验收都在这一行里发生 */
-function DayCards({ cards, me, progress, onDone, onJudge }) {
+function DayCards({ cards, me, progress, onDone, onJudge, onPhoto, onView }) {
   const [openId, setOpenId] = useState('')
   /* 点「再来一次」先展开一个输入框：那句话不是必填，但总得给人地方写 */
   const [againFor, setAgainFor] = useState('')
   const [note, setNote] = useState('')
+  /* 一个 input 服务所有卡：点哪张记哪张 */
+  const pickRef = useRef('')
+  const photoRef = useRef(null)
+  const pickPhoto = (c) => {
+    pickRef.current = c.id
+    if (photoRef.current) photoRef.current.click()
+  }
   return (
     <div className="cal-cc">
       {cards.map((c) => {
@@ -174,6 +181,8 @@ function DayCards({ cards, me, progress, onDone, onJudge }) {
           right = mine.state === 'again' ? '再来一次' : mine.state === 'pass' ? '通过' : '等 TA 验收'
         }
         const open = openId === c.id
+        /* 回执照片：我交的给我看，TA 交的给验收的人看 */
+        const photo = iMade ? (theirs && theirs.photo_url) : (mine && mine.photo_url)
         return (
           <div className="cal-cc-i" key={c.id}>
             <button
@@ -189,6 +198,11 @@ function DayCards({ cards, me, progress, onDone, onJudge }) {
             {open && (
               <div className="cal-cc-b">
                 {c.body ? <p className="cal-p">{c.body}</p> : null}
+                {photo ? (
+                  <button className="cal-cc-photo tap" type="button" onClick={() => onView(photo)} aria-label="看回执大图">
+                    <img src={photo} alt="回执照片" />
+                  </button>
+                ) : null}
                 <div className="cal-cc-act">
                   {iMade && theirs && theirs.state === 'done' && (
                     <>
@@ -202,10 +216,17 @@ function DayCards({ cards, me, progress, onDone, onJudge }) {
                       </button>
                     </>
                   )}
-                  {!iMade && (!mine || mine.state === 'again') && (
-                    <button className="cal-mini" type="button" onClick={() => onDone(c)}>
-                      {mine && mine.state === 'again' ? '再做一次' : '做完了'}
-                    </button>
+                  {!iMade && (!mine || mine.state === 'again' || mine.state === 'done') && (
+                    <>
+                      {!(mine && mine.state === 'done') && (
+                        <button className="cal-mini" type="button" onClick={() => onDone(c)}>
+                          {mine && mine.state === 'again' ? '再做一次' : '做完了'}
+                        </button>
+                      )}
+                      <button className="cal-mini ghost" type="button" onClick={() => pickPhoto(c)}>
+                        {photo ? '换张图' : '带张图交'}
+                      </button>
+                    </>
                   )}
                   {iMade && !theirs && <span className="cal-cc-wait">TA 做完，这里会写「等你验收」</span>}
                   {!iMade && mine && mine.state === 'done' && <span className="cal-cc-wait">交了，等 TA 验收</span>}
@@ -237,6 +258,18 @@ function DayCards({ cards, me, progress, onDone, onJudge }) {
           </div>
         )
       })}
+      <input
+        ref={photoRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files && e.target.files[0]
+          e.target.value = ''
+          const target = cards.find((x) => x.id === pickRef.current)
+          if (f && target) onPhoto(target, f)
+        }}
+      />
     </div>
   )
 }
@@ -404,7 +437,8 @@ export default function Calendar() {
   })
   const [toast, setToast] = useState('')
   const [coverOpen, setCoverOpen] = useState(false)
-  const [coverBig, setCoverBig] = useState(false)
+  /* 一张就够：版头的大图和回执的大图都用它 */
+  const [bigImg, setBigImg] = useState('')
   const fileRef = useRef(null)
   const toastT = useRef(0)
   const { unlocks, loading: unlockLoading, error: unlockErr, mark } = useUnlocks(me && me.id)
@@ -447,7 +481,7 @@ export default function Calendar() {
 
   const toggleCover = () => {
     if (!cover) { pickCover(); return }
-    if (!canGive) { setCoverBig(true); return }   // 没对方账号也能看大图
+    if (!canGive) { setBigImg(cover.url); return }   // 没对方账号也能看大图
     setCoverOpen(true)
   }
 
@@ -461,7 +495,7 @@ export default function Calendar() {
   const [postOpen, setPostOpen] = useState(false)
   const [posting, setPosting] = useState(false)
   const [form, setForm] = useState({ day: '', kind: 'task', title: '', body: '', needCheck: true })
-  const { cards, progress, post, markDone, judge } = useCalCards(me && me.id, partner && partner.id)
+  const { cards, progress, post, markDone, judge, attachPhoto } = useCalCards(me && me.id, partner && partner.id)
 
   const openPost = () => {
     setForm({ day: sel, kind: 'task', title: '', body: '', needCheck: true })
@@ -487,6 +521,12 @@ export default function Calendar() {
   const onJudgeCard = async (c, state, note) => {
     const r = await judge(c, state, note)
     say(r.ok ? (state === 'pass' ? '通过了' : '让它再来一次') : '没记上：' + r.error)
+  }
+
+  /* 回执照片：选完直接传，传完那张卡就算交了 */
+  const onPhotoCard = async (c, file) => {
+    const r = await attachPhoto(c, file)
+    say(r.ok ? '照片交上去了' : '没传上去：' + r.error)
   }
 
   /* 存成图片：iOS 走分享面板（才进得了相册），别的浏览器退成下载 */
@@ -750,6 +790,8 @@ export default function Calendar() {
                     progress={progress}
                     onDone={onDoneCard}
                     onJudge={onJudgeCard}
+                    onPhoto={onPhotoCard}
+                    onView={setBigImg}
                   />
                 )}
               </>
@@ -864,7 +906,7 @@ export default function Calendar() {
         <div className="overlay" onClick={() => setCoverOpen(false)} role="presentation">
           <div className="sheet cal-cv-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="cal-cv-t">版头 · 我换的只出现在 TA 那边</div>
-            <button className="cal-cv-btn" type="button" onClick={() => { setCoverOpen(false); setCoverBig(true) }}>看大图</button>
+            <button className="cal-cv-btn" type="button" onClick={() => { setCoverOpen(false); setBigImg(cover.url) }}>看大图</button>
             <button className="cal-cv-btn" type="button" onClick={() => { setCoverOpen(false); pickCover() }}>换一张</button>
             <button className="cal-cv-btn danger" type="button" onClick={dropCover}>撤下</button>
             <button className="cal-cv-btn ghost" type="button" onClick={() => setCoverOpen(false)}>算了</button>
@@ -872,9 +914,9 @@ export default function Calendar() {
         </div>
       )}
 
-      {coverBig && cover && (
-        <div className="cal-cv-big" onClick={() => setCoverBig(false)} role="presentation">
-          <img src={cover.url} alt="" />
+      {bigImg && (
+        <div className="cal-cv-big" onClick={() => setBigImg('')} role="presentation">
+          <img src={bigImg} alt="" />
           <span className="cal-cv-big-hint">点一下关掉</span>
         </div>
       )}
