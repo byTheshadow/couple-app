@@ -1206,6 +1206,7 @@ export default function PixelPals({ onExit }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" className="glass icon-btn tap" onClick={() => { if (onExit) onExit() }} aria-label="返回小物"><Svg name="back" size={20} /></button>
+          <button type="button" className="glass icon-btn tap pp-sleep-btn" onClick={() => setSleepOpen(true)} aria-label="哄睡" title="哄睡 · 陪兔兔钓鱼">💤</button>
           <button type="button" className="glass icon-btn tap" onClick={toggle} aria-label="切换明暗主题"><Svg name="moon" size={20} /></button>
         </div>
       </div>
@@ -1214,8 +1215,6 @@ export default function PixelPals({ onExit }) {
         <button type="button" role="tab" aria-selected={tab === 'mine'} className={tab === 'mine' ? 'on' : ''} onClick={() => setTab('mine')}>我的小屋</button>
         <button type="button" role="tab" aria-selected={tab === 'ta'} className={tab === 'ta' ? 'on' : ''} onClick={() => setTab('ta')}>{taName}的小屋</button>
       </div>
-
-      <button type="button" className="btn ghost pp-sleep-entry" onClick={() => setSleepOpen(true)}>🌙 哄睡 · 陪兔兔钓鱼</button>
 
       {myPending > 0 && (
         <button type="button" className="pp-mail" onClick={() => { setTab('mine'); setSec('wear') }}>
