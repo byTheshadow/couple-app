@@ -12,7 +12,7 @@ import {
 } from './pixelpals/art'
 import { meetOf, meetSpots, sceneSpot } from './pixelpals/scenes'
 import { ACT_DUR, drawAct, pruneActs } from './pixelpals/acts'
-import { catAt, catItem } from './pixelpals/cat'
+import { catAt, catItem, catPersona, catDest, catWhyLine } from './pixelpals/cat'
 import { todayKey } from '../lib/calendar'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
@@ -1242,9 +1242,13 @@ export default function PixelPals({ onExit }) {
   const togetherMinutes = Math.min(720, Math.max(together.total, together.mine + mined))
   // 猫屋：它此刻在不在家、架子上都有什么
   const catNow = catAt(hr)
-  const catRowsWith = cat.rows.filter((r) => r.to_scene)
-  const catItems = catRowsWith.slice(0, 4).map((r) => catItem(r.day_key, r.to_scene)).reverse()
-  const catLatest = catRowsWith.length ? catItem(catRowsWith[0].day_key, catRowsWith[0].to_scene) : null
+  const catPair = me && partner ? [me.id, partner.id].sort().join('-') : ''
+  const persona = catPersona(catPair)
+  const destOf = (r) => (r ? catDest(persona, r.day_key, r.pick_a, r.pick_b) : null)
+  const catRowsWith = cat.rows.map((r) => ({ row: r, dest: destOf(r) })).filter((x) => x.dest)
+  const catItems = catRowsWith.slice(0, 4).map((x) => catItem(x.row.day_key, x.dest.to)).reverse()
+  const catLatest = catRowsWith.length ? catItem(catRowsWith[0].row.day_key, catRowsWith[0].dest.to) : null
+  const todayDest = destOf(cat.today)
   const catView = { home: catNow.home, justLeft: catNow.justLeft, items: catItems, latest: catLatest }
   const smallId = me && partner ? [me.id, partner.id].sort()[0] : null
   const iAmA = !!(me && smallId === me.id)
@@ -1487,7 +1491,10 @@ export default function PixelPals({ onExit }) {
                 <p className="pp-hint" style={{ margin: 0 }}>
                   你：{myCatPick ? (SCENES[myCatPick] || myCatPick) : '还没指'}
                   {' · '}TA：{taCatPick ? (SCENES[taCatPick] || taCatPick) : '还没指'}
-                  {' · '}{cat.today && cat.today.to_scene ? `它今天去了 ${SCENES[cat.today.to_scene] || cat.today.to_scene}` : '它还没定'}
+                   {' · '}{todayDest ? `今天去了 ${SCENES[todayDest.to] || todayDest.to}` : '还没定'}
+                </p>
+                <p className="pp-hint" style={{ margin: 0 }}>
+                  {persona.n} · {todayDest ? catWhyLine(persona, todayDest.why, SCENES[todayDest.to]) : persona.note}
                 </p>
               </div>
             </section>
