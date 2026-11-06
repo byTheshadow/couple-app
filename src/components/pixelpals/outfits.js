@@ -561,6 +561,101 @@ export const BUILTINS = [
       ].map(w16),
     },
   },
+  {
+    id: 'b:raincoat', name: '雨衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#2f6b6b', '#24504f', '#f0e8d6', '#8fb5a8'],
+      rows: [
+        '....aabbbbaa....',
+        '...aabbbbbbaa...',
+        '..aaaaaaccaaaa..',
+        '..aaaaaaccaaaa..',
+        '..aaaaaaccaaaa..',
+        '..aabbaaccbbaa..',
+        '....aabbbbaa....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:rainboots', name: '雨靴', slot: 'shoes',
+    data: {
+      slot: 'shoes', y0: 21,
+      pal: ['#c9a25a', '#7a5b2a', '#f6e6b8'],
+      rows: [
+        '....abb..abb....',
+        '...aaaa..aaaa...',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:pajama', name: '睡衣上衣', slot: 'top',
+    data: {
+      slot: 'top', y0: 12,
+      pal: ['#cfe3ff', '#9fc0ee', '#ffffff', '#5b7396'],
+      rows: [
+        '....aabbbbaa....',
+        '...aaabbbbaaa...',
+        '..aaaaaadaaaaa..',
+        '..aaaaaaaaaaaa..',
+        '..aaaaaadaaaaa..',
+        '....bbbbbbbb....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:sleeppants', name: '睡裤', slot: 'bottom',
+    data: {
+      slot: 'bottom', y0: 17,
+      pal: ['#5b7396', '#3f5570'],
+      rows: [
+        '....abababab....',
+        '....abababab....',
+        '....aba..aba....',
+        '....aba..aba....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:nightcap', name: '睡帽', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 0,
+      pal: ['#e0736b', '#fff1e0', '#b85450'],
+      rows: [
+        '.....aaaaaa.....',
+        '....aaaaaaaa....',
+        '...aaaaaaaaaa.bb',
+        '..aaaaaaaaaa.bbb',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:tee', name: '短袖 T', slot: 'top',
+    data: {
+      slot: 'top', y0: 13,
+      pal: ['#7ec4a8', '#5aa98c', '#f9dcc8'],
+      rows: [
+        '...aaaaaaaaaa...',
+        '..aaaaaaaaaaaa..',
+        '..ccaaaaaaaacc..',
+        '...aaaaaaaaaa...',
+        '....aabbbbaa....',
+      ].map(w16),
+    },
+  },
+  {
+    id: 'b:strawhat', name: '草帽', slot: 'acc',
+    data: {
+      slot: 'acc', y0: 1,
+      pal: ['#e8c97a', '#b5651d'],
+      rows: [
+        '...aaaaaaaaaa...',
+        '..aaaaaaaaaaaa..',
+        '.aaaaabbbbbaaaa.',
+        '.aaaaaaaaaaaaaa.',
+      ].map(w16),
+    },
+  },
 ]
 
 /* ---------- 校验：返回 ''（没问题）或一句人话 ---------- */

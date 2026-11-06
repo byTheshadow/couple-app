@@ -497,3 +497,409 @@ export function drawLivingRoom(ctx, hr, t, gifts = []) {
     drawGiftGlows(ctx, gifts, 'living')
   }
 }
+
+/* ===========================================================================
+   第十三轮：在家可以去的新房间（厨房 / 阁楼 / 花房 / 游戏角）
+   和客厅一样是整幅手画场景：小人由 art.js 的 drawChar 画在这之上（FLOOR = 98）。
+   不画礼物摆件（礼物坐标是按卧室/客厅排的）。
+   =========================================================================== */
+
+const PX = (ctx, x, y, c) => R(ctx, x, y, 1, 1, c)
+
+function LN(ctx, x0, y0, x1, y1, c) {
+  x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1)
+  let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, e = dx + dy
+  for (;;) {
+    PX(ctx, x0, y0, c)
+    if (x0 === x1 && y0 === y1) break
+    const e2 = 2 * e
+    if (e2 >= dy) { e += dy; x0 += sx }
+    if (e2 <= dx) { e += dx; y0 += sy }
+  }
+}
+
+function EL(ctx, cx, cy, rx, ry, c) {
+  for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) {
+    if ((x * x) / ((rx + .5) * (rx + .5)) + (y * y) / ((ry + .5) * (ry + .5)) <= 1) PX(ctx, cx + x, cy + y, c)
+  }
+}
+
+function FR(ctx, x, y, w, h, c) {
+  R(ctx, x, y, w, 2, c); R(ctx, x, y + h - 2, w, 2, c); R(ctx, x, y, 2, h, c); R(ctx, x + w - 2, y, 2, h, c)
+}
+
+const isDarkHour = (hr) => hr >= 19 || hr < 6.5
+
+function roomWall(ctx, M) {
+  R(ctx, 0, 0, W, 94, M.wall); R(ctx, 0, 0, W, 9, M.wallTop)
+  for (let x = 0; x < W; x += 8) R(ctx, x, 0, 1, 94, M.stripe)
+  R(ctx, 0, 89, W, 5, M.base); R(ctx, 0, 94, W, 4, M.base); R(ctx, 0, 96, W, 1, M.baseHi)
+}
+
+function plankFloor(ctx, c1, c2, seam = 'rgba(0,0,0,.10)') {
+  for (let y = FLOOR; y < H; y += 6) {
+    const row = (y - FLOOR) / 6
+    R(ctx, 0, y, W, 6, row % 2 ? c1 : c2); R(ctx, 0, y, W, 1, 'rgba(0,0,0,.10)')
+  }
+  for (let x = 0; x < W; x += 24) R(ctx, x, FLOOR, 1, H - FLOOR, seam)
+  R(ctx, 0, FLOOR, W, 1, 'rgba(0,0,0,.22)')
+}
+
+function roomDim(ctx, a) { ctx.save(); ctx.globalAlpha = a; R(ctx, 0, 0, W, H, '#151226'); ctx.restore() }
+
+/* ---------- 厨房（早上默认来这儿） ---------- */
+
+export function drawKitchen(ctx, hr, t) {
+  const M = { wall: '#f8f1e3', wallTop: '#fffaf0', stripe: '#eee2cc', base: '#e2d3b8', baseHi: '#f1e5cd' }
+  roomWall(ctx, M)
+  for (let yy = FLOOR; yy < H; yy += 6) for (let x = 0; x < W; x += 12) R(ctx, x, yy, 12, 6, ((x / 12 + (yy - FLOOR) / 6) | 0) % 2 ? '#cdbfa6' : '#ddd0b8')
+  R(ctx, 0, FLOOR, W, 1, 'rgba(0,0,0,.22)')
+  // 绿墙砖
+  R(ctx, 0, 56, 70, 14, '#9db89a')
+  for (let x = 0; x < 70; x += 8) R(ctx, x, 56, 1, 14, '#8aa887')
+  for (let y = 56; y < 70; y += 7) R(ctx, 0, y, 70, 1, '#8aa887')
+  R(ctx, 0, 56, 70, 1, 'rgba(255,255,255,.25)')
+  // 柜台 + 柜门 + 烤箱
+  R(ctx, 0, 70, 70, 4, '#b98b62'); R(ctx, 0, 70, 70, 1, '#d0a274')
+  R(ctx, 0, 74, 70, 18, '#efe6d2')
+  for (let x = 2; x < 70; x += 16) { R(ctx, x, 74, 1, 18, '#ded1b8'); R(ctx, x + 8, 79, 4, 1, '#8d7a5c') }
+  R(ctx, 14, 76, 20, 14, '#3a3a42'); R(ctx, 15, 77, 18, 9, '#1d1d24'); R(ctx, 15, 77, 18, 2, '#2b2b33'); R(ctx, 15, 87, 18, 1, '#5a5a66')
+  // 灶 + 锅 + 热气
+  R(ctx, 12, 66, 28, 4, '#3a3a42'); R(ctx, 13, 66, 26, 1, '#4d4d58')
+  R(ctx, 17, 59, 14, 7, '#c9503e'); R(ctx, 17, 59, 14, 1, '#e06a55'); R(ctx, 16, 61, 1, 3, '#8f3a2c'); R(ctx, 31, 61, 1, 3, '#8f3a2c')
+  R(ctx, 20, 57, 8, 1, '#e06a55')
+  const s = Math.sin(t * 2.2)
+  R(ctx, 21, 52 + (s > 0 ? 0 : 1), 2, 4, 'rgba(255,255,255,.5)')
+  R(ctx, 25, 49 + (s > 0 ? 1 : 0), 2, 4, 'rgba(255,255,255,.35)')
+  // 吊柜
+  R(ctx, 4, 22, 44, 26, '#efe6d2'); R(ctx, 4, 22, 44, 2, '#ded1b8'); R(ctx, 26, 22, 1, 26, '#ded1b8')
+  R(ctx, 12, 34, 5, 1, '#8d7a5c'); R(ctx, 34, 34, 5, 1, '#8d7a5c')
+  // 窗
+  FR(ctx, 96, 12, 44, 42, '#b08a63')
+  R(ctx, 98, 14, 40, 38, '#cfe6f5'); drawSky(ctx, 98, 14, 40, 38, hr, t, false, true)
+  R(ctx, 94, 54, 48, 3, '#dcc4a2')
+  for (let i = 0; i < 3; i++) {
+    R(ctx, 100 + i * 11, 46, 7, 6, '#c56a4a'); R(ctx, 100 + i * 11, 46, 7, 1, '#d98a6a')
+    R(ctx, 102 + i * 11, 41, 3, 5, '#5fb86a'); R(ctx, 101 + i * 11, 43, 2, 3, '#4a9c55')
+  }
+  // 冰箱
+  R(ctx, 140, 54, 18, 38, '#eae5da'); R(ctx, 140, 54, 18, 1, '#f7f3ea'); R(ctx, 140, 74, 18, 1, '#d6cfc0')
+  R(ctx, 155, 58, 1, 12, '#b9b1a0'); R(ctx, 155, 78, 1, 10, '#b9b1a0')
+  R(ctx, 145, 60, 3, 3, '#ff8fa3'); R(ctx, 150, 82, 3, 2, '#7cc4e8')
+  // 挂锅杆
+  R(ctx, 48, 28, 20, 2, '#8d7a5c')
+  for (let i = 0; i < 2; i++) { const x = 53 + i * 9; R(ctx, x, 30, 1, 3, '#8d7a5c'); R(ctx, x - 3, 33, 6, 4, '#5a5f6a'); R(ctx, x - 3, 33, 6, 1, '#8a9099') }
+  // 吊灯
+  const dark = isDarkHour(hr)
+  R(ctx, 80, 0, 1, 12, '#6b6357'); R(ctx, 74, 12, 13, 6, '#e8b84a'); R(ctx, 73, 12, 15, 1, '#f6d98a'); R(ctx, 74, 17, 13, 1, '#c99a34')
+  // 地垫
+  R(ctx, 62, 104, 38, 10, '#d8c8a8'); R(ctx, 62, 104, 38, 1, '#c4b190'); R(ctx, 62, 113, 38, 1, '#c4b190')
+  if (dark) {
+    roomDim(ctx, 0.26)
+    glowAt(ctx, 80, 18, 30, '255,200,120', 0.3, 'lighter')
+    ctx.save(); ctx.globalAlpha = 0.16; R(ctx, 64, 96, 40, 10, '#ffb877'); ctx.restore()
+  }
+}
+
+/* ---------- 阁楼（夜里默认来这儿） ---------- */
+
+export function drawAttic(ctx, hr, t) {
+  // 木墙板 + 木结
+  R(ctx, 0, 0, W, 94, '#4a3a2e')
+  for (let x = 0; x < W; x += 12) R(ctx, x, 0, 1, 94, '#413226')
+  for (let i = 0; i < 9; i++) R(ctx, 16 + (i * 37) % 140, 46 + (i * 23) % 40, 2, 1, '#3a2c22')
+  R(ctx, 0, 0, W, 6, '#3a2c22')
+  // 斜梁 + 椽
+  for (let x = 0; x < W; x++) {
+    const y = 26 - Math.round(Math.abs(x - 80) * 0.3)
+    R(ctx, x, y, 1, 5, '#6b513d'); R(ctx, x, y, 1, 1, '#7d6048')
+  }
+  R(ctx, 0, 26, W, 3, '#5b4534')
+  for (let x = 30; x < 150; x += 40) { R(ctx, x, 8, 3, 18, '#5b4534'); R(ctx, x, 8, 1, 18, '#6b513d') }
+  // 斜天窗（里面是当前时段的天空）
+  for (let i = 0; i < 26; i++) {
+    const off = Math.round(i * 0.5)
+    const edge = i < 2 || i > 23
+    R(ctx, 44 + off, 3 + i, 46, 1, edge ? '#6b513d' : '#0f1836')
+  }
+  R(ctx, 47, 5, 44, 20, '#0f1836')
+  drawSky(ctx, 47, 5, 44, 20, hr, t, false, true)
+  R(ctx, 43, 28, 50, 2, '#6b513d')
+  // 月光斜下来
+  for (let y = 30; y < FLOOR; y++) {
+    const k = (y - 30) / (FLOOR - 30)
+    R(ctx, Math.round(38 + k * 26), y, 26, 1, 'rgba(170,190,255,.05)')
+  }
+  // 地板 + 地毯
+  plankFloor(ctx, '#7d6247', '#876b4e')
+  R(ctx, 46, 100, 70, 14, '#8a6450'); R(ctx, 48, 101, 66, 12, '#a4795f')
+  R(ctx, 48, 101, 66, 1, '#c08f6f'); R(ctx, 48, 112, 66, 1, '#8a6450')
+  for (let x = 52; x < 112; x += 10) R(ctx, x, 104, 4, 4, '#c08f6f')
+  // 纸箱
+  const box = (x, yy, w, h, c) => {
+    R(ctx, x, yy, w, h, c); R(ctx, x, yy, w, 1, 'rgba(255,255,255,.14)')
+    R(ctx, x + (w >> 1) - 2, yy, 4, h, '#e8d9b8'); R(ctx, x + 4, yy + 4, 8, 5, '#f2e8cf')
+    R(ctx, x + 5, yy + 5, 6, 1, '#b9a88a'); R(ctx, x + 5, yy + 7, 4, 1, '#b9a88a')
+  }
+  box(6, 80, 26, 16, '#c9a06a'); box(10, 66, 20, 14, '#b8915e'); box(34, 86, 15, 10, '#c9a06a')
+  // 架子 + 玻璃罐
+  R(ctx, 6, 40, 42, 3, '#6b513d'); R(ctx, 6, 40, 42, 1, '#7d6048')
+  for (const [c, x] of [['#c9a06a', 10], ['#8fb5a8', 22], ['#c9503e', 33]]) {
+    R(ctx, x, 31, 8, 9, c); R(ctx, x, 31, 8, 1, 'rgba(255,255,255,.35)'); R(ctx, x + 1, 29, 6, 2, '#b9a88a')
+  }
+  // 相框
+  FR(ctx, 56, 34, 16, 14, '#6b513d'); R(ctx, 58, 36, 12, 10, '#d8c8a8'); R(ctx, 60, 38, 8, 6, '#8fb5a8'); R(ctx, 61, 39, 6, 2, '#e8e2d0')
+  // 矮桌 + 书 + 杯子
+  R(ctx, 78, 84, 26, 3, '#8a6a4f'); R(ctx, 78, 84, 26, 1, '#a07d5c'); R(ctx, 80, 87, 2, 9, '#6b513d'); R(ctx, 100, 87, 2, 9, '#6b513d')
+  R(ctx, 82, 78, 8, 6, '#c9503e'); R(ctx, 82, 78, 8, 1, '#e06a55'); R(ctx, 84, 74, 6, 4, '#4a6fa8')
+  R(ctx, 94, 79, 6, 5, '#e8e2d0'); R(ctx, 94, 79, 6, 1, '#f6f2e8'); R(ctx, 100, 80, 1, 3, '#e8e2d0'); R(ctx, 95, 81, 4, 1, '#c98a5a')
+  // 懒人椅
+  R(ctx, 108, 80, 40, 12, '#5b4a3c'); R(ctx, 108, 80, 40, 2, '#6b584a')
+  R(ctx, 110, 74, 36, 8, '#c08f6f'); R(ctx, 110, 74, 36, 2, '#d8a888')
+  R(ctx, 112, 76, 10, 6, '#ff9fb6'); R(ctx, 124, 76, 10, 6, '#8fb5a8')
+  R(ctx, 108, 92, 3, 5, '#3f3126'); R(ctx, 145, 92, 3, 5, '#3f3126')
+  // 吉他
+  R(ctx, 148, 72, 9, 14, '#c9803f'); R(ctx, 150, 75, 5, 8, '#e5a05a'); R(ctx, 152, 78, 2, 2, '#3a2412')
+  R(ctx, 154, 58, 2, 15, '#7a4a24'); R(ctx, 153, 53, 5, 6, '#3a2412')
+  // 吊灯
+  R(ctx, 64, 0, 1, 22, '#3f3126'); R(ctx, 59, 22, 11, 6, '#ffd77a'); R(ctx, 58, 22, 13, 1, '#ffe9b8'); R(ctx, 60, 27, 9, 1, '#e0ac4c')
+  // 灯串
+  for (let i = 0; i < 9; i++) {
+    const x = 14 + i * 16
+    const yy = 30 + Math.round(2 * Math.sin(i * 1.2))
+    R(ctx, x, yy, 1, 3, '#2b211b'); R(ctx, x - 1, yy + 3, 3, 2, '#ffe6a8')
+  }
+  roomDim(ctx, 0.3)
+  glowAt(ctx, 64, 25, 30, '255,200,120', 0.22, 'lighter')
+  for (let i = 0; i < 9; i++) glowAt(ctx, 14 + i * 16, 33 + Math.round(2 * Math.sin(i * 1.2)), 6, '255,210,130', 0.1, 'lighter')
+  glowAt(ctx, 60, 14, 26, '150,175,255', 0.1, 'lighter')
+}
+
+/* ---------- 花房（白天） ---------- */
+
+const SWAY = [0, 1, 0, -1]
+const FLOWER_COLORS = [['#ff5d73', '#d93a55'], ['#ffd34d', '#e8b52e'], ['#a487e8', '#7d5cc8'], ['#6aa8ff', '#3c6bff'], ['#ffb3c7', '#e07a95']]
+
+function basketAt(ctx, x, top, t, i) {
+  for (let y = top; y < top + 12; y++) PX(ctx, x, y, y % 2 ? '#8d968f' : '#b4bcb6')
+  LN(ctx, x, top + 12, x - 6, top + 16, '#8d968f'); LN(ctx, x, top + 12, x + 6, top + 16, '#8d968f')
+  EL(ctx, x, top + 17, 7, 2, '#3f8a45'); EL(ctx, x, top + 16, 4, 1, '#6fbd5a')
+  R(ctx, x - 6, top + 18, 13, 2, '#9a6a35'); R(ctx, x - 5, top + 20, 11, 2, '#7a4e24'); R(ctx, x - 3, top + 22, 7, 1, '#5e3b1a')
+  const sway = SWAY[Math.floor(t * 2 + i) % 4]
+  for (const d of [[-4, 9], [-2, 12], [0, 7], [2, 13], [4, 9], [6, 6]]) {
+    const dx = d[0], len = d[1]
+    for (let k = 0; k < len; k++) {
+      const py = top + 19 + k
+      if (k < 3) continue
+      const px = x + dx + Math.round(sway * k / len * 1.5)
+      PX(ctx, px, py, k % 3 === 2 ? '#6fbd5a' : '#3f8a45')
+      if (k % 3 === 1) PX(ctx, px + (i % 2 ? 1 : -1), py, '#56a24e')
+    }
+    PX(ctx, x + dx + Math.round(sway * 1.5), top + 19 + len, i % 2 ? '#ffb3c7' : '#ffd34d')
+  }
+  PX(ctx, x - 3, top + 17, i % 2 ? '#ffb3c7' : '#ffd34d'); PX(ctx, x + 3, top + 16, i % 2 ? '#ffd34d' : '#ffb3c7')
+}
+
+function flowerBed(ctx, t, soilY) {
+  let i = 0
+  for (let x = 3; x < W - 2; x += 4) {
+    const h = 8 + ((i * 7) % 8)
+    const o = SWAY[(Math.floor(t * 2) + (i >> 2)) % 4]
+    for (let k = 1; k < h; k++) PX(ctx, x + Math.round(o * k / h), soilY - k, k % 3 ? '#4c8f3e' : '#3f7a34')
+    PX(ctx, x - 1, soilY - 2, '#5fb04f'); PX(ctx, x + 1, soilY - 1, '#5fb04f')
+    const c = FLOWER_COLORS[i % 5]
+    const tx = x + o, ty = soilY - h
+    PX(ctx, tx, ty, c[0]); PX(ctx, tx - 1, ty + 1, c[0]); PX(ctx, tx + 1, ty + 1, c[0]); PX(ctx, tx, ty - 1, c[1]); PX(ctx, tx, ty + 1, '#fff1b8')
+    i++
+  }
+}
+
+function cloche(ctx, x, y) {
+  EL(ctx, x, y, 4, 5, 'rgba(210,240,255,.16)')
+  for (let a = 0; a < 40; a++) { const an = Math.PI * a / 39; PX(ctx, x - Math.cos(an) * 4, y - Math.sin(an) * 5, 'rgba(200,235,255,.75)') }
+  PX(ctx, x, y + 2, '#4f9a4a'); PX(ctx, x - 1, y + 1, '#6fbd5a'); PX(ctx, x + 1, y, '#6fbd5a')
+  R(ctx, x - 5, y + 5, 11, 2, '#7a4a26'); R(ctx, x - 5, y + 5, 11, 1, '#b5763f')
+}
+
+export function drawGreenhouse(ctx, hr, t) {
+  // 天空 / 云 / 山
+  for (let y = 0; y < 58; y++) { const k = y / 58; R(ctx, 0, y, W, 1, `rgb(${Math.round(143 + 93 * k)},${Math.round(205 + 41 * k)},${Math.round(230 - 4 * k)})`) }
+  for (const c of [[10, 22, .9, 1], [64, 34, .6, .8], [112, 18, .45, .7]]) {
+    const cx = ((c[0] + t * c[2] * 4) % 200) - 20
+    EL(ctx, cx, c[1], 13 * c[3], 3, 'rgba(255,255,255,.8)'); EL(ctx, cx - 6 * c[3], c[1] + 1, 7 * c[3], 2, '#ffffff'); EL(ctx, cx + 7 * c[3], c[1] - 1, 6 * c[3], 2, '#ffffff')
+  }
+  for (let i = 0; i < 6; i++) EL(ctx, i * 30 + 8, 60, 22, 8, '#b5dba3')
+  for (let i = 0; i < 5; i++) EL(ctx, i * 34 + 22, 63, 18, 7, '#8cc77a')
+  for (let i = 0; i < 14; i++) EL(ctx, (i * 37) % 160, 56 + (i * 11) % 6, 2, 2, '#5f9f57')
+  R(ctx, 0, 58, W, 36, 'rgba(232,244,236,.55)')
+  // 木裙板
+  R(ctx, 0, 78, W, 16, '#b5763f')
+  for (let y = 78; y < 94; y += 4) R(ctx, 0, y, W, 1, 'rgba(90,50,20,.22)')
+  for (let x = 0; x < W; x += 20) R(ctx, x, 78, 1, 16, 'rgba(90,50,20,.18)')
+  R(ctx, 0, 78, W, 1, '#cf9257')
+  // 玻璃结构
+  for (let k = -5; k <= 5; k++) { LN(ctx, 80 + k * 4, 0, 80 + k * 15, 15, '#f3f6ef'); LN(ctx, 81 + k * 4, 0, 81 + k * 15, 15, '#b8c6b4') }
+  R(ctx, 0, 15, W, 2, '#f3f6ef'); R(ctx, 0, 17, W, 1, '#b8c6b4')
+  for (const x of [0, 40, 80, 120, 157]) { R(ctx, x, 18, 3, 76, '#f3f6ef'); R(ctx, x + 2, 18, 1, 76, '#b8c6b4') }
+  R(ctx, 0, 44, W, 2, '#f3f6ef'); R(ctx, 0, 46, W, 1, '#b8c6b4')
+  for (let x = 4; x < W; x += 10) LN(ctx, x, 42, x + 3, 24, 'rgba(255,255,255,.25)')
+  // 右侧爬藤架
+  for (let y = 22; y < 76; y += 6) R(ctx, 143, y, 15, 1, '#c9b08a')
+  for (let x = 143; x <= 158; x += 5) R(ctx, x, 22, 1, 54, '#c9b08a')
+  R(ctx, 142, 22, 2, 54, '#b5763f'); R(ctx, 157, 22, 2, 54, '#b5763f')
+  for (let k = 0; k < 40; k++) {
+    const px = 145 + Math.round(6 * Math.sin(k * 0.4 + t * 1.2)), py = 74 - k
+    PX(ctx, px, py, k % 4 ? '#4c8f3e' : '#5fb04f')
+    if (k % 5 === 2) PX(ctx, px + (k % 2 ? 1 : -1), py, '#7fd08a')
+    if (k % 9 === 4) PX(ctx, px + 1, py, '#ffd34d')
+  }
+  // 串灯
+  for (let x = 0; x < W; x++) PX(ctx, x, 30 + Math.round(3 * Math.sin(Math.PI * (x % 32) / 32)), '#6a5b48')
+  for (let s = 0; s < 5; s++) for (const lx of [5, 11, 17, 23, 29]) {
+    const x = s * 32 + lx, y = 32 + Math.round(3 * Math.sin(Math.PI * lx / 32))
+    const ph = (s * 5 + lx + Math.floor(t * 3)) % 4
+    if (ph === 0 || ph === 3) glowAt(ctx, x, y, 5, '255,226,140', 0.2, 'lighter')
+    PX(ctx, x, y, ph === 0 || ph === 3 ? '#fff6c8' : '#d9a443'); PX(ctx, x, y + 1, '#ffd76a')
+  }
+  // 吊篮（46 号那个在洒水壶上方）
+  basketAt(ctx, 22, 0, t, 0); basketAt(ctx, 80, 2, t, 1); basketAt(ctx, 46, 0, t, 2)
+  // 花槽
+  R(ctx, 0, 62, W, 4, '#c4673a'); R(ctx, 0, 62, W, 1, '#de8656')
+  for (let x = 0; x < W; x += 12) R(ctx, x, 62, 1, 4, 'rgba(120,50,20,.35)')
+  R(ctx, 0, 66, W, 4, '#5a3a24')
+  flowerBed(ctx, t, 66)
+  R(ctx, 0, 70, W, 8, '#b5583a')
+  for (let y = 70; y < 78; y += 4) R(ctx, 0, y, W, 1, '#86402a')
+  for (let x = 0; x < W; x += 16) R(ctx, x, 70, 1, 8, '#86402a')
+  R(ctx, 0, 70, W, 1, '#e0a070')
+  // 操作台
+  R(ctx, 2, 80, 56, 3, '#b5763f'); R(ctx, 2, 80, 56, 1, '#cf9257'); R(ctx, 2, 83, 56, 1, '#7a4a26')
+  R(ctx, 4, 84, 3, 13, '#7a4a26'); R(ctx, 53, 84, 3, 13, '#7a4a26')
+  R(ctx, 2, 89, 56, 2, '#8a5a30'); R(ctx, 2, 89, 56, 1, '#a06c3c')
+  for (const x of [8, 18, 28]) { R(ctx, x, 85, 6, 4, '#c4673a'); R(ctx, x, 85, 6, 1, '#de8656'); PX(ctx, x + 2, 83, '#5fb04f'); PX(ctx, x + 3, 83, '#6fbd5a') }
+  cloche(ctx, 16, 73)
+  R(ctx, 26, 78, 10, 2, '#3b3b3b'); for (let k = 0; k < 5; k++) { PX(ctx, 27 + k * 2, 76, '#6fbd5a'); PX(ctx, 27 + k * 2, 75, '#9bd677') }
+  R(ctx, 42, 74, 9, 6, '#6aa79a'); R(ctx, 42, 74, 2, 6, '#9ad0c2'); LN(ctx, 51, 76, 55, 71, '#6aa79a'); R(ctx, 54, 69, 2, 3, '#4a8478')
+  for (let k = 0; k < 3; k++) { const dy = (t * 9 + k * 5) % 14; PX(ctx, 46, 58 + dy, 'rgba(200,235,255,.85)') }
+  // 圆桌
+  R(ctx, 118, 82, 24, 2, '#b5763f'); R(ctx, 118, 82, 24, 1, '#cf9257'); R(ctx, 128, 84, 2, 12, '#7a4a26'); R(ctx, 121, 94, 18, 2, '#7a4a26')
+  R(ctx, 124, 77, 5, 4, '#f3efe2'); R(ctx, 124, 77, 5, 1, '#fffdf4'); R(ctx, 129, 78, 1, 2, '#f3efe2'); R(ctx, 125, 79, 3, 1, '#c08a5a')
+  const st = Math.sin(t * 3)
+  PX(ctx, 126, 74 + (st > 0 ? 0 : 1), 'rgba(255,255,255,.5)'); PX(ctx, 127, 72 + (st > 0 ? 1 : 0), 'rgba(255,255,255,.35)')
+  R(ctx, 136, 76, 4, 6, '#e8e2d0'); PX(ctx, 137, 73, '#4c8f3e'); PX(ctx, 137, 72, '#ff9fb6'); PX(ctx, 138, 72, '#ffb3c7')
+  // 地板（陶土斜格）
+  for (let y = FLOOR; y < H; y += 2) for (let x = 0; x < W; x += 2) R(ctx, x, y, 2, 2, (((x >> 1) + (y >> 1)) % 2) ? '#d68c5d' : '#c47a4d')
+  R(ctx, 0, FLOOR, W, 1, 'rgba(90,40,10,.35)')
+  R(ctx, 4, 118, 52, 2, 'rgba(80,30,10,.18)'); R(ctx, 116, 118, 32, 2, 'rgba(80,30,10,.15)')
+  // 蝴蝶 / 光柱 / 尘埃
+  const bp = [[40, 56], [70, 48], [104, 56], [84, 62], [52, 60]][Math.floor(t * 1.5) % 5]
+  const flap = Math.floor(t * 6) % 2
+  PX(ctx, bp[0], bp[1], '#ffb3c7'); PX(ctx, bp[0] + (flap ? 2 : 1), bp[1], '#ffb3c7'); PX(ctx, bp[0] + 1, bp[1] + 1, '#5a4a3a')
+  ctx.save(); ctx.globalAlpha = 0.14 + 0.05 * Math.sin(t * 2)
+  for (let y = 0; y < FLOOR; y++) { const k = y / FLOOR; R(ctx, Math.round(96 - k * 22), y, 13, 1, '#fff6c4'); R(ctx, Math.round(38 - k * 6), y, 8, 1, '#fff6c4') }
+  ctx.restore()
+  for (let i = 0; i < 9; i++) PX(ctx, 30 + ((i * 17 + Math.floor(t * 3)) % 110), 30 + ((i * 23 + Math.floor(t * 2)) % 58), 'rgba(255,250,215,.8)')
+  if (isDarkHour(hr)) {
+    roomDim(ctx, 0.34)
+    for (let s = 0; s < 5; s++) for (const lx of [5, 11, 17, 23, 29]) glowAt(ctx, s * 32 + lx, 34 + Math.round(3 * Math.sin(Math.PI * lx / 32)), 8, '255,220,150', 0.12, 'lighter')
+    glowAt(ctx, 80, 10, 40, '150,175,255', 0.06, 'lighter')
+  }
+}
+
+/* ---------- 游戏角（赛博朋克） ---------- */
+
+const NEON_COLORS = ['#ff2fd6', '#8a3cff', '#2fe6ff', '#3c6bff']
+const PIXEL_FONT = {
+  P: ['XX.', 'X.X', 'XX.', 'X..', 'X..'],
+  L: ['X..', 'X..', 'X..', 'X..', 'XXX'],
+  A: ['.X.', 'X.X', 'XXX', 'X.X', 'X.X'],
+  Y: ['X.X', 'X.X', '.X.', '.X.', '.X.'],
+}
+
+function neonText(ctx, x, y, str, color) {
+  for (const ch of str) {
+    const g = PIXEL_FONT[ch]
+    for (let ry = 0; ry < 5; ry++) for (let rx = 0; rx < 3; rx++) if (g[ry][rx] === 'X') PX(ctx, x + rx, y + ry, color)
+    x += 4
+  }
+}
+
+export function drawGameCorner(ctx, hr, t) {
+  R(ctx, 0, 0, W, 94, '#1c1234')
+  for (let x = 0; x < W; x += 26) R(ctx, x, 0, 3, 94, '#140c27')
+  R(ctx, 0, 0, W, 7, '#0b0716')
+  const led = NEON_COLORS[Math.floor(t * 1.5) % 4]
+  R(ctx, 0, 7, W, 1, led)
+  ctx.save(); ctx.globalAlpha = 0.16; R(ctx, 0, 8, W, 8, led); ctx.restore()
+  // 窗
+  FR(ctx, 6, 12, 82, 64, '#3b2f5c')
+  R(ctx, 8, 14, 78, 60, '#090418')
+  for (let y = 0; y < 60; y++) { const k = y / 60; R(ctx, 8, 14 + y, 78, 1, `rgb(${Math.round(9 + 60 * k)},${Math.round(4 + 22 * k)},${Math.round(24 + 60 * k)})`) }
+  EL(ctx, 66, 26, 6, 6, '#e8e2c8'); EL(ctx, 64, 24, 3, 3, '#f6f0d8')
+  for (let i = 0; i < 6; i++) { const h = 10 + (i * 7) % 18; R(ctx, 10 + i * 12, 74 - h, 10, h, i % 2 ? '#140833' : '#1b1040') }
+  for (let i = 0; i < 18; i++) { const x = 10 + (i * 13) % 72, y = 40 + (i * 11) % 32; PX(ctx, x, y, i % 3 ? '#ff2fd6' : '#2fe6ff') }
+  R(ctx, 12, 64, 14, 4, 'rgba(255,47,214,.35)'); R(ctx, 40, 58, 10, 3, 'rgba(47,230,255,.35)')
+  const carX = 10 + Math.floor((t * 14) % 74), carY = 36 + Math.round(2 * Math.sin(t * 3))
+  R(ctx, carX, carY, 5, 2, '#2fe6ff'); R(ctx, carX - 4, carY + 1, 4, 1, 'rgba(47,230,255,.5)'); PX(ctx, carX + 5, carY, '#ff2fd6')
+  for (let i = 0; i < 16; i++) { const x = 8 + (i * 19 + Math.floor(t * 30)) % 78, y = 14 + (i * 13 + Math.floor(t * 40)) % 58; R(ctx, x, y, 1, 3, 'rgba(190,215,255,.22)') }
+  ctx.save(); ctx.globalAlpha = 0.12; R(ctx, 14, 14, 2, 58, '#fff'); R(ctx, 48, 14, 2, 58, '#fff'); ctx.restore()
+  // 霓虹 PLAY
+  const flick = (Math.floor(t * 7) % 23 === 0) ? 0.35 : 1
+  ctx.save(); ctx.globalAlpha = flick
+  neonText(ctx, 102, 16, 'PLAY', '#ff2fd6')
+  ctx.restore()
+  glowAt(ctx, 110, 18, 20, '255,47,214', 0.2, 'lighter')
+  // 六边形灯板
+  for (let i = 0; i < 3; i++) {
+    const cx = 104 + i * 10, cy = 30
+    const c = NEON_COLORS[(i + Math.floor(t * 1.5)) % 4]
+    for (let a = 0; a < 6; a++) { const an = Math.PI / 3 * a; PX(ctx, cx + Math.cos(an) * 4, cy + Math.sin(an) * 4, c) }
+    R(ctx, cx - 2, cy - 2, 4, 4, c)
+  }
+  // 桌子
+  R(ctx, 70, 82, 90, 4, '#251a3e'); R(ctx, 70, 82, 90, 1, '#3d2e66')
+  R(ctx, 70, 86, 90, 10, '#130d22')
+  R(ctx, 72, 96, 4, 2, '#0f0a1c'); R(ctx, 156, 96, 4, 2, '#0f0a1c')
+  R(ctx, 76, 90, 80, 1, led)
+  // 主屏
+  R(ctx, 88, 38, 62, 44, '#0b0716'); R(ctx, 88, 38, 62, 1, '#3d2e66'); R(ctx, 88, 80, 62, 2, '#0b0716')
+  R(ctx, 92, 42, 54, 34, '#1a1030')
+  for (let y = 0; y < 14; y++) { const ww = Math.round(20 * Math.sin(Math.PI * (y + 1) / 16)); R(ctx, 119 - (ww >> 1), 44 + y, ww, 1, y % 3 === 0 ? '#ff8a3d' : '#ff4d8d') }
+  R(ctx, 92, 58, 54, 1, '#ff2e88')
+  for (let y = 60; y < 76; y += 3) R(ctx, 92, y, 54, 1, y % 2 ? 'rgba(47,230,255,.35)' : 'rgba(47,230,255,.18)')
+  for (let x = 92; x < 146; x += 6) R(ctx, x, 60, 1, 16, 'rgba(47,230,255,.16)')
+  for (let y = 42; y < 76; y += 2) R(ctx, 92, y, 54, 1, 'rgba(0,0,0,.16)')
+  // 副屏代码
+  R(ctx, 72, 50, 18, 32, '#0b0716'); R(ctx, 74, 52, 14, 28, '#0f1a22')
+  for (let i = 0; i < 8; i++) R(ctx, 75, 54 + i * 3, 4 + (i * 5) % 9, 1, i % 3 ? '#4dff8a' : '#5fd4ff')
+  // 键盘 / 鼠标 / 耳机 / 罐
+  R(ctx, 98, 78, 30, 4, '#1b1430'); R(ctx, 100, 79, 26, 1, '#2b2040')
+  for (let i = 0; i < 8; i++) PX(ctx, 101 + i * 3, 79, i % 2 ? '#ff2fd6' : '#2fe6ff')
+  R(ctx, 132, 79, 5, 3, '#1b1430'); PX(ctx, 133, 78, '#2fe6ff')
+  R(ctx, 82, 74, 6, 8, '#2b2040'); R(ctx, 83, 71, 4, 4, '#3d2e66'); PX(ctx, 84, 70, '#ff2fd6')
+  R(ctx, 144, 74, 5, 8, '#20163a'); R(ctx, 144, 74, 5, 1, '#3d2e66')
+  // 机箱
+  R(ctx, 150, 58, 8, 24, '#0f0a1c'); R(ctx, 150, 58, 8, 1, '#3d2e66')
+  for (let i = 0; i < 3; i++) EL(ctx, 154, 62 + i * 7, 2, 2, NEON_COLORS[(i + Math.floor(t * 1.5)) % 4])
+  // 线缆
+  for (const c of [[96, '#2b2040'], [120, led], [142, '#2fe6ff']]) R(ctx, c[0], 76, 1, 8, c[1])
+  // 电竞椅
+  R(ctx, 28, 62, 26, 6, '#241a3d'); R(ctx, 28, 62, 26, 1, '#3d2e66')
+  R(ctx, 30, 68, 22, 20, '#1b1430'); R(ctx, 32, 70, 18, 16, '#241a3d')
+  R(ctx, 28, 68, 2, 20, '#1b1430'); R(ctx, 54, 68, 2, 20, '#1b1430')
+  R(ctx, 28, 68, 2, 20, '#3d2e66'); PX(ctx, 28, 70, '#ff2fd6'); PX(ctx, 54, 70, '#ff2fd6')
+  R(ctx, 32, 88, 3, 9, '#0f0a1c'); R(ctx, 47, 88, 3, 9, '#0f0a1c'); R(ctx, 30, 96, 24, 2, '#2b2040')
+  R(ctx, 40, 86, 2, 10, '#0f0a1c')
+  // 地板
+  R(ctx, 0, FLOOR, W, 22, '#0c0816')
+  for (let y = FLOOR; y < H; y += 4) R(ctx, 0, y, W, 1, 'rgba(60,40,110,.35)')
+  for (let x = 0; x < W; x += 20) R(ctx, x, FLOOR, 1, 22, 'rgba(30,20,60,.5)')
+  R(ctx, 84, 100, 62, 12, 'rgba(255,47,214,.10)'); R(ctx, 8, 102, 40, 10, 'rgba(47,230,255,.08)')
+  // 光
+  glowAt(ctx, 119, 58, 46, '255,47,214', 0.16, 'lighter')
+  glowAt(ctx, 110, 30, 30, '255,47,214', 0.1, 'lighter')
+  glowAt(ctx, 40, 30, 34, '47,230,255', 0.08, 'lighter')
+  glowAt(ctx, 76, 96, 36, '47,230,255', 0.1, 'lighter')
+  for (let i = 0; i < 6; i++) { ctx.globalAlpha = 0.05; R(ctx, 0, i, W, 1, '#000'); R(ctx, 0, H - 1 - i, W, 1, '#000') }
+  ctx.globalAlpha = 1
+}

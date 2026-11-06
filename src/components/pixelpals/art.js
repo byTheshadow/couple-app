@@ -12,7 +12,7 @@ export const FLOOR = 98
 
 // 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
 import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, USER_SCENE_RE, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
-import { drawWeatherScene, isWeatherScene, drawLivingRoom } from './rooms'
+import { drawWeatherScene, isWeatherScene, drawLivingRoom, drawKitchen, drawAttic, drawGreenhouse, drawGameCorner } from './rooms'
 import { drawRainStation } from './station'
 import { resolveWorn, SLOT_KEYS } from './outfits'
 export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
@@ -56,6 +56,7 @@ export const DEFAULT_BUTTONS = {
 export const DEFAULT_SETTINGS = {
   work_scene: 'office',
   idle_scene: null, // 第五轮：放空时去哪（null = 在家窗前，和以前一样；也可以是任何一个场景）
+  home_room: null, // 第十三轮：在家时待在哪（null = 跟着时间：早上卧室、其余客厅）
   home_theme: 'cream',
   wake_h: 6,
   work_h: 7,
@@ -206,6 +207,7 @@ export function normalizeSettings(row, slot) {
   return {
     work_scene: sceneKnown(r.work_scene) ? r.work_scene : d.work_scene,
     idle_scene: sceneKnown(r.idle_scene) ? r.idle_scene : null,
+    home_room: ROOM_KEYS.indexOf(r.home_room) >= 0 ? r.home_room : null,
     home_theme: has(THEMES, r.home_theme) ? r.home_theme : d.home_theme,
     wake_h: clampH(r.wake_h, d.wake_h),
     work_h: clampH(r.work_h, d.work_h, 47),
@@ -322,6 +324,10 @@ export function stateOf(s, clock) {
 /** 在家的几种状态（在家 / 玩耍 / 放空）都画家里的房间、都看得到墙纸（放空去了别的场景的除外，见 atHome） */
 export const isHomeLike = (st) => st === 'home' || st === 'play' || st === 'idle'
 
+/** 第十三轮：在家的房间（卧室 / 客厅 / 厨房 / 阁楼 / 花房 / 游戏角） */
+export const ROOM_KEYS = ['home', 'living', 'kitchen', 'attic', 'greenhouse', 'game']
+export const ROOM_NAMES = { home: '卧室', living: '客厅', kitchen: '厨房', attic: '阁楼', greenhouse: '花房', game: '游戏角' }
+
 /** 小人此刻在哪个场景：上班 = 上班地点；放空且选了「放空去哪」= 那个场景；其余都在家，返回 null */
 export function placeOf(settings, st) {
   if (st === 'work') return settings.work_scene
@@ -339,9 +345,12 @@ export const atHome = (settings, st) => isHomeLike(st) && !placeOf(settings, st)
  * 不在家（上班 / 去了别的场景）返回 null
  */
 export function roomOf(settings, st, hr) {
-  if (st === 'sleep') return 'home'
-  if (st === 'play' || st === 'idle') return 'living'
+  if (st === 'sleep') return 'home' // 睡觉永远回卧室
   if (st === 'work') return null
+  // 第十三轮：选了「在家时待在哪」就听用户的，没选才按时间走
+  const pick = settings && ROOM_KEYS.indexOf(settings.home_room) >= 0 ? settings.home_room : null
+  if (pick) return pick
+  if (st === 'play' || st === 'idle') return 'living'
   const h = shiftHour(settings, hr)
   return h >= settings.wake_h && h < settings.work_h ? 'home' : 'living'
 }
@@ -582,6 +591,13 @@ export function createActor(slot) {
 // 放空时站在窗前；玩耍时在地毯上这一块活动
 const IDLE_X = 83
 const PLAY_X = [92, 116]
+// 第十三轮：新房间的走位（站立点 + 活动范围），客厅和卧室用上面那两个老位置
+const ROOM_SPOTS = {
+  kitchen: { walk: [70, 92], stand: 82 },
+  attic: { walk: [62, 96], stand: 80 },
+  greenhouse: { walk: [64, 100], stand: 84 },
+  game: { walk: [58, 84], stand: 66 },
+}
 
 export const headTop = (a) => (a.state === 'sleep' ? 64 : FLOOR - 23)
 
@@ -596,8 +612,9 @@ export function stepActor(a, settings, hr, dt, mood) {
   const spot = place ? sceneSpot(place) : null // 数据场景里：能走的范围 + 放空站的位置（办公室、咖啡馆、家里没有，用下面的老位置）
   const room = place ? null : roomOf(settings, st, hr) // null = 在场景里；'home' = 卧室；'living' = 客厅
   const living = room === 'living'
-  const walk = spot ? spot.walk : living ? [72, 96] : [80, 92]
-  const stand = spot ? spot.stand : living ? 84 : IDLE_X
+  const rs = room && ROOM_SPOTS[room]
+  const walk = spot ? spot.walk : rs ? rs.walk : living ? [72, 96] : [80, 92]
+  const stand = spot ? spot.stand : rs ? rs.stand : living ? 84 : IDLE_X
   // 刚下班 / 刚起床回到家：先站到家里的中间；从在家切到玩耍/放空：直接走向各自的位置
   if (was && was !== st && isHomeLike(st) && !spot && (was === 'work' || was === 'sleep')) { a.x = 90; a.tx = 90 }
   // 进出数据场景（整个画面换了）：小人直接出现在那里的起点，不从上一个画面的位置滑过去
@@ -822,8 +839,15 @@ export function renderFrame(ctx, a, m, hr, t) {
   else if (place && isWeatherScene(place)) drawWeatherScene(ctx, place, t) // 下雨 / 雨夜 / 下雪 / 下雪夜：手写场景，雨雪要动
   else if (place === 'rainstation') drawRainStation(ctx, t) // 雨夜车站：手写，列车会开走
   else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
-  else if (roomOf(m.settings, a.state, hr) === 'living') drawLivingRoom(ctx, hr, t, m.gifts) // 在家醒着：客厅
-  else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
+  else {
+    const room = roomOf(m.settings, a.state, hr) // 在家：卧室 / 客厅 / 厨房 / 阁楼 / 花房 / 游戏角
+    if (room === 'living') drawLivingRoom(ctx, hr, t, m.gifts)
+    else if (room === 'kitchen') drawKitchen(ctx, hr, t)
+    else if (room === 'attic') drawAttic(ctx, hr, t)
+    else if (room === 'greenhouse') drawGreenhouse(ctx, hr, t)
+    else if (room === 'game') drawGameCorner(ctx, hr, t)
+    else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
+  }
   if (m.other) drawOther(ctx, m.other) // 相遇：TA 画在场景后层之后、我的人之前（两人叠在一起时我压着 TA）
   if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t, resolveWorn(m.settings && m.settings.outfit))
   if (data) drawScene(ctx, place, 'front', o)

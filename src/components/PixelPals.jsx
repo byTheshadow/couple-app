@@ -8,7 +8,7 @@ import {
   W, H, FLOOR, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, drawAvatar, headTop, hearts,
   normalizeButtons, compactBtnLines, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
-  placeOf, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
+  placeOf, roomOf, ROOM_NAMES, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
 import { meetOf, meetSpots, sceneSpot } from './pixelpals/scenes'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
@@ -99,6 +99,16 @@ const winFromList = (s) => homeSegments(s).flatMap(([f, t]) => range(f, t - 1))
 const winToList = (s, from) => homeSegments(s).filter(([f, t]) => from == null || (from >= f && from < t)).flatMap(([f, t]) => range(Math.max(f + 1, from == null ? 0 : from + 1), t))
 const PLAN_TABS = [['preset', '预设'], ['scene', '场景'], ['wear', '换装'], ['sched', '作息'], ['touch', '互动'], ['persona', '人设']]
 const SCHED_NAMES = { wake_h: '起床', work_h: '上班', off_h: '下班', sleep_h: '睡觉' }
+// 第十三轮：在家时待在哪（'' = 跟着时间走）
+const ROOM_CHOICES = [
+  { k: '', n: '跟着时间', e: '🕘' },
+  { k: 'home', n: '卧室', e: '🛏️' },
+  { k: 'living', n: '客厅', e: '🛋️' },
+  { k: 'kitchen', n: '厨房', e: '🍳' },
+  { k: 'attic', n: '阁楼', e: '🪟' },
+  { k: 'greenhouse', n: '花房', e: '🌷' },
+  { k: 'game', n: '游戏角', e: '🎮' },
+]
 const MINI_KEY = 'pp-mini'
 const MINI_POS_KEY = 'pp-mini-pos'
 const lsGet = (k) => { try { return window.localStorage.getItem(k) } catch { return null } }
@@ -290,11 +300,13 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         if (miniClockRef.current && miniClockRef.current.textContent !== clockText) miniClockRef.current.textContent = clockText
       }
 
+      const roomNow = place ? null : roomOf(cur.settings, actor.state, cur.hr)
+      const roomTag = roomNow ? ` · ${ROOM_NAMES[roomNow] || ''}` : ''
       const meetTag = met ? (mine ? ' · TA 也在这儿' : ' · 你也在这儿') : ''
       const label = (actor.state === 'work' ? `上班中 · ${SCENES[place] || '自己画的场景'}`
         : actor.state === 'play' ? '在家 · 玩耍中'
           : actor.state === 'idle' ? (place ? `放空中 · ${SCENES[place] || '自己画的场景'}` : '在家 · 放空中')
-            : actor.state === 'home' ? '在家' : '睡觉中') + meetTag
+            : actor.state === 'home' ? '在家' : '睡觉中') + roomTag + meetTag
       const key = `${fmtHour(cur.hr)}|${label}`
       if (key !== hudKey) {
         hudKey = key
@@ -915,6 +927,12 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
             ))}
             {userScenes.map((s) => (
               <button key={s.id} type="button" className={`pp-chip${draft.idle_scene === s.id ? ' on' : ''}`} onClick={() => setIdleScene(s.id)}>🎨 {s.name}</button>
+            ))}
+          </div>
+          <div className="pp-sub">在家时待在哪 <small>不选就跟着时间：早上卧室、其余客厅；睡觉永远回卧室</small></div>
+          <div className="pp-chips">
+            {ROOM_CHOICES.map(({ k, n, e }) => (
+              <button key={k || 'auto'} type="button" className={`pp-chip${(draft.home_room || '') === k ? ' on' : ''}`} onClick={() => set('home_room', k || null)}>{e} {n}</button>
             ))}
           </div>
           <p className="pp-hint">不设就是没有。时间要完整落在「起床后到上班前」或「下班后到睡觉前」里，两段不能重叠。玩耍时小人{slot === 'u2' ? '弹吉他' : '玩掌机'}；放空时站着发呆（在家就在窗前，选了别的地方就去那里）；拖下面的「预览时间」就能看到。</p>
