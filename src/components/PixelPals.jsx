@@ -13,6 +13,7 @@ import {
 import { meetOf, meetSpots, sceneSpot } from './pixelpals/scenes'
 import { ACT_DUR, drawAct, pruneActs } from './pixelpals/acts'
 import { catAt, catItem, catPersona, catDest, catWhyLine } from './pixelpals/cat'
+import { catSay } from './pixelpals/catvoice'
 import { todayKey } from '../lib/calendar'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
@@ -1170,6 +1171,7 @@ export default function PixelPals({ onExit }) {
     const c = live.current.tab === 'mine' ? myConsole.current : taConsole.current
     if (c && c.act) c.act(k)
   })
+  const [catVoice, setCatVoice] = useState('')
   const [sec, setSec] = useState('preset') // 设置面板当前翻到哪一页（信封角标要能直接跳到换装）
 
   const [tab, setTab] = useState('mine')
@@ -1249,6 +1251,7 @@ export default function PixelPals({ onExit }) {
   const catItems = catRowsWith.slice(0, 4).map((x) => catItem(x.row.day_key, x.dest.to)).reverse()
   const catLatest = catRowsWith.length ? catItem(catRowsWith[0].row.day_key, catRowsWith[0].dest.to) : null
   const todayDest = destOf(cat.today)
+  const aiOn = aiReady(loadAi())
   const catView = { home: catNow.home, justLeft: catNow.justLeft, items: catItems, latest: catLatest }
   const smallId = me && partner ? [me.id, partner.id].sort()[0] : null
   const iAmA = !!(me && smallId === me.id)
@@ -1256,6 +1259,23 @@ export default function PixelPals({ onExit }) {
   const taCatPick = cat.today ? (iAmA ? cat.today.pick_b : cat.today.pick_a) : null
   const shownDraft = draft || myPal.settings
   const catRoomNow = roomOf(shownDraft, stateOf(shownDraft, hr), hr) === 'cat'
+
+  // 猫的话：一天一张，AI 生成；没配 AI 就退回写死的那句
+  useEffect(() => {
+    if (!catRoomNow || !todayDest) { setCatVoice(''); return undefined }
+    let alive = true
+    catSay({
+      day: today,
+      scene: todayDest.to,
+      sceneName: SCENES[todayDest.to] || todayDest.to,
+      persona,
+      why: todayDest.why,
+      myPick: myCatPick,
+      taPick: taCatPick,
+      together: togetherMinutes,
+    }).then((r) => { if (alive) setCatVoice(r.text || '') }).catch(() => {})
+    return () => { alive = false }
+  }, [today, catRoomNow, todayDest && todayDest.to, todayDest && todayDest.why, persona.k, myCatPick, taCatPick, togetherMinutes])
   const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
   // 夜班（下班时间在次日）算的是「上班那天」的班：次日下班后结算的是昨天上的那一班
@@ -1496,6 +1516,8 @@ export default function PixelPals({ onExit }) {
                 <p className="pp-hint" style={{ margin: 0 }}>
                   {persona.n} · {todayDest ? catWhyLine(persona, todayDest.why, SCENES[todayDest.to]) : persona.note}
                 </p>
+                {catVoice && <p className="pp-quote">「{catVoice}」</p>}
+                {!catVoice && <p className="pp-hint" style={{ margin: 0 }}>{aiOn ? '它今天还没说话' : '配了 AI 之后，它会自己说一句'}</p>}
               </div>
             </section>
           )}

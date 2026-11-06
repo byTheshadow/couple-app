@@ -184,3 +184,6 @@
   padding: 3px 9px; border-radius: 999px; background: rgba(12,10,18,.72);
   border: 1px solid rgba(255,214,228,.22); color: #fff8fc; text-shadow: 1px 1px 0 rgba(0,0,0,.6);
   font-family: DotGothic16, var(--font), sans-serif; font-size: clamp(10px, 2.6vw, 12px); }
+/* 第十五轮 · 猫说话：AI 生成的那一句（一天一张，带缓存） */
+.pp-quote { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--chip);
+  border: 1px solid var(--line); font-size: 13px; line-height: 1.65; color: var(--ink); }
