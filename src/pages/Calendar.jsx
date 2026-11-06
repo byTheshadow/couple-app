@@ -9,6 +9,7 @@ import {
 } from '../lib/calendar'
 import { dailyCard } from '../lib/stories'
 import { countPendingVerdicts } from '../lib/badgeCount'
+import { usePalTogether } from '../components/pixelpals/store'
 import NoticeDot from '../components/NoticeDot'
 import QuestPopup from '../components/QuestPopup'
 import './calendar.css'
@@ -443,6 +444,8 @@ export default function Calendar() {
   const toastT = useRef(0)
   const { unlocks, loading: unlockLoading, error: unlockErr, mark } = useUnlocks(me && me.id)
   const { cover, loading: coverLoading, give: giveCover, clear: clearCover } = useCover(me && me.id, partner && partner.id)
+  // 第十四轮：那天两个人在像素小屋里一起待了多久（两边各记一份，取较大的那个）
+  const together = usePalTogether(me && me.id, partner && partner.id, sel)
 
   const say = useCallback((t) => {
     setToast(t)
@@ -783,6 +786,13 @@ export default function Calendar() {
                   <span className="t">{dailyCard(sel).title}</span>
                   <span className="s">{dailyCard(sel).kind === 'story' ? '故事' : '冷知识'}</span>
                 </div>
+                {together.total > 0 && (
+                  <div className="cal-row cal-together">
+                    <Svg name="heart" size={14} />
+                    <span className="t">{sel === today ? '今天' : '那天'}一起待了 {together.total} 分钟</span>
+                    <span className="s">像素小屋</span>
+                  </div>
+                )}
                 {dayCards.length > 0 && (
                   <DayCards
                     cards={dayCards}

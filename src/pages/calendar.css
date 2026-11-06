@@ -233,3 +233,7 @@
   border-bottom: 1px dashed var(--line); color: inherit; font: inherit; }
 .cal-task .t { color: var(--ink); }
 .cal-task:active { opacity: .7; }
+
+/* 第十四轮 · 一起待着：那天一起待了多久（读 pal_together，不进 cal_* 表） */
+.cal-together .t { color: #ff8fab; }
+.cal-together svg { color: #ff8fab; }

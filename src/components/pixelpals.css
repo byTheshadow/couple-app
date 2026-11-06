@@ -164,3 +164,23 @@
   100% { opacity: 0; }
 }
 .pp-ta-bubble { z-index: 3; }
+/* 第十四轮 · 一起待着：动作条（DOM，贴在 TA 头顶）+ 左下角的共处分钟 */
+.pp-actwrap { position: absolute; z-index: 4; top: 59%; transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pp-actbar { position: relative; display: flex; gap: 2px; padding: 3px; border-radius: 9px;
+  background: rgba(26,22,34,.94); border: 1px solid #ff9cba; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+.pp-actbar::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -5px;
+  border: 5px solid transparent; border-top-color: #ff9cba; }
+.pp-actbar.off { border-color: #6b6474; }
+.pp-actbar.off::after { border-top-color: #6b6474; }
+.pp-actbtn { border: 0; background: none; color: #fff8fc; cursor: pointer; white-space: nowrap;
+  font-family: DotGothic16, var(--font), sans-serif; font-size: clamp(10px, 2.6vw, 12px); padding: 4px 7px; border-radius: 6px; }
+.pp-actbtn:hover:not(:disabled) { background: rgba(255,156,186,.18); }
+.pp-actbtn:disabled { color: #8d8598; cursor: not-allowed; }
+.pp-acthint { border: 1px solid rgba(255,156,186,.35); background: rgba(12,10,18,.9); color: #fff8fc;
+  cursor: pointer; white-space: nowrap; border-radius: 8px; padding: 4px 8px;
+  font-family: DotGothic16, var(--font), sans-serif; font-size: clamp(10px, 2.6vw, 12px); }
+.pp-together { position: absolute; left: 8px; bottom: 8px; z-index: 2; pointer-events: none;
+  padding: 3px 9px; border-radius: 999px; background: rgba(12,10,18,.72);
+  border: 1px solid rgba(255,214,228,.22); color: #fff8fc; text-shadow: 1px 1px 0 rgba(0,0,0,.6);
+  font-family: DotGothic16, var(--font), sans-serif; font-size: clamp(10px, 2.6vw, 12px); }

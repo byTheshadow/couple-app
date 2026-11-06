@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, usePalTogether, usePalActChannel, palTogetherAdd, palNote, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
 import {
   W, H, FLOOR, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, drawAvatar, headTop, hearts,
@@ -11,6 +11,8 @@ import {
   placeOf, roomOf, ROOM_NAMES, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
 import { meetOf, meetSpots, sceneSpot } from './pixelpals/scenes'
+import { ACT_DUR, drawAct, pruneActs } from './pixelpals/acts'
+import { todayKey } from '../lib/calendar'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, shiftDay, INCOME } from './pixelpals/celebrate'
@@ -109,6 +111,13 @@ const ROOM_CHOICES = [
   { k: 'greenhouse', n: '花房', e: '🌷' },
   { k: 'game', n: '游戏角', e: '🎮' },
 ]
+// 第十四轮：相遇时能对 TA 做的三个动作（顺序就是动作条上的顺序）
+const ACTS = [
+  { k: 'wave', n: '挥手' },
+  { k: 'cup', n: '递奶茶' },
+  { k: 'heart', n: '贴爱心' },
+]
+const NOTE_HOME = '我先回家了，等你'
 const MINI_KEY = 'pp-mini'
 const MINI_POS_KEY = 'pp-mini-pos'
 const lsGet = (k) => { try { return window.localStorage.getItem(k) } catch { return null } }
@@ -131,7 +140,7 @@ function CountUp({ to }) {
   return <>{n}</>
 }
 
-const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other }, ref) {
+const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other, taOnline, onSendAct, onTogether, onLeaveNote, together }, ref) {
   const [banner, setBanner] = useState(null)
   const bannerT = useRef(0)
   const canvasRef = useRef(null)
@@ -141,6 +150,16 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
   const taBubbleRef = useRef(null) // TA 头顶的小气泡（点 TA 才冒，只有本机看得到）
   const taBubbleT = useRef(0)
   const otherHit = useRef(null) // TA 这一帧的可点区域（相遇时才有）
+  // 第十四轮 · 一起待着：动作条（DOM，位置每帧跟着 TA 的头）、正在播的小动作、共处计时
+  const actBarRef = useRef(null)
+  const [actBar, setActBar] = useState(false)
+  const actOpen = useRef(false)
+  const actsRef = useRef([])
+  const meetRef = useRef({ met: false, mine: 0, other: 0, sec: 0, slot: 'u2' })
+  const onlineRef = useRef(false)
+  onlineRef.current = !!taOnline
+  const togetherCb = useRef(onTogether)
+  togetherCb.current = onTogether
   const [meetBanner, setMeetBanner] = useState(null)
   const meetShown = useRef(null) // 这次进这个场景已经弹过横幅了
   const clockRef = useRef(null)
@@ -236,7 +255,49 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
     if (ev.drop) dropItem(a, ev.drop, land)
     else land()
   }, [say])
-  useImperativeHandle(ref, () => ({ play, say }), [play, say])
+  // 第十四轮 · 一起待着：把动作塞进特效队列。asSender 决定往哪边飞
+  // （我发的：从我到 TA；收到的：从 TA 到我。挥手画在「挥手那个人」头上，爱心贴在「被贴的人」头上）
+  const pushAct = useCallback((k, meX, taX, asSender) => {
+    const act = k === 'wave'
+      ? { k, to: asSender ? meX : taX }
+      : k === 'heart'
+        ? { k, to: asSender ? taX : meX }
+        : { k, from: asSender ? meX : taX, to: asSender ? taX : meX }
+    actsRef.current = [...actsRef.current, { ...act, t0: performance.now(), dur: ACT_DUR[k] || 800 }]
+  }, [])
+
+  // 我对 TA 做一个动作：本机先播，再广播给对面（不落库）；TA 不在线就只提示留句话
+  const doAct = useCallback((k) => {
+    const m = meetRef.current
+    actOpen.current = false
+    setActBar(false)
+    if (!m.met) return
+    if (!onlineRef.current) { say('TA 现在不在，先留句话？', 2.8); return }
+    pushAct(k, m.mine, m.other, true)
+    if (k === 'wave') {
+      const a = actorRef.current
+      if (a) a.react = 0.45
+      say(pick((LINES[slot] || LINES.u1).wave))
+    }
+    if (onSendAct) onSendAct(k)
+  }, [pushAct, say, onSendAct, slot])
+
+  // 收到 TA 的动作：从他那边播过来；挥手时他头顶冒一句
+  const playAct = useCallback((k) => {
+    const m = meetRef.current
+    if (!m.met) return
+    pushAct(k, m.mine, m.other, false)
+    if (k === 'wave') {
+      const el = taBubbleRef.current
+      if (el) {
+        el.textContent = pick((LINES[m.slot] || LINES.u2).wave)
+        el.classList.add('on')
+        taBubbleT.current = 2.4
+      }
+    }
+  }, [pushAct])
+
+  useImperativeHandle(ref, () => ({ play, say, act: playAct }), [play, say, playAct])
   useEffect(() => () => clearTimeout(bannerT.current), [])
   // 相遇横幅只活 0.8 秒（同一次进入只弹一次，没有第二次）
   useEffect(() => {
@@ -277,12 +338,41 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       const meet = meetOf(place, otherPlace) && !!sceneSpot(place)
       const spots = meet ? meetSpots(sceneSpot(place), actor.tx >= actor.x ? 1 : -1) : null
       const met = !!spots // 两个人都有站位才画（数据场景漏了 spot 就退回一个人）
+      // 第十四轮：记下这一帧的站位（点 TA / 动作条 / 共处计时都要用）
+      const mref = meetRef.current
+      mref.met = met
+      if (other) mref.slot = other.slot
+      if (met) { mref.mine = spots[0]; mref.other = spots[1] }
       renderFrame(ctx, actor, {
         slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood,
         other: met ? { x: spots[1], slot: other.slot, worn: resolveWorn(other.settings.outfit), t: now / 1000, flip: true } : null,
       }, cur.hr, now / 1000)
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
+      // 小动作（挥手 / 递奶茶 / 贴爱心）：画完这一帧再把过期的扔掉
+      if (actsRef.current.length) {
+        actsRef.current = pruneActs(actsRef.current, now)
+        for (const act of actsRef.current) drawAct(ctx, act, now)
+      }
+      // 动作条是 DOM：每帧跟着 TA 的头；两个人不再同场景就收掉
+      if (actOpen.current) {
+        const ab = actBarRef.current
+        if (met && ab) ab.style.left = `${(spots[1] / W) * 100}%`
+        else if (!met) { actOpen.current = false; setActBar(false) }
+      }
+      // 共处计时：连着站够 30 秒才开始记，之后每满 1 分钟报一次（单次 < 30 秒不记）
+      if (met) {
+        mref.sec += dt
+        if (mref.sec >= 30) {
+          const whole = Math.floor(mref.sec / 60)
+          if (whole >= 1) {
+            mref.sec -= whole * 60
+            if (togetherCb.current) togetherCb.current(whole)
+          }
+        }
+      } else if (mref.sec) {
+        mref.sec = 0
+      }
       // 相遇横幅：这次进入这个场景第一次遇见才弹一次，0.8 秒后自己消失
       if (!met) meetShown.current = null
       else if (meetShown.current !== place) {
@@ -348,26 +438,28 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
           tb.classList.remove('on')
         }
       }
-      otherHit.current = met ? { x0: spots[1] - 8, x1: spots[1] + 8, y0: FLOOR - 32, y1: FLOOR + 1, slot: other.slot } : null
+      // 点 TA 的判定区：24 宽（小人只有 16 宽，手机上手指点得中），30 高
+      otherHit.current = met ? { x0: spots[1] - 12, x1: spots[1] + 12, y0: FLOOR - 30, y1: FLOOR + 1, slot: other.slot } : null
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
   }, [slot])
 
-  // 点 TA 的小人：只在本机冒一句 TA 的台词，不写库、不计数
-  const pokeOther = (e) => {
+  // 点画面：点在 TA 身上 → 浮出动作条；点别处 → 收掉
+  const tapOther = (e) => {
     const hit = otherHit.current
     const c = canvasRef.current
     if (!hit || !c) return
     const r = c.getBoundingClientRect()
     const x = ((e.clientX - r.left) / r.width) * W
     const y = ((e.clientY - r.top) / r.height) * H
-    if (x < hit.x0 || x > hit.x1 || y < hit.y0 || y > hit.y1) return
-    const el = taBubbleRef.current
-    if (!el) return
-    el.textContent = pick((LINES[hit.slot] || LINES.u2).wave)
-    el.classList.add('on')
-    taBubbleT.current = 2.8
+    const inside = x >= hit.x0 && x <= hit.x1 && y >= hit.y0 && y <= hit.y1
+    if (!inside) {
+      if (actOpen.current) { actOpen.current = false; setActBar(false) }
+      return
+    }
+    actOpen.current = true
+    setActBar(true)
   }
 
   const poke = () => {
@@ -418,10 +510,25 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         </div>
         <div className="pp-bezel" ref={bezelRef}>
           <div className="pp-screen">
-            <canvas ref={canvasRef} width={W} height={H} onPointerUp={pokeOther} />
+            <canvas ref={canvasRef} width={W} height={H} onPointerUp={tapOther} />
             <div className="pp-hud"><span ref={clockRef} /><span ref={whereRef} className="where" /></div>
             <div ref={bubbleRef} className="pp-bubble" />
             <div ref={taBubbleRef} className="pp-bubble pp-ta-bubble" />
+            {together > 0 && <div className="pp-together">今天一起待了 {together} 分钟</div>}
+            {actBar && (
+              <div ref={actBarRef} className="pp-actwrap" style={{ left: `${(meetRef.current.other / W) * 100}%` }}>
+                {!taOnline && (
+                  <button type="button" className="pp-acthint" onClick={(e) => { e.stopPropagation(); actOpen.current = false; setActBar(false); if (onLeaveNote) onLeaveNote() }}>
+                    TA 现在不在，先留句话？
+                  </button>
+                )}
+                <div className={`pp-actbar${taOnline ? '' : ' off'}`} role="group" aria-label={`对${mine ? 'TA' : '你'}做点什么`}>
+                  {ACTS.map((a) => (
+                    <button key={a.k} type="button" className="pp-actbtn" disabled={!taOnline} onClick={(e) => { e.stopPropagation(); doAct(a.k) }}>{a.n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
             {meetBanner && (
               <div key={meetBanner.k} className="pp-meet-banner" role="status">在{meetBanner.name}遇见 {mine ? 'TA' : '你'}</div>
             )}
@@ -1051,6 +1158,13 @@ export default function PixelPals({ onExit }) {
   const myOutfits = usePalOutfits(me && me.id)
   const taOutfits = usePalOutfits(partner && partner.id)
   const outfitReqs = useOutfitReqs(me && me.id, partner && partner.id)
+  // 第十四轮 · 一起待着：今天的共处分钟 + 相遇时的动作通道（broadcast，不落库）
+  const today = todayKey(new Date())
+  const together = usePalTogether(me && me.id, partner && partner.id, today)
+  const actCh = usePalActChannel(me && me.id, partner && partner.id, (k) => {
+    const c = live.current.tab === 'mine' ? myConsole.current : taConsole.current
+    if (c && c.act) c.act(k)
+  })
   const [sec, setSec] = useState('preset') // 设置面板当前翻到哪一页（信封角标要能直接跳到换装）
 
   const [tab, setTab] = useState('mine')
@@ -1070,6 +1184,7 @@ export default function PixelPals({ onExit }) {
   const settledRef = useRef(false) // 这次打开页面已经问过服务端结算了
   const pendingRef = useRef(null) // 刚结算到的工资，等「我的小屋」在屏幕上了就放庆祝
   const [celebTick, setCelebTick] = useState(0)
+  const [mined, setMined] = useState(0) // 这次打开页面之后新攒下的共处分钟（服务端那一行是底数）
   const live = useRef({}) // 给回调用的「最新值」，免得回调里拿到旧的
 
   useEffect(() => {
@@ -1118,6 +1233,8 @@ export default function PixelPals({ onExit }) {
   }, [tab, celebTick, mySlot])
 
   const hr = sim == null ? real : sim
+  // 显示取较大的那个：我这边刚攒的（乐观值）可能已经超过服务端读回来的旧数
+  const togetherMinutes = Math.min(720, Math.max(together.total, together.mine + mined))
   const shownDraft = draft || myPal.settings
   const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
@@ -1151,6 +1268,20 @@ export default function PixelPals({ onExit }) {
     myConsole.current.play(reactionFor(L.mySlot, stateOf(L.mySettings, L.hr), row.kind, row.data, L.mySettings))
   }, [])
   const log = usePalLog(me && me.id, partner && partner.id, onLogInsert)
+
+  // 共处满 1 分钟：写一条（服务端按天累加、封顶 720）；本机先加个乐观值，数字当场就动
+  const onTogether = useCallback((m) => {
+    setMined((v) => v + m)
+    palTogetherAdd(m, todayKey(new Date()))
+  }, [])
+
+  // TA 不在线时留一句话：复用悄悄话（写 pal_notes + 进小人日记），零 SQL
+  const onLeaveNote = useCallback(async () => {
+    if (!partner) return
+    const { error } = await palNote(partner.id, NOTE_HOME)
+    if (error) { say(error); return }
+    say('留好啦，TA 下次打开小屋就能看到')
+  }, [partner, say])
 
   // 我对 TA 的小人做一件事：先让服务端结算（扣钱、加心情、写日记），成功了 TA 的小人才当场反应
   const onAct = async (kind, call, data) => {
@@ -1306,7 +1437,7 @@ export default function PixelPals({ onExit }) {
 
       {tab === 'mine' ? (
         <>
-          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} />
+          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} taOnline={actCh.online} onSendAct={actCh.send} onTogether={onTogether} onLeaveNote={onLeaveNote} together={togetherMinutes} />
           <Planner
             name={myName}
             slot={mySlot}
@@ -1351,6 +1482,11 @@ export default function PixelPals({ onExit }) {
             preview={false}
             onA={onPokeTa}
             other={{ slot: mySlot, settings: myPal.settings, hr }}
+            taOnline={actCh.online}
+            onSendAct={actCh.send}
+            onTogether={onTogether}
+            onLeaveNote={onLeaveNote}
+            together={togetherMinutes}
           />
           <Visitor
             ownerId={partner.id}

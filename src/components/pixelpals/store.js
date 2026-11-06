@@ -126,6 +126,7 @@ export async function saveSettings(userId, draft) {
     .update({
       work_scene: draft.work_scene,
       idle_scene: draft.idle_scene || null, // 第五轮新增：放空时去哪（null = 在家窗前）
+      home_room: draft.home_room || null, // 第十三轮：在家时待在哪（null = 跟着时间）
       home_theme: draft.home_theme,
       wake_h: draft.wake_h,
       work_h: draft.work_h,
@@ -457,4 +458,78 @@ export function useOutfitReqs(myId, taId) {
   }, [myId, reload])
 
   return { items, reload }
+}
+
+/* ---------- 一起待着（第十四轮） ---------- */
+
+// 分钟数：动作是瞬时的、走广播不落库，只有「一起待了几分钟」每天写一行（pixelpals-round14.sql）
+export const palTogetherAdd = (minutes, day) => rpc('pal_together_add', { p_minutes: minutes, p_day: day || null })
+
+/**
+ * 今天两个人一起待了多久：{ mine, ta, total, reload }
+ * 两边各自记自己那一行（谁在看小屋就记谁），显示取较大的那个——不做加法，免得一晚上翻倍
+ */
+export function usePalTogether(myId, taId, dayKey) {
+  const [rows, setRows] = useState({ mine: 0, ta: 0 })
+
+  const reload = useCallback(async () => {
+    if (!supabase || !myId || !dayKey) return
+    const owners = [myId, taId].filter(Boolean)
+    const { data, error } = await supabase
+      .from('pal_together')
+      .select('user_id, minutes')
+      .in('user_id', owners)
+      .eq('day_key', dayKey)
+    if (error || !data) return
+    setRows({
+      mine: (data.find((r) => r.user_id === myId) || {}).minutes || 0,
+      ta: (data.find((r) => r.user_id === taId) || {}).minutes || 0,
+    })
+  }, [myId, taId, dayKey])
+
+  useEffect(() => { reload() }, [reload])
+
+  return { mine: rows.mine, ta: rows.ta, total: Math.max(rows.mine, rows.ta), reload }
+}
+
+/**
+ * 相遇时的动作通道：{ online, send }
+ * - online：对面在不在线（Realtime presence，key 就是各自的 user id）
+ * - send(k)：挥手 / 递奶茶 / 贴爱心，走 broadcast，不写库、关掉就没了
+ * 频道名两个人算出来一样（两个 uid 排个序再拼），所以谁先订阅都能碰上。
+ * presence 偶尔慢半拍，所以「收到过动作」也当在线。
+ */
+export function usePalActChannel(myId, taId, onAct) {
+  const [online, setOnline] = useState(false)
+  const chRef = useRef(null)
+  const cb = useRef(onAct)
+  cb.current = onAct
+
+  useEffect(() => {
+    if (!supabase || !myId || !taId) return undefined
+    const key = [myId, taId].sort().join('-')
+    const ch = supabase.channel(`pal-act-${key}`, { config: { presence: { key: myId }, broadcast: { self: false } } })
+    chRef.current = ch
+    ch
+      .on('broadcast', { event: 'act' }, (msg) => {
+        setOnline(true)
+        if (msg && msg.payload && msg.payload.k && cb.current) cb.current(msg.payload.k)
+      })
+      .on('presence', { event: 'sync' }, () => {
+        const st = ch.presenceState ? ch.presenceState() : {}
+        setOnline(Object.keys(st || {}).some((k) => k !== myId))
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') { try { ch.track({ at: Date.now() }) } catch { /* 老版本没有 track 就算了 */ } }
+      })
+    return () => { chRef.current = null; setOnline(false); supabase.removeChannel(ch) }
+  }, [myId, taId])
+
+  const send = useCallback((k) => {
+    const ch = chRef.current
+    if (!ch || !k) return
+    try { ch.send({ type: 'broadcast', event: 'act', payload: { k, ts: Date.now() } }) } catch { /* 没连上就算了 */ }
+  }, [])
+
+  return { online, send }
 }
