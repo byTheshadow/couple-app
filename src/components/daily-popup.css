@@ -1,0 +1,123 @@
+/* ===========================================================================
+   每日弹窗（第十五轮）
+   玻璃面板 + 背后弥散光；左边是拟物的撕页日历，进来那天会翻掉昨天那页。
+   颜色全部走 styles.css 里的令牌（--ink / --win2 / --chip / --line …），跟着明暗主题走。
+   =========================================================================== */
+
+.ppd-dim { position: fixed; inset: 0; z-index: 240; display: grid; place-items: center; padding: 16px;
+  background: rgba(8, 8, 12, .52); overscroll-behavior: contain; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  animation: ppd-fade .18s ease-out both; }
+
+/* 背后那团会发光的颜色：透过玻璃渗出来，外面再晕一圈 */
+.ppd-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(560px, 92vw); height: min(680px, 90vh); border-radius: 60px;
+  pointer-events: none; filter: blur(38px); opacity: .95;
+  background:
+    radial-gradient(240px 200px at 16% 12%, rgba(255,120,160,.52), transparent 70%),
+    radial-gradient(260px 260px at 84% 44%, rgba(150,130,255,.44), transparent 72%),
+    radial-gradient(220px 220px at 28% 88%, rgba(255,190,120,.30), transparent 72%),
+    radial-gradient(200px 200px at 88% 86%, rgba(110,200,255,.24), transparent 72%); }
+
+.ppd-win { position: relative; width: min(420px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+  display: flex; flex-direction: column; gap: 14px; padding: 16px;
+  border-radius: 22px; background: var(--win2); border: 1px solid var(--gb);
+  box-shadow: 0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.10);
+  backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+  color: var(--ink); animation: ppd-in .22s cubic-bezier(.3,1.2,.4,1) both; }
+
+@keyframes ppd-fade { from { opacity: 0; } }
+@keyframes ppd-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+
+/* ── 页头：撕页日历 ─────────────────────────────── */
+.ppd-head { display: flex; gap: 16px; align-items: flex-start; }
+.ppd-pad { position: relative; width: 76px; height: 100px; perspective: 640px; flex: none; }
+.ppd-sheet { position: absolute; left: 0; top: 0; width: 76px; height: 100px; border-radius: 2px;
+  background: var(--chip); border: 1px solid var(--line); }
+.ppd-sheet.s3 { transform: translateY(7px); opacity: .55; }
+.ppd-sheet.s2 { transform: translateY(4px); opacity: .8; }
+
+.ppd-page { position: absolute; left: 0; top: 0; width: 76px; height: 100px; overflow: hidden;
+  background: #f9f4ea; border-radius: 2px; filter: drop-shadow(0 6px 12px rgba(0,0,0,.38));
+  clip-path: polygon(0px 0.3px, 4px 1.6px, 8px 0.3px, 12px 1.6px, 16px 0.3px, 20px 1.6px, 24px 0.3px, 28px 1.6px, 32px 0.3px, 36px 1.6px, 40px 0.3px, 44px 1.6px, 48px 0.3px, 52px 1.6px, 56px 0.3px, 60px 1.6px, 64px 0.3px, 68px 1.6px, 72px 0.3px, 76px 1.6px, 76px 0, 100% 100%, 0 100%);
+  background-image: repeating-linear-gradient(90deg, rgba(240,233,219,.9) 0 1px, transparent 1px 10px);
+  background-position: 0 24px; }
+.ppd-page .ppd-band { position: absolute; left: 0; top: 2px; width: 100%; height: 17px; background: #b03a2f;
+  color: #fcf2e6; font: 700 9px/17px Georgia, "Times New Roman", serif; letter-spacing: 2.2px; text-align: center; }
+.ppd-page b { position: absolute; left: 0; top: 22px; width: 100%; text-align: center;
+  font: 700 34px/1 Georgia, "Times New Roman", serif; color: #281e18; }
+.ppd-page i { position: absolute; left: 0; bottom: 10px; width: 100%; text-align: center; font-style: normal;
+  font: 400 11px/1 SimSun, "Songti SC", "Noto Serif SC", serif; color: #8e6e54; }
+
+.ppd-page.old { transform-origin: left center;
+  animation: ppd-tear 1.15s cubic-bezier(.42,0,.2,1) forwards; }
+@keyframes ppd-tear {
+  0%   { transform: rotateY(0deg); }
+  38%  { transform: rotateY(-72deg); }
+  72%  { transform: rotateY(-138deg); opacity: 1; }
+  100% { transform: rotateY(-176deg); opacity: 0; }
+}
+
+.ppd-headtext { padding-top: 20px; flex: 1; min-width: 0; }
+.ppd-title { font: 400 20px/1.35 SimSun, "Songti SC", "Noto Serif SC", serif; letter-spacing: 1px; }
+.ppd-sub { margin-top: 7px; font-size: 11.5px; color: var(--ink2); }
+.ppd-x { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--chip); color: var(--ink2); font-size: 17px; line-height: 1; }
+
+/* ── 今日卡 ─────────────────────────────────────── */
+.ppd-label { font-size: 10.5px; font-weight: 600; color: var(--ink2); margin: -2px 0 -6px; }
+.ppd-card { border-radius: 15px; padding: 14px 16px 12px; background: var(--chip); border: 1px solid var(--line); }
+.ppd-kind { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 600;
+  background: var(--ink); color: var(--win2); }
+.ppd-ct { margin: 9px 0 4px; font-size: 17px; font-weight: 700; line-height: 1.4; }
+.ppd-cs { margin: 0 0 6px; font-size: 11.5px; color: var(--ink2); }
+.ppd-cte { margin: 0; font-size: 12px; color: var(--ink2); line-height: 1.65; }
+.ppd-cfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--ink2); }
+.ppd-more { border: 0; background: none; padding: 0; cursor: pointer; color: var(--ink); font-size: 11px; font-weight: 600; }
+
+/* ── 今天的任务 ─────────────────────────────────── */
+.ppd-task { display: flex; flex-direction: column; gap: 10px; }
+.ppd-trow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ppd-pill { padding: 2px 9px; border-radius: 10px; font-size: 10.5px; font-weight: 600;
+  background: rgba(255,143,171,.20); color: #ff8fab; }
+.ppd-meta { font-size: 11px; color: var(--ink2); }
+.ppd-tt { margin: 0; font-size: 13px; line-height: 1.65; }
+.ppd-who { display: flex; gap: 8px; flex-wrap: wrap; }
+.ppd-w { padding: 5px 11px; border-radius: 13px; font-size: 11.5px; color: var(--ink2);
+  background: var(--chip); border: 1px solid var(--line); }
+.ppd-w::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 7px; vertical-align: 1px; border: 1px solid currentColor; }
+.ppd-w.on { color: var(--ink); }
+.ppd-w.on::before { background: #ff8fab; border-color: #ff8fab; }
+
+/* ── 你们俩的今天（只有这里看得到） ──────────────── */
+.ppd-tog { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ppd-heart { color: #ff8fab; font-size: 11px; }
+.ppd-tog b { font-size: 12.5px; font-weight: 700; margin-top: -16px; margin-left: 16px; }
+.ppd-note { font-size: 11.5px; color: var(--ink2); }
+
+/* ── 底部 ───────────────────────────────────────── */
+.ppd-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+.ppd-foot-note { font-size: 10.5px; color: var(--ink2); }
+.ppd-btns { display: flex; gap: 8px; }
+.ppd-btn { border: 0; cursor: pointer; border-radius: 13px; padding: 11px 16px; font: 600 12.5px/1 inherit;
+  background: var(--btn); color: var(--btnInk); }
+.ppd-btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+
+/* ── 关掉之后首页顶上那条 ───────────────────────── */
+.ppd-bar { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  margin: 0 0 14px; padding: 12px 14px; border-radius: 16px; color: var(--ink);
+  background: var(--glass); border: 1px solid var(--gb); box-shadow: var(--shadow); }
+.ppd-barchip { flex: none; width: 44px; height: 48px; border-radius: 9px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px; background: var(--ink); color: var(--win2);
+  font: 700 8.5px/1 Georgia, serif; letter-spacing: 1.4px; }
+.ppd-barchip b { font-size: 17px; letter-spacing: 0; }
+.ppd-bartext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ppd-bartext b { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppd-bartext span { font-size: 11px; color: var(--ink2); }
+.ppd-bargo { color: var(--ink2); font-size: 18px; line-height: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ppd-page.old { animation: none; display: none; }
+  .ppd-win, .ppd-dim { animation: none; }
+}

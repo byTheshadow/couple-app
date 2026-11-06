@@ -10,6 +10,7 @@ import Whisper from '../components/Whisper'
 import { NowPlaying } from '../components/Music'
 import LetterModal from '../components/LetterModal'
 import LetterComposer from '../components/LetterComposer'
+import DailyPopup from '../components/DailyPopup'
 import LetterArrival from '../components/LetterArrival'
 import Album from '../components/Album'
 import Anniversaries from '../components/Anniversaries'
@@ -281,6 +282,9 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* 今天：一天第一次打开弹一次；关掉之后这里留一条，点它重开 */}
+        <DailyPopup />
 
         {/* ===== 我的档案窗口：标题栏 + 证件（装在毛玻璃袋子里，点一下取出）+ 编辑入口 ===== */}
         <section className="win hero rv" data-depth>
