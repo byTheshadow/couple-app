@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
-import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, usePalTogether, usePalActChannel, palTogetherAdd, palNote, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
+import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, usePalTogether, usePalActChannel, usePalCat, palTogetherAdd, palCatPick, palNote, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
 import {
   W, H, FLOOR, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, drawAvatar, headTop, hearts,
@@ -12,6 +12,7 @@ import {
 } from './pixelpals/art'
 import { meetOf, meetSpots, sceneSpot } from './pixelpals/scenes'
 import { ACT_DUR, drawAct, pruneActs } from './pixelpals/acts'
+import { catAt, catItem } from './pixelpals/cat'
 import { todayKey } from '../lib/calendar'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
@@ -110,6 +111,7 @@ const ROOM_CHOICES = [
   { k: 'attic', n: '阁楼', e: '🪟' },
   { k: 'greenhouse', n: '花房', e: '🌷' },
   { k: 'game', n: '游戏角', e: '🎮' },
+  { k: 'cat', n: '猫屋', e: '🐈' },
 ]
 // 第十四轮：相遇时能对 TA 做的三个动作（顺序就是动作条上的顺序）
 const ACTS = [
@@ -140,7 +142,7 @@ function CountUp({ to }) {
   return <>{n}</>
 }
 
-const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other, taOnline, onSendAct, onTogether, onLeaveNote, together }, ref) {
+const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other, taOnline, onSendAct, onTogether, onLeaveNote, together, cat }, ref) {
   const [banner, setBanner] = useState(null)
   const bannerT = useRef(0)
   const canvasRef = useRef(null)
@@ -184,7 +186,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
     } catch { /* 位置坏了就用默认的 */ }
     return null
   })
-  live.current = { slot, settings, state, hr, other }
+  live.current = { slot, settings, state, hr, other, cat }
 
   useEffect(() => {
     const el = bezelRef.current
@@ -346,6 +348,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       renderFrame(ctx, actor, {
         slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood,
         other: met ? { x: spots[1], slot: other.slot, worn: resolveWorn(other.settings.outfit), t: now / 1000, flip: true } : null,
+        cat: cur.cat,
       }, cur.hr, now / 1000)
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
@@ -1161,6 +1164,8 @@ export default function PixelPals({ onExit }) {
   // 第十四轮 · 一起待着：今天的共处分钟 + 相遇时的动作通道（broadcast，不落库）
   const today = todayKey(new Date())
   const together = usePalTogether(me && me.id, partner && partner.id, today)
+  // 第十五轮 · 猫屋：同一只猫，两个人看到的应该是同一份记录
+  const cat = usePalCat(me && me.id, partner && partner.id, today)
   const actCh = usePalActChannel(me && me.id, partner && partner.id, (k) => {
     const c = live.current.tab === 'mine' ? myConsole.current : taConsole.current
     if (c && c.act) c.act(k)
@@ -1235,7 +1240,18 @@ export default function PixelPals({ onExit }) {
   const hr = sim == null ? real : sim
   // 显示取较大的那个：我这边刚攒的（乐观值）可能已经超过服务端读回来的旧数
   const togetherMinutes = Math.min(720, Math.max(together.total, together.mine + mined))
+  // 猫屋：它此刻在不在家、架子上都有什么
+  const catNow = catAt(hr)
+  const catRowsWith = cat.rows.filter((r) => r.to_scene)
+  const catItems = catRowsWith.slice(0, 4).map((r) => catItem(r.day_key, r.to_scene)).reverse()
+  const catLatest = catRowsWith.length ? catItem(catRowsWith[0].day_key, catRowsWith[0].to_scene) : null
+  const catView = { home: catNow.home, justLeft: catNow.justLeft, items: catItems, latest: catLatest }
+  const smallId = me && partner ? [me.id, partner.id].sort()[0] : null
+  const iAmA = !!(me && smallId === me.id)
+  const myCatPick = cat.today ? (iAmA ? cat.today.pick_a : cat.today.pick_b) : null
+  const taCatPick = cat.today ? (iAmA ? cat.today.pick_b : cat.today.pick_a) : null
   const shownDraft = draft || myPal.settings
+  const catRoomNow = roomOf(shownDraft, stateOf(shownDraft, hr), hr) === 'cat'
   const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
   // 夜班（下班时间在次日）算的是「上班那天」的班：次日下班后结算的是昨天上的那一班
@@ -1282,6 +1298,14 @@ export default function PixelPals({ onExit }) {
     if (error) { say(error); return }
     say('留好啦，TA 下次打开小屋就能看到')
   }, [partner, say])
+  // 猫屋：给猫指一个地方（两个人各指一个，服务端算它去哪）
+  const onCatPick = useCallback(async (scene) => {
+    if (!partner) { say('还没有另一半的账号'); return }
+    const { error } = await palCatPick(scene, partner.id)
+    if (error) { say(error); return }
+    await cat.reload()
+    say(`指好了：${SCENES[scene] || scene}`)
+  }, [partner, cat, say])
 
   // 我对 TA 的小人做一件事：先让服务端结算（扣钱、加心情、写日记），成功了 TA 的小人才当场反应
   const onAct = async (kind, call, data) => {
@@ -1437,7 +1461,37 @@ export default function PixelPals({ onExit }) {
 
       {tab === 'mine' ? (
         <>
-          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} taOnline={actCh.online} onSendAct={actCh.send} onTogether={onTogether} onLeaveNote={onLeaveNote} together={togetherMinutes} />
+          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} taOnline={actCh.online} onSendAct={actCh.send} onTogether={onTogether} onLeaveNote={onLeaveNote} together={togetherMinutes} cat={catView} />
+
+          {/* 猫屋：今天让它去哪（两个人各指一个，它自己挑） */}
+          {catRoomNow && (
+            <section className="win">
+              <header className="tb">
+                <Svg name="home" size={14} />
+                <b>猫屋</b>
+                <span className="grow" />
+                <span className="mono">{catNow.home ? '猫在家' : catNow.justLeft ? '刚走开' : '出门了'}</span>
+              </header>
+              <div className="wb" style={{ gap: 10 }}>
+                <p className="pp-hint" style={{ margin: 0 }}>今天让它去哪？你和 TA 各指一个，猫自己挑。</p>
+                <div className="pp-chips">
+                  {SCENE_LIST.map((sc) => (
+                    <button
+                      key={sc.k}
+                      type="button"
+                      className={`pp-chip${myCatPick === sc.k ? ' on' : ''}`}
+                      onClick={() => onCatPick(sc.k)}
+                    >{sc.e} {sc.n}</button>
+                  ))}
+                </div>
+                <p className="pp-hint" style={{ margin: 0 }}>
+                  你：{myCatPick ? (SCENES[myCatPick] || myCatPick) : '还没指'}
+                  {' · '}TA：{taCatPick ? (SCENES[taCatPick] || taCatPick) : '还没指'}
+                  {' · '}{cat.today && cat.today.to_scene ? `它今天去了 ${SCENES[cat.today.to_scene] || cat.today.to_scene}` : '它还没定'}
+                </p>
+              </div>
+            </section>
+          )}
           <Planner
             name={myName}
             slot={mySlot}
@@ -1487,6 +1541,7 @@ export default function PixelPals({ onExit }) {
             onTogether={onTogether}
             onLeaveNote={onLeaveNote}
             together={togetherMinutes}
+            cat={catView}
           />
           <Visitor
             ownerId={partner.id}

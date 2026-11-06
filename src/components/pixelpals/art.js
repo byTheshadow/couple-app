@@ -12,7 +12,7 @@ export const FLOOR = 98
 
 // 场景（数据）、礼物、窗和天空都放在 scenes.js；这里重新导出，别的文件照旧从 art.js 里拿
 import { SCENES, SCENE_ICON, SCENE_LIST, GIFTS, USER_SCENE_RE, drawWindow, drawGifts, drawGiftGlows, drawScene, sceneSpot, isDataScene } from './scenes'
-import { drawWeatherScene, isWeatherScene, drawLivingRoom, drawKitchen, drawAttic, drawGreenhouse, drawGameCorner } from './rooms'
+import { drawWeatherScene, isWeatherScene, drawLivingRoom, drawKitchen, drawAttic, drawGreenhouse, drawGameCorner, drawCatRoom } from './rooms'
 import { drawRainStation } from './station'
 import { resolveWorn, SLOT_KEYS } from './outfits'
 export { SCENES, SCENE_ICON, SCENE_LIST, GIFTS }
@@ -324,9 +324,9 @@ export function stateOf(s, clock) {
 /** 在家的几种状态（在家 / 玩耍 / 放空）都画家里的房间、都看得到墙纸（放空去了别的场景的除外，见 atHome） */
 export const isHomeLike = (st) => st === 'home' || st === 'play' || st === 'idle'
 
-/** 第十三轮：在家的房间（卧室 / 客厅 / 厨房 / 阁楼 / 花房 / 游戏角） */
-export const ROOM_KEYS = ['home', 'living', 'kitchen', 'attic', 'greenhouse', 'game']
-export const ROOM_NAMES = { home: '卧室', living: '客厅', kitchen: '厨房', attic: '阁楼', greenhouse: '花房', game: '游戏角' }
+/** 第十三轮：在家的房间（卧室 / 客厅 / 厨房 / 阁楼 / 花房 / 游戏角）；第十四轮加了猫屋 */
+export const ROOM_KEYS = ['home', 'living', 'kitchen', 'attic', 'greenhouse', 'game', 'cat']
+export const ROOM_NAMES = { home: '卧室', living: '客厅', kitchen: '厨房', attic: '阁楼', greenhouse: '花房', game: '游戏角', cat: '猫屋' }
 
 /** 小人此刻在哪个场景：上班 = 上班地点；放空且选了「放空去哪」= 那个场景；其余都在家，返回 null */
 export function placeOf(settings, st) {
@@ -597,6 +597,7 @@ const ROOM_SPOTS = {
   attic: { walk: [62, 96], stand: 80 },
   greenhouse: { walk: [64, 100], stand: 84 },
   game: { walk: [58, 84], stand: 66 },
+  cat: { walk: [104, 142], stand: 126 },
 }
 
 export const headTop = (a) => (a.state === 'sleep' ? 64 : FLOOR - 23)
@@ -846,6 +847,7 @@ export function renderFrame(ctx, a, m, hr, t) {
     else if (room === 'attic') drawAttic(ctx, hr, t)
     else if (room === 'greenhouse') drawGreenhouse(ctx, hr, t)
     else if (room === 'game') drawGameCorner(ctx, hr, t)
+    else if (room === 'cat') drawCatRoom(ctx, hr, t, m.cat)
     else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
   }
   if (m.other) drawOther(ctx, m.other) // 相遇：TA 画在场景后层之后、我的人之前（两人叠在一起时我压着 TA）

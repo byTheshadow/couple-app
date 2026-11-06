@@ -533,3 +533,30 @@ export function usePalActChannel(myId, taId, onAct) {
 
   return { online, send }
 }
+/* ---------- 猫屋（第十五轮） ---------- */
+
+// 我给它指一个地方：两个人都指完，服务端才算它去哪（pixelpals-round15.sql）
+export const palCatPick = (scene, peer) => rpc('pal_cat_pick', { p_scene: scene, p_peer: peer })
+
+/**
+ * 猫这几天的记录：{ rows, today, reload }
+ * rows 一天一行（pair + day_key），最近的在前；today 是今天那行（可能还没有）
+ */
+export function usePalCat(myId, peerId, dayKey, days = 6) {
+  const [rows, setRows] = useState([])
+
+  const reload = useCallback(async () => {
+    if (!supabase || !myId || !peerId) return
+    const pair = [myId, peerId].sort().join('-')
+    const { data } = await supabase
+      .from('pal_cat').select('*')
+      .eq('pair', pair)
+      .order('day_key', { ascending: false })
+      .limit(days)
+    setRows(data || [])
+  }, [myId, peerId, days])
+
+  useEffect(() => { reload() }, [reload])
+
+  return { rows, today: rows.find((r) => r.day_key === dayKey) || null, reload }
+}

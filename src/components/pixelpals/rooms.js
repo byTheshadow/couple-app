@@ -903,3 +903,255 @@ export function drawGameCorner(ctx, hr, t) {
   for (let i = 0; i < 6; i++) { ctx.globalAlpha = 0.05; R(ctx, 0, i, W, 1, '#000'); R(ctx, 0, H - 1 - i, W, 1, '#000') }
   ctx.globalAlpha = 1
 }
+
+/* ===========================================================================
+   猫屋（第十四轮 · 一起养的猫）
+   - 房间：暖木小屋，壁纸 + 护墙板 + 木地板 + 窗帘 + 台灯 + 猫窝 + 坐垫 + 食盆
+   - 猫在家：蜷在坐垫上（眨眼 / 呼吸 / 冒心）；刚出门：爪印 + 猫毛 + 滚出来的毛线球
+   - 架子上摆它捡回来的东西；墙上贴着最近一张明信片
+   - 白天 / 夜里两套光，按 hour 切，和别的房间一样
+   =========================================================================== */
+
+let CTX = null
+let CAT_STATE = { home: false, justLeft: false, items: [], latest: null }
+
+const catR = (x, y, w, h, c) => { if (w <= 0 || h <= 0) return; CTX.fillStyle = c; CTX.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)) }
+const catP = (x, y, c) => catR(x, y, 1, 1, c)
+function catEll(cx, cy, rx, ry, c) {
+  if (ry === 0) { catR(cx - rx, cy, rx * 2 + 1, 1, c); return }
+  for (let y = -ry; y <= ry; y++) {
+    const w = Math.round(rx * Math.sqrt(1 - (y * y) / (ry * ry)))
+    catR(cx - w, cy + y, w * 2 + 1, 1, c)
+  }
+}
+function catSpr(rows, map, x, y) {
+  for (let j = 0; j < rows.length; j++) {
+    const row = rows[j]
+    for (let i = 0; i < row.length; i++) { const col = map[row[i]]; if (col) catP(x + i, y + j, col) }
+  }
+}
+
+/* 它捡回来的东西（架子上的四格） */
+const CAT_ITEMS = {
+  ticket: { s: ['XXXXX', 'XbbbX', 'XbXbX', 'XbbbX', 'XXXXX'], p: { X: '#8a6a45', b: '#f5e8c6' } },
+  shell:  { s: ['.XXX.', 'XaaaX', 'XaabX', '.XaX.', '..X..'], p: { X: '#d9c3a5', a: '#f4b3a2', b: '#fde2d6' } },
+  leaf:   { s: ['..XX.', '.XdX.', 'XdddX', '.XddX', '..X..'], p: { X: '#7a4b2a', d: '#d98a3f' } },
+  marble: { s: ['.XXX.', 'XcccX', 'XcccX', '.XcX.', '..X..'], p: { X: '#5f7f8f', c: '#a8d6e4' } },
+  candy:  { s: ['X.X..', 'XcX..', 'XcX..', 'X.X..', '.....'], p: { X: '#c0554f', c: '#f2a2ac' } },
+}
+const CAT_LOOT_SPOTS = [[113, 36], [121, 36], [129, 36], [137, 36]]
+
+function catDrawLoot() {
+  const list = (CAT_STATE.items || []).slice(-4)
+  list.forEach((k, i) => {
+    const it = CAT_ITEMS[k]
+    if (!it) return
+    catSpr(it.s, it.p, CAT_LOOT_SPOTS[i][0], CAT_LOOT_SPOTS[i][1])
+  })
+}
+
+function catDrawPostcard(t, night) {
+  catR(114, 14, 20, 17, '#fbf6ea'); catR(114, 14, 20, 1, '#e2d7c2')
+  if (!CAT_STATE.latest) {
+    catR(116, 18, 16, 1, '#d8cdb8'); catR(116, 21, 10, 1, '#d8cdb8')
+    return
+  }
+  catR(116, 16, 9, 7, night ? '#3c4a6a' : '#bfe0f5')
+  catR(116, 21, 9, 2, night ? '#2b3550' : '#7aa86a')
+  catR(127, 17, 5, 3, '#e8dfc8'); catR(128, 18, 3, 1, '#c9b9a0')
+  catR(127, 23, 5, 1, '#c9beb0'); catR(127, 25, 4, 1, '#c9beb0'); catR(127, 27, 5, 1, '#c9beb0')
+  catR(123, 12, 3, 3, '#8a6a45')
+}
+
+/** 猫屋。cat = { home, justLeft, items: [], latest } */
+export function drawCatRoom(ctx, hr, t, cat) {
+  const night = hr >= 19 || hr < 6.5
+  CAT_STATE = { home: false, justLeft: false, items: [], latest: null, ...(cat || {}) }
+  CTX = ctx
+  catR(0, 0, W, H, '#3a2a22')
+  catDrawRoom(t, night)
+  catDrawHouse()
+  catDrawRug()
+  catDrawMat()
+  if (CAT_STATE.justLeft) catDrawPawPrints()
+  catDrawBasket(!CAT_STATE.justLeft)
+  catDrawBowls(!CAT_STATE.justLeft, t)
+  catDrawCushion(!!CAT_STATE.justLeft)
+  if (CAT_STATE.home) catDrawCat(t)
+  if (CAT_STATE.justLeft) catDrawLeftovers(t, 999)
+  catDrawLight(t, night)
+  catDrawLoot()
+  catDrawPostcard(t, night)
+  if (!night) { CTX.fillStyle = 'rgba(255,246,228,0.06)'; CTX.fillRect(0, 0, W, H) }
+}
+
+const CATK = { o:'#5a3420', O:'#f2a558', D:'#d77f38', L:'#fff0d6', E:'#3a2620', W:'#ffffff', P:'#f08aa0', K:'#f7a7a0' }
+const CATSPR = ['..oo..........oo..','..oPo........oPo..','.oOPP........PPOo.','.OOOOOOODDDOOOOOO.','.OOOOOODOOOOOOOOO.','oOOOOOOOOOOOOOOOOo','oOOOWEOOOOOOEWOOOo','oOOOEEOOOOOOEEOOOo','oOOOEEOOOOOOEEOOOo','oOOOOOOOPPOOOOOOOo','oOOOOOOoOOoOOOOOOo','oOOOOOOOooOOOOOOOo','.OOOOOOLLLLOOOOOO.','.ooooooLLLooooooo.','...oOOLLLLLLOOo...','...oOOLLLLLLOOo...','...oOOLLLLLLOOo...','...oOOLLLLLLOOo...','...oOLLLLLLLLOo...','...oLLLLooLLLLo...','...oooooooooooo...']
+const CATSPR_BLINK = ['..oo..........oo..','..oPo........oPo..','.oOPP........PPOo.','.OOOOOOODDDOOOOOO.','.OOOOOODOOOOOOOOO.','oOOOOOOOOOOOOOOOOo','oOOOOOOOOOOOOOOOOo','oOOOooOOOOOOooOOOo','oOOOOOOOOOOOOOOOOo','oOOOOOOOPPOOOOOOOo','oOOOOOOoOOoOOOOOOo','oOOOOOOOooOOOOOOOo','.OOOOOOLLLLOOOOOO.','.ooooooLLLooooooo.','...oOOLLLLLLOOo...','...oOOLLLLLLOOo...','...oOOLLLLLLOOo...','...oOOLLLLLLOOo...','...oOLLLLLLLLOo...','...oLLLLooLLLLo...','...oooooooooooo...']
+const CATHEART = ['.P.P.', 'PPPPP', 'PPPPP', '.PPP.', '..P..']
+const CATFISH = ['......oo....','..o..oFFo...','.oFooFFFFo..','.oFFFFFFEFo.','.oFooFFFFo..','..o..oFFo...','......oo....']
+
+function catDrawRoom(t, night) {
+  catR(0,0,W,64, night ? '#e7b98f' : '#f0c8a2')
+  for (let x=3;x<W;x+=10) catR(x,0,3,63,'#deac80')
+  for (let x=8,j=0;x<W;x+=10,j++){
+    for (let y=6+(j%2)*7;y<58;y+=14){
+      catP(x,y,'#f4d3ae'); catP(x-1,y+1,'#f4d3ae'); catP(x+1,y+1,'#f4d3ae'); catP(x,y+2,'#f4d3ae'); catP(x,y+1,'#e98a7a')
+    }
+  }
+  catR(0,0,W,2,'#b97a55')
+  catR(0,63,W,21, night ? '#a8674a' : '#b0714f')
+  catR(0,63,W,2,'#e3b58a'); catR(0,65,W,1,'#7f4a35')
+  for (let x=4;x<W;x+=20){ catR(x,69,16,11,'#9a5d42'); catR(x,69,16,1,'#7f4a35'); catR(x,79,16,1,'#c07f5c') }
+  catR(0,82,W,2,'#5e3626')
+  catR(0,84,W,36, night ? '#8a5639' : '#96603f')
+  for (let row=0,y=84;y<H;y+=6,row++){
+    catR(0,y,W,1,'#6e4130')
+    for (let x=(row%2?12:32);x<W;x+=40) catR(x,y,1,6,'#6e4130')
+    for (let x=(row*17)%23;x<W;x+=23) catR(x,y+3,3,1,'#97613f')
+  }
+  catR(52,9,60,2,'#4a3428'); catR(51,8,3,4,'#4a3428'); catR(110,8,3,4,'#4a3428')
+  catR(62,12,40,36,'#f3e0c2')
+  if (night) { catR(65,15,34,30,'#2b2d5c'); catR(65,31,34,14,'#35356c') }
+  else {
+    catR(65,15,34,30,'#8cc4ea'); catR(65,31,34,14,'#bfe0f5')
+    catR(67,19,9,3,'#ffffff'); catR(76,18,7,3,'#ffffff'); catR(85,22,11,3,'#ffffff')
+    catR(68,26,6,2,'#eaf6ff'); catR(88,28,10,2,'#eaf6ff')
+    catR(65,40,34,5,'#9dbf7a')   // 窗外远处一点树/屋顶
+  }
+  if (night) {
+    ;[[68,18],[73,24],[85,17],[95,33],[70,34],[77,19],[90,27]].forEach(([x,y],i)=>{
+      if ((t+i*7)%22 < 16) catP(x,y,'#fff6d8')
+      if ((t+i*5)%40 < 4){ catP(x-1,y,'#9aa0e0'); catP(x+1,y,'#9aa0e0'); catP(x,y-1,'#9aa0e0'); catP(x,y+1,'#9aa0e0') }
+    })
+    catEll(92,21,3,3,'#fff2c4'); catP(91,20,'#efdca0'); catP(93,22,'#efdca0')
+    catR(65,40,9,5,'#1d1e44'); catR(74,37,7,8,'#1d1e44'); catR(83,39,6,6,'#1d1e44'); catR(89,36,10,9,'#1d1e44')
+    catP(76,39,'#f2c46b'); catP(78,41,'#f2c46b'); catP(92,39,'#f2c46b'); catP(95,42,(t%30)<20?'#f2c46b':'#1d1e44')
+  } else {
+    catR(65,40,9,4,'#7aa86a'); catR(74,38,7,6,'#6f9e60'); catR(83,40,6,4,'#7aa86a'); catR(89,37,10,7,'#67955a')
+    catP(76,39,'#e8f0c0'); catP(92,39,'#e8f0c0')
+  }
+  catR(81,15,2,30,'#f3e0c2'); catR(65,29,34,2,'#f3e0c2')
+  catR(59,48,46,3,'#e8cfa8'); catR(59,51,46,1,'#b88a63')
+  catR(68,38,2,7,'#5f9a5a'); catR(66,40,1,3,'#5f9a5a'); catR(66,42,2,1,'#5f9a5a'); catR(70,39,1,2,'#5f9a5a'); catP(68,37,'#f08aa0')
+  catR(66,44,6,4,'#c2603f'); catR(66,44,6,1,'#d9774f')
+  for (const cx of [56,100]){
+    catR(cx,10,8,40,'#b9475a'); catR(cx-1,44,10,12,'#b9475a')
+    catR(cx+2,10,1,46,'#93354a'); catR(cx+5,10,1,46,'#93354a')
+    catR(cx,33,8,2,'#f2c46b')
+  }
+  // 交给 catDrawLoot() / catDrawPostcard() 画（内容由当天状态决定）                                  // 木夹
+  catR(112,42,30,2,'#7d4a2e'); catR(115,44,2,3,'#7d4a2e'); catR(137,44,2,3,'#7d4a2e')
+  // 交给 catDrawLoot() / catDrawPostcard() 画（内容由当天状态决定）
+  catR(147,50,2,34,'#4a3428'); catEll(148,85,5,1,'#4a3428')
+  for (let i=0;i<12;i++){ const hw = 4 + Math.floor(i/2)
+    catR(148-hw,38+i,hw*2,1, night ? (i%4===3 ? '#e9b85e' : '#f6d27a') : (i%4===3 ? '#d8c9a6' : '#e6d9b8')) }
+}
+
+function catDrawHouse() {
+  catR(8,92,38,2,'rgba(40,20,15,.35)')
+  catR(10,64,34,28,'#b06f45')
+  for (let y=68;y<92;y+=5) catR(10,y,34,1,'#9a5d3a')
+  catR(9,64,1,28,'#5e3626'); catR(44,64,1,28,'#5e3626')
+  catR(10,65,34,2,'rgba(0,0,0,.18)')
+  for (let i=0;i<=18;i++){
+    const h = Math.round(i*1.15)+1
+    catR(27-h,46+i,h*2+1,1,(Math.floor(i/3)%2)?'#7a4767':'#6a3a5a')
+    catP(27-h,46+i,'#4a2440'); catP(27+h,46+i,'#4a2440')
+  }
+  catSpr(CATHEART,{P:'#f3a3b4'},25,53)
+  catR(21,67,12,4,'#f3e0c2'); catR(26,69,2,1,'#7d4a2e'); catP(25,68,'#7d4a2e'); catP(28,68,'#7d4a2e')
+  catR(25,73,4,1,'#e0a674')
+  for (let y=74;y<92;y++){
+    const dy = 80-y
+    const hw = y<80 ? Math.round(7*Math.sqrt(1-(dy*dy)/36)) : 7
+    catR(27-hw-1,y,hw*2+2,1,'#e0a674')
+    if (hw>0) catR(27-hw,y,hw*2,1,'#2a1a1e')
+  }
+  catR(21,88,12,4,'#6f5a8a'); catR(21,88,12,1,'#8a74a6')
+}
+
+function catDrawBasket(full) {
+  catR(47,101,16,1,'rgba(40,20,15,.3)')
+  catR(48,94,14,7,'#c99a5c')
+  for (let x=48;x<62;x+=2) for (let y=95;y<101;y+=2) catP(x+((y/2)%2),y,'#a87a42')
+  if (full){
+    catEll(52,91,3,3,'#7aa6d9'); catP(51,89,'#5a86b9'); catP(52,90,'#5a86b9'); catP(53,91,'#5a86b9'); catP(50,91,'#a7c6ea')
+    catEll(58,92,2,1,'#a0a0ae'); catP(57,90,'#e98a9a'); catP(59,91,'#2a1a1e')
+  }
+  catR(47,93,16,2,'#8f6234')
+}
+
+function catDrawRug() {
+  catEll(80,105,37,11,'#f2c46b')
+  catEll(80,105,35,10,'#c45c6a')
+  catEll(80,105,27,7,'#d4707c')
+  for (let i=-3;i<=3;i++){ const x=80+i*9; catP(x,105,'#f2c46b'); catP(x-1,106,'#f2c46b'); catP(x+1,106,'#f2c46b'); catP(x,107,'#f2c46b') }
+  for (let x=46;x<=114;x+=4){ catP(x,116,'#f2c46b') }
+}
+function catDrawMat() {
+  catR(112,101,34,9,'#86a3b8'); catR(112,101,34,1,'#a3bccd')
+  catP(112,101,'#8a5639'); catP(145,101,'#8a5639'); catP(112,109,'#8a5639'); catP(145,109,'#8a5639')
+}
+function catBowl(cx,y,c,hi,lo){ catR(cx-6,y,13,4,c); catR(cx-7,y-1,15,1,hi); catR(cx-5,y+4,11,1,lo) }
+function catDrawBowls(full,t) {
+  if (full){ catEll(122,102,5,2,'#a0603a'); [[119,101],[122,100],[125,102],[121,103]].forEach(([x,y])=>catP(x,y,'#c98250')) }
+  else { catEll(122,103,3,1,'#a0603a'); catP(121,102,'#c98250'); catP(128,108,'#a0603a'); catP(116,107,'#a0603a'); catP(130,107,'#a0603a') }
+  catBowl(122,104,'#e05a6a','#f08392','#a83d4c')
+  catBowl(136,104,'#5b8fd1','#86b2e6','#3f6aa6')
+  catR(130,103,13,1,'#9bd3ea')
+  catP(132+((t>>2)%3)*3,103,'#ffffff')
+}
+function catDrawCushion(dented) {
+  catEll(78,100,15,5,'#4f8784')
+  catEll(78,99,14,4,'#6fa3a0')
+  if (dented){
+    catEll(78,98,8,2,'#5a8f8c')
+    ;[[72,97],[73,96],[83,98],[84,97],[79,96]].forEach(([x,y])=>catP(x,y,'#f0b070'))
+  } else {
+    catEll(78,97,9,1,'#8fc2bb')
+  }
+}
+function catTailPts(ox,oy,dir,sway){ const pts=[]; for (let i=0;i<7;i++){ const k=i/6; pts.push([ox+dir*(i*1.2+Math.sin(sway)*k*k*2.5), oy-i*i*0.20]) } return pts }
+function catDrawTail(pts){ pts.forEach(([x,y])=>catR(x-1,y-1,3,3,CATK.o)); pts.forEach(([x,y],i)=>catR(x,y,1,1,(i===2||i===4||i>=6)?CATK.D:CATK.O)) }
+function catDrawCat(t){
+  const bob = Math.sin(t * 0.55) > 0.86 ? -1 : 0
+  // 尾巴：贴在身侧的一小卷，跟着呼吸动一格
+  const tx = 87, ty = 99 + bob
+  catR(tx, ty - 3, 2, 5, CATK.o)
+  catP(tx, ty - 3, CATK.O); catP(tx, ty - 2, CATK.D); catP(tx + 1, ty - 1, CATK.D)
+  catSpr((t%36)<2 ? CATSPR_BLINK : CATSPR, CATK, 69, 83 + bob)
+  const hp = t%50
+  if (hp<20){ CTX.globalAlpha = 1-hp/20; catSpr(CATHEART,{P:'#f06b85'},86,Math.round(74-hp*0.6)); CTX.globalAlpha = 1 }
+}
+function catPaw(x,y,c){ catR(x,y+1,3,2,c); catP(x-1,y,c); catP(x+1,y-1,c); catP(x+3,y,c) }
+function catDrawPawPrints(){ for (let k=0;k<8;k++){ const x = 94+k*9; const y = Math.min(116, 106+k*1.5) + (k%2 ? 2 : -1); catPaw(x,Math.round(y),'rgba(70,38,28,.38)') } }
+function catDrawLeftovers(t,st){
+  for (let x=70;x<=96;x++) catP(x,Math.round(107+Math.sin(x*0.35)*1.5),'#7aa6d9')
+  const roll = Math.round(Math.sin(st*0.5)*2*Math.exp(-st/30))
+  const bx = 100+roll
+  catEll(bx,110,4,4,'#7aa6d9')
+  ;[[-2,-2],[-1,-1],[0,0],[1,1],[2,-1],[1,-3],[-3,1],[-1,2]].forEach(([dx,dy])=>catP(bx+dx,110+dy,'#5a86b9'))
+  catP(bx-2,108,'#a7c6ea')
+  catEll(64,113,3,2,'#a0a0ae'); catR(62,114,5,1,'#c4c4d0')
+  catP(62,111,'#e98a9a'); catP(62,112,'#2a1a1e'); catP(68,113,'#e98a9a'); catP(69,112,'#e98a9a'); catP(70,112,'#e98a9a'); catP(71,113,'#e98a9a')
+  for (let i=0;i<=16;i++) catP(42+i,113-Math.round(i*6/16),'#b98a52')
+  ;[[39,112],[40,113],[41,114],[40,111],[39,114],[38,113],[41,112]].forEach(([x,y])=>catP(x,y,'#e98a9a'))
+  ;[[38,111],[37,112],[40,115]].forEach(([x,y])=>catP(x,y,'#f6c1c9'))
+  catP(36,113,'#6fa3a0'); catP(37,114,'#6fa3a0')
+  for (let i=0;i<3;i++){ const ph = (t*0.5+i*13)%30; if (ph<24) catP(74+i*5+Math.round(Math.sin((t+i*10)*0.2)), 80+ph*0.6, '#f0b070') }
+  if (st<16) catDrawTail(catTailPts(162+st*1.4,97,-1,st*0.6))
+}
+function catDrawLight(t, night){
+  if (!night) {
+    // 白天：窗光落在坐垫和地板上，一点点
+    for (let y=88;y<=112;y++) catR(Math.round(58-(y-88)*0.5),y,44,1,'rgba(255,250,235,0.07)')
+    return
+  }
+  for (let y=86;y<=100;y++) catR(Math.round(56-(y-86)*1.4),y,34,1,'rgba(200,210,255,0.09)')
+  const f = 1+0.08*Math.sin(t*0.7)
+  ;[[30,.045],[20,.06],[12,.08]].forEach(([r,a])=>catEll(148,46,r,Math.round(r*0.85),`rgba(255,206,130,${(a*f).toFixed(3)})`))
+  catEll(148,86,12,3,'rgba(255,206,130,0.12)')
+}
+
+
