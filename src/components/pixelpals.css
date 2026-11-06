@@ -151,3 +151,16 @@
 .pp-wear-fold > .pp-wear-area { width: calc(100% - 24px); margin: 8px 12px; }
 .pp-wear-fold > .btn { margin: 0 12px 12px; }
 .pp-wear-x:disabled { opacity: .4; }
+/* 相遇：0.8 秒的横幅 + 点 TA 冒的小气泡（都在画面里，不挤 HUD 和悬浮窗） */
+.pp-meet-banner { position: absolute; left: 50%; top: 30px; transform: translateX(-50%); z-index: 3;
+  padding: 4px 10px; border-radius: 8px; background: rgba(28,26,43,.92); color: #fffaec;
+  border: 1px solid rgba(255,253,244,.35); font-family: DotGothic16, var(--font), sans-serif;
+  font-size: clamp(11px, 3vw, 13px); white-space: nowrap; pointer-events: none;
+  animation: ppMeetBanner .8s ease-out both; }
+@keyframes ppMeetBanner {
+  0% { opacity: 0; transform: translate(-50%, -4px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.pp-ta-bubble { z-index: 3; }

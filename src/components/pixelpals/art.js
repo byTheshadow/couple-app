@@ -768,6 +768,35 @@ export function drawAvatar(ctx, slot, worn) {
   if (worn && worn.length) drawWorn(ctx, sp.spr, worn, 0, 0)
 }
 
+/**
+ * 相遇时画 TA：站在 x（中心），朝向翻向我，头顶一颗小爱心（不写名字）。
+ * 只用到 fillStyle / fillRect，软件画布和浏览器画布跑出来一样。
+ */
+export function drawOther(ctx, { x, slot = 'u2', worn = [], t = 0, flip = true }) {
+  const left = Math.round(x) - 8
+  const top = FLOOR - 23
+  R(ctx, 'rgba(0,0,0,.15)', left + 3, FLOOR - 1, 10, 2) // 影子：和我自己那颗同色，两个人都踩在地上
+  // drawAvatar 画在 (0,0)：flip 时左右镜像，朝向翻向我
+  const px = {
+    fillStyle: '#000',
+    fillRect(bx, by, bw, bh) { ctx.fillStyle = px.fillStyle; ctx.fillRect(flip ? left + (15 - bx) : left + bx, top + by, bw, bh) },
+  }
+  drawAvatar(px, slot, worn)
+  // 头顶的爱心：1px 上下浮；外围一圈深色描边，压在亮背景（路灯、伞沿）上也读得出来
+  const hx = left + 6
+  const hy = top - 8 + Math.round(Math.sin(t * 1.8))
+  const OUTLINE = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]
+  for (const d of OUTLINE) {
+    for (let r = 0; r < HEART.length; r++) for (let i = 0; i < HEART[r].length; i++) {
+      if (HEART[r][i] === 'X') R(ctx, 'rgba(34,18,30,.6)', hx + i + d[0], hy + r + d[1], 1, 1)
+    }
+  }
+  for (let r = 0; r < HEART.length; r++) for (let i = 0; i < HEART[r].length; i++) {
+    if (HEART[r][i] === 'X') R(ctx, '#ff5c8a', hx + i, hy + r, 1, 1)
+  }
+  return { x0: left, x1: left + 16, y0: hy - 1, y1: FLOOR + 1 }
+}
+
 function drawParticles(ctx, a) {
   for (const p of a.particles) {
     if (p.k === 'heart') pat(ctx, HEART, { X: '#ff5c8a' }, p.x, p.y)
@@ -795,6 +824,7 @@ export function renderFrame(ctx, a, m, hr, t) {
   else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
   else if (roomOf(m.settings, a.state, hr) === 'living') drawLivingRoom(ctx, hr, t, m.gifts) // 在家醒着：客厅
   else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
+  if (m.other) drawOther(ctx, m.other) // 相遇：TA 画在场景后层之后、我的人之前（两人叠在一起时我压着 TA）
   if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t, resolveWorn(m.settings && m.settings.outfit))
   if (data) drawScene(ctx, place, 'front', o)
   if (a.state === 'sleep') {

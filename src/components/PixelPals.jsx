@@ -5,11 +5,12 @@ import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
 import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
 import {
-  W, H, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
+  W, H, FLOOR, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
   createActor, stepActor, renderFrame, drawAvatar, headTop, hearts,
   normalizeButtons, compactBtnLines, checkSchedule, cleanEmoji, cleanLabel, moodNow, fmtHour, pad2, pick, stateOf,
   placeOf, atHome, compactPokeLines, clipLine, hourText, shiftHour, reflow, fitWindows, homeSegments, WINDOW_KINDS, POKE_MAX, POKE_LEN, POKE_STREAK, POKE_STREAK_MS,
 } from './pixelpals/art'
+import { meetOf, meetSpots, sceneSpot } from './pixelpals/scenes'
 import { dropItem, stepDrops, drawDrops } from './pixelpals/fx'
 import { PLAY_KINDS, reactionFor, pokeLine, defaultPokes, defaultBtnLines } from './pixelpals/voice'
 import { startCelebration, stepCelebration, drawCelebration, celebrateEvent, estimateIncome, shiftDay, INCOME } from './pixelpals/celebrate'
@@ -120,13 +121,18 @@ function CountUp({ to }) {
   return <>{n}</>
 }
 
-const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay }, ref) {
+const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other }, ref) {
   const [banner, setBanner] = useState(null)
   const bannerT = useRef(0)
   const canvasRef = useRef(null)
   const actorRef = useRef(null)
   const bubbleRef = useRef(null)
   const bubbleT = useRef(0)
+  const taBubbleRef = useRef(null) // TA 头顶的小气泡（点 TA 才冒，只有本机看得到）
+  const taBubbleT = useRef(0)
+  const otherHit = useRef(null) // TA 这一帧的可点区域（相遇时才有）
+  const [meetBanner, setMeetBanner] = useState(null)
+  const meetShown = useRef(null) // 这次进这个场景已经弹过横幅了
   const clockRef = useRef(null)
   const whereRef = useRef(null)
   const segsRef = useRef(null)
@@ -149,7 +155,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
     } catch { /* 位置坏了就用默认的 */ }
     return null
   })
-  live.current = { slot, settings, state, hr }
+  live.current = { slot, settings, state, hr, other }
 
   useEffect(() => {
     const el = bezelRef.current
@@ -222,6 +228,12 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
   }, [say])
   useImperativeHandle(ref, () => ({ play, say }), [play, say])
   useEffect(() => () => clearTimeout(bannerT.current), [])
+  // 相遇横幅只活 0.8 秒（同一次进入只弹一次，没有第二次）
+  useEffect(() => {
+    if (!meetBanner) return undefined
+    const id = setTimeout(() => setMeetBanner(null), 800)
+    return () => clearTimeout(id)
+  }, [meetBanner])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -248,9 +260,25 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
       stepActor(actor, cur.settings, cur.hr, dt, mood)
       stepDrops(actor, dt)
       stepCelebration(actor, dt)
-      renderFrame(ctx, actor, { slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood }, cur.hr, now / 1000)
+      // 同场景相遇：TA 就在这儿的话，先算站位再画这一帧（TA 站我走位方向的那一侧）
+      const place = placeOf(cur.settings, actor.state) // 在哪个场景（在家 = null）
+      const other = cur.other
+      const otherPlace = other ? placeOf(other.settings, stateOf(other.settings, cur.hr)) : null
+      const meet = meetOf(place, otherPlace) && !!sceneSpot(place)
+      const spots = meet ? meetSpots(sceneSpot(place), actor.tx >= actor.x ? 1 : -1) : null
+      const met = !!spots // 两个人都有站位才画（数据场景漏了 spot 就退回一个人）
+      renderFrame(ctx, actor, {
+        slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood,
+        other: met ? { x: spots[1], slot: other.slot, worn: resolveWorn(other.settings.outfit), t: now / 1000, flip: true } : null,
+      }, cur.hr, now / 1000)
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
+      // 相遇横幅：这次进入这个场景第一次遇见才弹一次，0.8 秒后自己消失
+      if (!met) meetShown.current = null
+      else if (meetShown.current !== place) {
+        meetShown.current = place
+        setMeetBanner({ k: Date.now(), name: SCENES[place] || '自己画的场景' })
+      }
 
       // 悬浮小窗开着就把同一帧复制过去（画布是 160×120 的小图，复制几乎不费力）
       const mc = miniCanvasRef.current
@@ -262,11 +290,11 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         if (miniClockRef.current && miniClockRef.current.textContent !== clockText) miniClockRef.current.textContent = clockText
       }
 
-      const place = placeOf(cur.settings, actor.state) // 在哪个场景（在家 = null）
-      const label = actor.state === 'work' ? `上班中 · ${SCENES[place] || '自己画的场景'}`
+      const meetTag = met ? (mine ? ' · TA 也在这儿' : ' · 你也在这儿') : ''
+      const label = (actor.state === 'work' ? `上班中 · ${SCENES[place] || '自己画的场景'}`
         : actor.state === 'play' ? '在家 · 玩耍中'
           : actor.state === 'idle' ? (place ? `放空中 · ${SCENES[place] || '自己画的场景'}` : '在家 · 放空中')
-            : actor.state === 'home' ? '在家' : '睡觉中'
+            : actor.state === 'home' ? '在家' : '睡觉中') + meetTag
       const key = `${fmtHour(cur.hr)}|${label}`
       if (key !== hudKey) {
         hudKey = key
@@ -295,10 +323,40 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
           mb.style.top = b.style.top
         }
       }
+      // TA 头顶的气泡：点了才冒，离开相遇就收
+      const tb = taBubbleRef.current
+      if (tb) {
+        if (met && taBubbleT.current > 0) {
+          tb.style.left = `${(spots[1] / W) * 100}%`
+          tb.style.top = `${((FLOOR - 23 - 12) / H) * 100}%`
+          taBubbleT.current -= dt
+          if (taBubbleT.current <= 0) tb.classList.remove('on')
+        } else if (!met) {
+          taBubbleT.current = 0
+          tb.classList.remove('on')
+        }
+      }
+      otherHit.current = met ? { x0: spots[1] - 8, x1: spots[1] + 8, y0: FLOOR - 32, y1: FLOOR + 1, slot: other.slot } : null
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
   }, [slot])
+
+  // 点 TA 的小人：只在本机冒一句 TA 的台词，不写库、不计数
+  const pokeOther = (e) => {
+    const hit = otherHit.current
+    const c = canvasRef.current
+    if (!hit || !c) return
+    const r = c.getBoundingClientRect()
+    const x = ((e.clientX - r.left) / r.width) * W
+    const y = ((e.clientY - r.top) / r.height) * H
+    if (x < hit.x0 || x > hit.x1 || y < hit.y0 || y > hit.y1) return
+    const el = taBubbleRef.current
+    if (!el) return
+    el.textContent = pick((LINES[hit.slot] || LINES.u2).wave)
+    el.classList.add('on')
+    taBubbleT.current = 2.8
+  }
 
   const poke = () => {
     if (onA) { onA(); return } // 去戳 TA：交给父组件走服务端，成功后小人才有反应
@@ -348,9 +406,13 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         </div>
         <div className="pp-bezel" ref={bezelRef}>
           <div className="pp-screen">
-            <canvas ref={canvasRef} width={W} height={H} />
+            <canvas ref={canvasRef} width={W} height={H} onPointerUp={pokeOther} />
             <div className="pp-hud"><span ref={clockRef} /><span ref={whereRef} className="where" /></div>
             <div ref={bubbleRef} className="pp-bubble" />
+            <div ref={taBubbleRef} className="pp-bubble pp-ta-bubble" />
+            {meetBanner && (
+              <div key={meetBanner.k} className="pp-meet-banner" role="status">在{meetBanner.name}遇见 {mine ? 'TA' : '你'}</div>
+            )}
             {banner && (
               <div key={banner.k} className={`pp-banner ${banner.cls}`} role="status">
                 <small>{banner.head}</small>
@@ -1226,7 +1288,7 @@ export default function PixelPals({ onExit }) {
 
       {tab === 'mine' ? (
         <>
-          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} />
+          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} />
           <Planner
             name={myName}
             slot={mySlot}
@@ -1270,6 +1332,7 @@ export default function PixelPals({ onExit }) {
             mine={false}
             preview={false}
             onA={onPokeTa}
+            other={{ slot: mySlot, settings: myPal.settings, hr }}
           />
           <Visitor
             ownerId={partner.id}

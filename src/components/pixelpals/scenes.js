@@ -252,6 +252,29 @@ export const CODE_SPOTS = {
 /** 小人在这个场景里站哪、走哪（数据场景和手写场景都有；其余返回 null） */
 export const sceneSpot = (key) => (isDataScene(key) ? SCENE_DATA[key].spot : CODE_SPOTS[key] || null)
 
+/* ---------- 同场景相遇（第十二轮） ---------- */
+
+/** 两个 place 都非空且相等才算遇见（在家 = null，不算） */
+export function meetOf(myPlace, taPlace) {
+  return !!myPlace && !!taPlace && myPlace === taPlace
+}
+
+/**
+ * 相遇时的站位：[我的 x, TA 的 x]。
+ * 我站 spot.stand，TA 站我「要走过去」的那一侧 14px 外；贴边放不下就换一边，夹在 [8, W-8]。
+ * 没有 spot 的手写场景返回 null（办公室 / 咖啡馆 / 下雨 / 雨夜 / 下雪）。
+ */
+export function meetSpots(spot, dir = 1) {
+  if (!spot || !Number.isFinite(spot.stand)) return null
+  const d = dir < 0 ? -1 : 1
+  const clamp = (x) => Math.max(8, Math.min(W - 8, Math.round(x)))
+  const mine = clamp(spot.stand)
+  let ta = clamp(mine + d * 14)
+  if (Math.abs(ta - mine) < 10) ta = clamp(mine - d * 14)
+  if (Math.abs(ta - mine) < 10) ta = clamp(mine + (mine + 14 <= W - 8 ? 14 : -14))
+  return [mine, ta]
+}
+
 /* ---------- 天空和窗 ---------- */
 
 const MOON = ['.MMM.', 'MMMM.', 'MMM..', 'MMMM.', '.MMM.']
