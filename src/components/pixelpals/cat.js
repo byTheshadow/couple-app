@@ -3,15 +3,20 @@
    纯函数，不碰网络、不碰 canvas。
    =========================================================================== */
 
-/** 猫的作息：8 点出门，19 点回家 */
-export const CAT_OUT_H = 8
-export const CAT_BACK_H = 19
+/** 出门一趟：从两个人凑齐那一刻算起，出去 3 小时，前半小时算「刚走开」 */
+export const CAT_TRIP_H = 3
+export const CAT_JUST_H = 0.5
 
-export function catAt(hr) {
-  const h = ((hr % 24) + 24) % 24
-  const home = h >= CAT_BACK_H || h < CAT_OUT_H
-  const justLeft = !home && h < CAT_OUT_H + 2
-  return { home, justLeft }
+/**
+ * 此刻猫在哪。
+ * leftHour = 今天出发的那个钟点（两个人都指完的时刻）；没有就是还没出发。
+ * 这样不管几点指完都能出去：22 点指完就 22 点走、1 点回来。
+ */
+export function catAt(hr, leftHour) {
+  if (leftHour == null || !Number.isFinite(leftHour)) return { home: true, justLeft: false, out: false }
+  const d = (((hr - leftHour) % 24) + 24) % 24
+  const out = d < CAT_TRIP_H
+  return { home: !out, justLeft: out && d < CAT_JUST_H, out }
 }
 
 /* 它可能叼回来的东西（和 rooms.js 里的 CAT_ITEMS 一一对应） */

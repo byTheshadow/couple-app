@@ -1243,11 +1243,18 @@ export default function PixelPals({ onExit }) {
   // 显示取较大的那个：我这边刚攒的（乐观值）可能已经超过服务端读回来的旧数
   const togetherMinutes = Math.min(720, Math.max(together.total, together.mine + mined))
   // 猫屋：它此刻在不在家、架子上都有什么
-  const catNow = catAt(hr)
+  const bothPicked = !!(cat.today && cat.today.pick_a && cat.today.pick_b)
+  // 出发时刻 = 最后一个人指完的那一刻（服务端 updated_at）
+  const leftAt = bothPicked && cat.today.updated_at ? new Date(cat.today.updated_at) : null
+  const leftHour = leftAt ? leftAt.getHours() + leftAt.getMinutes() / 60 : null
+  const catNow = catAt(hr, leftHour)
   const catPair = me && partner ? [me.id, partner.id].sort().join('-') : ''
   const persona = catPersona(catPair)
   const destOf = (r) => (r ? catDest(persona, r.day_key, r.pick_a, r.pick_b) : null)
-  const catRowsWith = cat.rows.map((r) => ({ row: r, dest: destOf(r) })).filter((x) => x.dest)
+  const catRowsWith = cat.rows
+    .map((r) => ({ row: r, dest: destOf(r) }))
+    .filter((x) => x.dest && x.row.pick_a && x.row.pick_b)
+    .filter((x) => !(x.row.day_key === today && catNow.out))
   const catItems = catRowsWith.slice(0, 4).map((x) => catItem(x.row.day_key, x.dest.to)).reverse()
   const catLatest = catRowsWith.length ? catItem(catRowsWith[0].row.day_key, catRowsWith[0].dest.to) : null
   const todayDest = destOf(cat.today)
@@ -1511,7 +1518,7 @@ export default function PixelPals({ onExit }) {
                 <p className="pp-hint" style={{ margin: 0 }}>
                   你：{myCatPick ? (SCENES[myCatPick] || myCatPick) : '还没指'}
                   {' · '}TA：{taCatPick ? (SCENES[taCatPick] || taCatPick) : '还没指'}
-                   {' · '}{todayDest ? `今天去了 ${SCENES[todayDest.to] || todayDest.to}` : '还没定'}
+                   {' · '}{bothPicked && todayDest ? `今天去了 ${SCENES[todayDest.to] || todayDest.to}` : '等两个人都指完'}
                 </p>
                 <p className="pp-hint" style={{ margin: 0 }}>
                   {persona.n} · {todayDest ? catWhyLine(persona, todayDest.why, SCENES[todayDest.to]) : persona.note}
