@@ -28,6 +28,7 @@ import AiSettings from './pixelpals/AiSettings'
 import PersonaEditor from './pixelpals/PersonaEditor'
 import PalBoot from './pixelpals/Boot'
 import Sleep from './pixelpals/Sleep'
+import CatRoom from './pixelpals/CatRoom'
 import './pixelpals.css'
 
 /* ===========================================================================
@@ -1265,11 +1266,11 @@ export default function PixelPals({ onExit }) {
   const myCatPick = cat.today ? (iAmA ? cat.today.pick_a : cat.today.pick_b) : null
   const taCatPick = cat.today ? (iAmA ? cat.today.pick_b : cat.today.pick_a) : null
   const shownDraft = draft || myPal.settings
-  const catRoomNow = roomOf(shownDraft, stateOf(shownDraft, hr), hr) === 'cat'
+
 
   // 猫的话：一天一张，AI 生成；没配 AI 就退回写死的那句
   useEffect(() => {
-    if (!catRoomNow || !todayDest) { setCatVoice(''); return undefined }
+    if (!todayDest) { setCatVoice(''); return undefined }
     let alive = true
     catSay({
       day: today,
@@ -1282,7 +1283,7 @@ export default function PixelPals({ onExit }) {
       together: togetherMinutes,
     }).then((r) => { if (alive) setCatVoice(r.text || '') }).catch(() => {})
     return () => { alive = false }
-  }, [today, catRoomNow, todayDest && todayDest.to, todayDest && todayDest.why, persona.k, myCatPick, taCatPick, togetherMinutes])
+  }, [today, todayDest && todayDest.to, todayDest && todayDest.why, persona.k, myCatPick, taCatPick, togetherMinutes])
   const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
   // 夜班（下班时间在次日）算的是「上班那天」的班：次日下班后结算的是昨天上的那一班
@@ -1495,39 +1496,19 @@ export default function PixelPals({ onExit }) {
           <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} taOnline={actCh.online} onSendAct={actCh.send} onTogether={onTogether} onLeaveNote={onLeaveNote} together={togetherMinutes} cat={catView} />
 
           {/* 猫屋：今天让它去哪（两个人各指一个，它自己挑） */}
-          {catRoomNow && (
-            <section className="win">
-              <header className="tb">
-                <Svg name="home" size={14} />
-                <b>猫屋</b>
-                <span className="grow" />
-                <span className="mono">{catNow.home ? '猫在家' : catNow.justLeft ? '刚走开' : '出门了'}</span>
-              </header>
-              <div className="wb" style={{ gap: 10 }}>
-                <p className="pp-hint" style={{ margin: 0 }}>今天让它去哪？你和 TA 各指一个，猫自己挑。</p>
-                <div className="pp-chips">
-                  {SCENE_LIST.map((sc) => (
-                    <button
-                      key={sc.k}
-                      type="button"
-                      className={`pp-chip${myCatPick === sc.k ? ' on' : ''}`}
-                      onClick={() => onCatPick(sc.k)}
-                    >{sc.e} {sc.n}</button>
-                  ))}
-                </div>
-                <p className="pp-hint" style={{ margin: 0 }}>
-                  你：{myCatPick ? (SCENES[myCatPick] || myCatPick) : '还没指'}
-                  {' · '}TA：{taCatPick ? (SCENES[taCatPick] || taCatPick) : '还没指'}
-                   {' · '}{bothPicked && todayDest ? `今天去了 ${SCENES[todayDest.to] || todayDest.to}` : '等两个人都指完'}
-                </p>
-                <p className="pp-hint" style={{ margin: 0 }}>
-                  {persona.n} · {todayDest ? catWhyLine(persona, todayDest.why, SCENES[todayDest.to]) : persona.note}
-                </p>
-                {catVoice && <p className="pp-quote">「{catVoice}」</p>}
-                {!catVoice && <p className="pp-hint" style={{ margin: 0 }}>{aiOn ? '它今天还没说话' : '配了 AI 之后，它会自己说一句'}</p>}
-              </div>
-            </section>
-          )}
+          {/* 猫屋：任何时候都能进来看，不跟角色此刻在哪绑定 */}
+          <CatRoom
+            cat={catView}
+            hr={hr}
+            persona={persona}
+            bothPicked={bothPicked}
+            todayDest={todayDest}
+            myPick={myCatPick}
+            taPick={taCatPick}
+            catVoice={catVoice}
+            aiOn={aiOn}
+            onPick={onCatPick}
+          />
           <Planner
             name={myName}
             slot={mySlot}
