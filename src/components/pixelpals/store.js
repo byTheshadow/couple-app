@@ -560,3 +560,5 @@ export function usePalCat(myId, peerId, dayKey, days = 6) {
 
   return { rows, today: rows.find((r) => r.day_key === dayKey) || null, reload }
 }
+// 猫今天说的话：谁先生成谁写，另一边直接读（pixelpals-round16.sql）
+export const palCatSay = (peer, text) => rpc('pal_cat_say', { p_peer: peer, p_text: text })

@@ -5,6 +5,7 @@
    - 没配 AI / 请求失败：不报错，退回写死的那句（catWhyLine）
    =========================================================================== */
 import { loadAi, aiReady, chat } from './ai'
+import { palCatSay } from './store'
 
 const LS_KEY = 'pp.cat.voice.v1'
 const KEEP = 40
@@ -28,8 +29,10 @@ const whyText = (why) => ({
  * 生成（或读缓存）今天的一句话。
  * 返回 { text, ai, cached, error }；text 为空表示这次没说出来，界面该退回写死的那句。
  */
-export async function catSay({ day, scene, sceneName, persona, why, myPick, taPick, together }) {
+export async function catSay({ day, scene, sceneName, persona, why, myPick, taPick, together, rowSay, peerId }) {
   if (!day || !scene || !persona) return { text: '', ai: false, cached: false, error: null }
+  // 服务端已经有了（对方生成过）：直接读，不再花任何人的额度
+  if (rowSay) return { text: rowSay, ai: true, cached: true, error: null }
   const key = `${day}|${scene}|${persona.k}`
   const all = readAll()
   if (all[key]) return { text: all[key], ai: true, cached: true, error: null }
@@ -56,5 +59,11 @@ export async function catSay({ day, scene, sceneName, persona, why, myPick, taPi
   const keys = Object.keys(all)
   if (keys.length > KEEP) keys.slice(0, keys.length - KEEP).forEach((k) => { delete all[k] })
   writeAll(all)
-  return { text: clean, ai: true, cached: false, error: null }
+  // 写回服务端：先写的算数，另一边之后直接读这一句
+  let written = false
+  if (peerId) {
+    const { error: e2 } = await palCatSay(peerId, clean)
+    written = !e2
+  }
+  return { text: clean, ai: true, cached: false, written, error: null }
 }

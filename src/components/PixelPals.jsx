@@ -1281,9 +1281,15 @@ export default function PixelPals({ onExit }) {
       myPick: myCatPick,
       taPick: taCatPick,
       together: togetherMinutes,
-    }).then((r) => { if (alive) setCatVoice(r.text || '') }).catch(() => {})
+      rowSay: cat.today && cat.today.say,
+      peerId: partner && partner.id,
+    }).then((r) => {
+      if (!alive) return
+      setCatVoice(r.text || '')
+      if (r.written) cat.reload()
+    }).catch(() => {})
     return () => { alive = false }
-  }, [today, todayDest && todayDest.to, todayDest && todayDest.why, persona.k, myCatPick, taCatPick, togetherMinutes])
+  }, [today, todayDest && todayDest.to, todayDest && todayDest.why, persona.k, myCatPick, taCatPick, togetherMinutes, cat.today && cat.today.say])
   const dirty = !!draft && !same(canon(draft), myPal.settings)
   const est = estimateIncome(shownDraft, 0)
   // 夜班（下班时间在次日）算的是「上班那天」的班：次日下班后结算的是昨天上的那一班
