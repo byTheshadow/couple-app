@@ -202,3 +202,6 @@
   background: linear-gradient(to right, transparent, var(--win2)); pointer-events: none; }
 .pp-feedslide::before { content: '\203A'; position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
   font-size: 14px; color: var(--ink2); pointer-events: none; }
+/* 现实天气（第十八轮）：设置里的勾选项 */
+.pp-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin: 0 0 10px; }
+.pp-check input { width: 16px; height: 16px; accent-color: var(--btn); }

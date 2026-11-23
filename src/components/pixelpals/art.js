@@ -479,12 +479,12 @@ function monitor(ctx, job, x, y, w, h, t) {
   }
 }
 
-function drawOffice(ctx, job, hr, t) {
+function drawOffice(ctx, job, hr, t, wx) {
   R(ctx, '#d9e0ec', 0, 0, W, FLOOR); R(ctx, '#c6cfdf', 0, FLOOR - 14, W, 14); R(ctx, '#b5bfd3', 0, FLOOR - 15, W, 1)
   R(ctx, '#7f889e', 0, FLOOR, W, H - FLOOR)
   for (let i = 0; i < W; i += 16) R(ctx, '#747d93', i, FLOOR, 1, H - FLOOR)
   R(ctx, '#6a7288', 0, FLOOR, W, 1)
-  drawWindow(ctx, 12, 16, 40, 30, hr, t)
+  drawWindow(ctx, 12, 16, 40, 30, hr, t, wx)
   R(ctx, '#3a3f55', 63, 11, 13, 13); R(ctx, '#fff', 64, 12, 11, 11); R(ctx, '#3a3f55', 69, 14, 1, 4); R(ctx, '#e5384f', 70, 17, 3, 1)
   if (job === 'coder') {
     R(ctx, '#ff7eb3', 80, 24, 15, 19)
@@ -504,7 +504,7 @@ function drawOffice(ctx, job, hr, t) {
   R(ctx, '#fff', 144, 66, 5, 6); R(ctx, '#e04a5f', 144, 68, 5, 1)
 }
 
-function drawCafe(ctx, job, hr, t) {
+function drawCafe(ctx, job, hr, t, wx) {
   R(ctx, '#efdcc4', 0, 0, W, FLOOR)
   for (let y = 5; y < FLOOR - 14; y += 6) {
     R(ctx, '#e3ccb0', 0, y, W, 1)
@@ -514,7 +514,7 @@ function drawCafe(ctx, job, hr, t) {
   for (let y = FLOOR; y < H; y += 6) {
     for (let x = 0; x < W; x += 12) R(ctx, ((x / 12 + (y - FLOOR) / 6) % 2) ? '#d8c3a5' : '#c4ad8c', x, y, 12, 6)
   }
-  drawWindow(ctx, 14, 18, 28, 26, hr, t)
+  drawWindow(ctx, 14, 18, 28, 26, hr, t, wx)
   R(ctx, '#6b4a33', 52, 12, 38, 26); R(ctx, '#2f3b34', 54, 14, 34, 22)
   ;[[57, 17, 14], [57, 21, 22], [57, 25, 18], [57, 29, 20], [57, 33, 12]].forEach(([x, y, w]) => R(ctx, '#e8efe9', x, y, w, 1))
   ;[21, 25, 29].forEach((y) => R(ctx, '#ffcf6b', 83, y, 2, 1))
@@ -546,7 +546,7 @@ function drawHome(ctx, m, a, hr, t) {
   R(ctx, '#b98b62', 0, FLOOR, W, H - FLOOR)
   for (let y = FLOOR + 5; y < H; y += 6) R(ctx, '#a77a54', 0, y, W, 1)
   for (let y = FLOOR; y < H; y += 6) R(ctx, '#a77a54', ((y / 6 | 0) * 37) % W, y, 1, 5)
-  drawWindow(ctx, 68, 14, 30, 26, hr, t)
+  drawWindow(ctx, 68, 14, 30, 26, hr, t, m.weather) // 卧室的窗：现实天气画在玻璃上
   if (m.slot === 'u1') {
     R(ctx, '#1d1d26', 112, 12, 16, 20); R(ctx, '#e5384f', 114, 15, 12, 2)
     R(ctx, '#fff', 119, 19, 3, 1); R(ctx, '#fff', 118, 20, 3, 1); R(ctx, '#fff', 117, 21, 5, 1); R(ctx, '#fff', 119, 22, 2, 1); R(ctx, '#fff', 118, 23, 2, 1)
@@ -836,19 +836,26 @@ export function renderFrame(ctx, a, m, hr, t) {
   const place = placeOf(m.settings, a.state) // 在哪个场景（在家 = null）
   const data = place && isDataScene(place)
   const o = { job, working: a.state === 'work', hr, t }
+  const wx = m.weather || null // 现实天气：{ kind: 'rain' | 'snow', heavy } 或 null
   if (data) drawScene(ctx, place, 'back', o)
   else if (place && isWeatherScene(place)) drawWeatherScene(ctx, place, t) // 下雨 / 雨夜 / 下雪 / 下雪夜：手写场景，雨雪要动
   else if (place === 'rainstation') drawRainStation(ctx, t) // 雨夜车站：手写，列车会开走
-  else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t) // 办公室、咖啡馆：第一轮手写的画法
+  else if (place) (place === 'cafe' ? drawCafe : drawOffice)(ctx, job, hr, t, wx) // 办公室、咖啡馆：第一轮手写的画法
   else {
     const room = roomOf(m.settings, a.state, hr) // 在家：卧室 / 客厅 / 厨房 / 阁楼 / 花房 / 游戏角
-    if (room === 'living') drawLivingRoom(ctx, hr, t, m.gifts)
-    else if (room === 'kitchen') drawKitchen(ctx, hr, t)
-    else if (room === 'attic') drawAttic(ctx, hr, t)
+    if (room === 'living') drawLivingRoom(ctx, hr, t, m.gifts, wx)
+    else if (room === 'kitchen') drawKitchen(ctx, hr, t, wx)
+    else if (room === 'attic') drawAttic(ctx, hr, t, wx)
     else if (room === 'greenhouse') drawGreenhouse(ctx, hr, t)
     else if (room === 'game') drawGameCorner(ctx, hr, t)
     else if (room === 'cat') drawCatRoom(ctx, hr, t, m.cat)
     else drawHome(ctx, m, a, hr, t) // 卧室：睡觉、起床到出门
+  }
+  // 现实天气：下雨下雪时整屋压暗一点（窗外已经在玻璃上画过了）。
+  // 数据场景 / 天气场景 / 雨夜车站不加——它们本身就有自己的光线，加了反而怪。
+  if (wx && !data && !isWeatherScene(place) && place !== 'rainstation') {
+    ctx.fillStyle = wx.kind === 'snow' ? 'rgba(30,40,60,.05)' : wx.heavy ? 'rgba(30,40,60,.09)' : 'rgba(30,40,60,.06)'
+    ctx.fillRect(0, 0, W, H)
   }
   if (m.other) drawOther(ctx, m.other) // 相遇：TA 画在场景后层之后、我的人之前（两人叠在一起时我压着 TA）
   if (a.state !== 'sleep') drawChar(ctx, a, m.mood, t, resolveWorn(m.settings && m.settings.outfit))

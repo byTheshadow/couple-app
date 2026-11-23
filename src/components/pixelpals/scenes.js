@@ -322,8 +322,41 @@ export function drawSky(ctx, x, y, w, h, hr, t, force, smooth) {
   ctx.restore()
 }
 
-export function drawWindow(ctx, x, y, w, h, hr, t) {
+/**
+ * 窗外下雨 / 下雪：画在玻璃上。wx = { kind: 'rain' | 'snow', heavy } 或 null（= 不画）
+ * 自己 clip 到 rect，调用方不用管越界；粒子数量按玻璃面积算，小窗也不会糊成一团。
+ * 只画天气，不碰窗框——窗框由 drawWindow 在这之后盖上去。
+ */
+export function glassWeather(ctx, x, y, w, h, wx, t) {
+  if (!wx || !wx.kind) return
+  const rnd = (i, k) => { const s = (i * 9301 + k * 49297 + 12345) % 233280; return s / 233280 }
+  const heavy = !!wx.heavy
+  ctx.save()
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
+  if (wx.kind === 'snow') {
+    R(ctx, 'rgba(70,84,110,0.16)', x, y, w, h)
+    const n = Math.max(5, Math.round(w * h / 60))
+    for (let i = 0; i < n; i++) {
+      const px = x + Math.floor(rnd(i, 1) * w)
+      const py = y + Math.floor((rnd(i, 2) * h * 4 + t * 9) % h)
+      R(ctx, i % 4 ? 'rgba(255,255,255,0.95)' : 'rgba(226,238,252,0.85)', px, py, 1, 1)
+    }
+  } else {
+    R(ctx, heavy ? 'rgba(38,50,74,0.30)' : 'rgba(38,50,74,0.20)', x, y, w, h)
+    const n = Math.max(6, Math.round(w * h / (heavy ? 22 : 34)))
+    for (let i = 0; i < n; i++) {
+      const px = x + Math.floor(rnd(i, 3) * w)
+      const py = y + Math.floor((rnd(i, 4) * h * 3 + t * (heavy ? 54 : 40)) % h)
+      R(ctx, i % 3 ? 'rgba(196,220,246,0.85)' : 'rgba(150,180,215,0.95)', px, py, 1, heavy ? 3 : 2)
+      if (heavy) R(ctx, 'rgba(196,220,246,0.55)', px + 1, py + 1, 1, 2)
+    }
+  }
+  ctx.restore()
+}
+
+export function drawWindow(ctx, x, y, w, h, hr, t, wx) {
   drawSky(ctx, x, y, w, h, hr, t, false)
+  glassWeather(ctx, x, y, w, h, wx, t)
   const f = '#fbfbff'
   R(ctx, f, x - 2, y - 2, w + 4, 2); R(ctx, f, x - 2, y + h, w + 4, 2)
   R(ctx, f, x - 2, y, 2, h); R(ctx, f, x + w, y, 2, h)

@@ -493,17 +493,22 @@ export function usePalTogether(myId, taId, dayKey) {
 }
 
 /**
- * 相遇时的动作通道：{ online, send }
+ * 相遇时的动作通道：{ online, send, taWx }
  * - online：对面在不在线（Realtime presence，key 就是各自的 user id）
  * - send(k)：挥手 / 递奶茶 / 贴爱心，走 broadcast，不写库、关掉就没了
+ * - taWx：对面窗外现在是什么天气 { kind: 'rain' | 'snow', heavy } 或 null
+ *   跟着 presence 一起广播：**只送这一个词，城市名永远不出本机**（城市存在 localStorage）
  * 频道名两个人算出来一样（两个 uid 排个序再拼），所以谁先订阅都能碰上。
  * presence 偶尔慢半拍，所以「收到过动作」也当在线。
  */
-export function usePalActChannel(myId, taId, onAct) {
+export function usePalActChannel(myId, taId, onAct, myWx) {
   const [online, setOnline] = useState(false)
+  const [taWx, setTaWx] = useState(null)
   const chRef = useRef(null)
   const cb = useRef(onAct)
   cb.current = onAct
+  const wxRef = useRef(myWx || null)
+  wxRef.current = myWx || null
 
   useEffect(() => {
     if (!supabase || !myId || !taId) return undefined
@@ -517,13 +522,23 @@ export function usePalActChannel(myId, taId, onAct) {
       })
       .on('presence', { event: 'sync' }, () => {
         const st = ch.presenceState ? ch.presenceState() : {}
-        setOnline(Object.keys(st || {}).some((k) => k !== myId))
+        const others = Object.keys(st || {}).filter((k) => k !== myId)
+        setOnline(others.length > 0)
+        const me = others.length ? (st[others[0]] || [])[0] : null
+        setTaWx(me && me.wx && me.wx.kind ? me.wx : null)
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') { try { ch.track({ at: Date.now() }) } catch { /* 老版本没有 track 就算了 */ } }
+        if (status === 'SUBSCRIBED') { try { ch.track({ at: Date.now(), wx: wxRef.current }) } catch { /* 老版本没有 track 就算了 */ } }
       })
-    return () => { chRef.current = null; setOnline(false); supabase.removeChannel(ch) }
+    return () => { chRef.current = null; setOnline(false); setTaWx(null); supabase.removeChannel(ch) }
   }, [myId, taId])
+
+  // 我这边天气变了（下雨了 / 停了）：重新上报一次 presence，对面就能跟着看到
+  useEffect(() => {
+    const ch = chRef.current
+    if (!ch) return
+    try { ch.track({ at: Date.now(), wx: myWx || null }) } catch { /* 没连上就算了 */ }
+  }, [myWx && myWx.kind, myWx && myWx.heavy])
 
   const send = useCallback((k) => {
     const ch = chRef.current
@@ -531,7 +546,7 @@ export function usePalActChannel(myId, taId, onAct) {
     try { ch.send({ type: 'broadcast', event: 'act', payload: { k, ts: Date.now() } }) } catch { /* 没连上就算了 */ }
   }, [])
 
-  return { online, send }
+  return { online, send, taWx }
 }
 /* ---------- 猫屋（第十五轮） ---------- */
 

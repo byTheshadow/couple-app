@@ -1,4 +1,4 @@
-import { W, H, FLOOR, drawSky, drawGifts, drawGiftGlows } from './scenes'
+import { W, H, FLOOR, drawSky, drawGifts, drawGiftGlows, glassWeather } from './scenes'
 
 /* ===========================================================================
    三个「天气场景」：雨夜 / 下雪夜 / 下雪白天
@@ -449,7 +449,7 @@ const LIVING = {
 export const isLivingDark = (hr) => hr >= 19 || hr < 6.5
 
 /** 客厅。hr = 现在的钟点，t = 秒（灯串和台灯会轻轻呼吸）；gifts = 收到的礼物（摆到客厅的插槽上） */
-export function drawLivingRoom(ctx, hr, t, gifts = []) {
+export function drawLivingRoom(ctx, hr, t, gifts = [], wx) {
   const dark = isLivingDark(hr)
   const M = { ...LIVING, lamp: dark, lights: dark }
   drawRoom(ctx, M)
@@ -474,7 +474,7 @@ export function drawLivingRoom(ctx, hr, t, gifts = []) {
   drawWindowWith(ctx, M, {
     snow: false,
     shine: dark ? 0.06 : 0.10,
-    glass: (c) => drawSky(c, 100, 14, 40, 44, hr, t, false, true),
+    glass: (c) => { drawSky(c, 100, 14, 40, 44, hr, t, false, true); glassWeather(c, 100, 14, 40, 44, wx, t) },
   })
   drawSofa(ctx, M)
   drawTable(ctx, { ...M, lamp: false })
@@ -549,7 +549,7 @@ function roomDim(ctx, a) { ctx.save(); ctx.globalAlpha = a; R(ctx, 0, 0, W, H, '
 
 /* ---------- 厨房（早上默认来这儿） ---------- */
 
-export function drawKitchen(ctx, hr, t) {
+export function drawKitchen(ctx, hr, t, wx) {
   const M = { wall: '#f8f1e3', wallTop: '#fffaf0', stripe: '#eee2cc', base: '#e2d3b8', baseHi: '#f1e5cd' }
   roomWall(ctx, M)
   for (let yy = FLOOR; yy < H; yy += 6) for (let x = 0; x < W; x += 12) R(ctx, x, yy, 12, 6, ((x / 12 + (yy - FLOOR) / 6) | 0) % 2 ? '#cdbfa6' : '#ddd0b8')
@@ -576,7 +576,7 @@ export function drawKitchen(ctx, hr, t) {
   R(ctx, 12, 34, 5, 1, '#8d7a5c'); R(ctx, 34, 34, 5, 1, '#8d7a5c')
   // 窗
   FR(ctx, 96, 12, 44, 42, '#b08a63')
-  R(ctx, 98, 14, 40, 38, '#cfe6f5'); drawSky(ctx, 98, 14, 40, 38, hr, t, false, true)
+  R(ctx, 98, 14, 40, 38, '#cfe6f5'); drawSky(ctx, 98, 14, 40, 38, hr, t, false, true); glassWeather(ctx, 98, 14, 40, 38, wx, t)
   R(ctx, 94, 54, 48, 3, '#dcc4a2')
   for (let i = 0; i < 3; i++) {
     R(ctx, 100 + i * 11, 46, 7, 6, '#c56a4a'); R(ctx, 100 + i * 11, 46, 7, 1, '#d98a6a')
@@ -603,7 +603,7 @@ export function drawKitchen(ctx, hr, t) {
 
 /* ---------- 阁楼（夜里默认来这儿） ---------- */
 
-export function drawAttic(ctx, hr, t) {
+export function drawAttic(ctx, hr, t, wx) {
   // 木墙板 + 木结
   R(ctx, 0, 0, W, 94, '#4a3a2e')
   for (let x = 0; x < W; x += 12) R(ctx, x, 0, 1, 94, '#413226')
@@ -623,7 +623,7 @@ export function drawAttic(ctx, hr, t) {
     R(ctx, 44 + off, 3 + i, 46, 1, edge ? '#6b513d' : '#0f1836')
   }
   R(ctx, 47, 5, 44, 20, '#0f1836')
-  drawSky(ctx, 47, 5, 44, 20, hr, t, false, true)
+  drawSky(ctx, 47, 5, 44, 20, hr, t, false, true); glassWeather(ctx, 47, 5, 44, 20, wx, t)
   R(ctx, 43, 28, 50, 2, '#6b513d')
   // 月光斜下来
   for (let y = 30; y < FLOOR; y++) {

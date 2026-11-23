@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { Svg } from './Icon'
+import { loadWeather, saveWeather, needRefresh, refreshWeather, geocodeCity, weatherText, wxForArt } from './pixelpals/weather'
 import { usePal, usePalLog, usePresets, usePalScenes, usePalOutfits, useOutfitReqs, usePalTogether, usePalActChannel, usePalCat, palTogetherAdd, palCatPick, palNote, saveSettings, palPoke, palSettle, palLogClear, outfitSave, outfitDelete, outfitSend, outfitRespond, outfitCancel } from './pixelpals/store'
 import {
   W, H, FLOOR, CHARS, SCENES, SCENE_LIST, THEMES, GIFTS, LINES,
@@ -144,7 +145,7 @@ function CountUp({ to }) {
   return <>{n}</>
 }
 
-const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other, taOnline, onSendAct, onTogether, onLeaveNote, together, cat }, ref) {
+const Console = forwardRef(function Console({ slot, name, settings, state, hr, mine, preview, onA, onReplay, other, taOnline, onSendAct, onTogether, onLeaveNote, together, cat, weather }, ref) {
   const [banner, setBanner] = useState(null)
   const bannerT = useRef(0)
   const canvasRef = useRef(null)
@@ -351,6 +352,7 @@ const Console = forwardRef(function Console({ slot, name, settings, state, hr, m
         slot: cur.slot, sp: actor.sp, settings: cur.settings, gifts: cur.state.gifts, mood,
         other: met ? { x: spots[1], slot: other.slot, worn: resolveWorn(other.settings.outfit), t: now / 1000, flip: true } : null,
         cat: cur.cat,
+        weather, // 现实天气：{ kind, heavy } 或 null，画在窗外
       }, cur.hr, now / 1000)
       drawDrops(ctx, actor)
       drawCelebration(ctx, actor)
@@ -845,7 +847,7 @@ function Wardrobe({ slot, draft, setDraft, outfits }) {
   )
 }
 
-function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, userScenes, onSavePreset, onDeletePreset, say, sec, setSec, outfits }) {
+function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, sim, setSim, hr, onPreset, onTheme, onReplay, onTryButton, settleNote, income, mine, userScenes, onSavePreset, onDeletePreset, say, sec, setSec, outfits, wx, wxCity, setWxCity, onWxToggle, onWxCity, wxBusy }) {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
   const [pe, setPe] = useState('⭐') // 要存的预设：图标 + 名字
   const [pn, setPn] = useState('')
@@ -996,6 +998,19 @@ function Planner({ name, slot, draft, setDraft, dirty, saving, onSave, onReset, 
             ))}
           </div>
           <p className="pp-hint">🎨 是自己画的场景，在页面最下面的「像素画室」里画；画好了就会出现在这里。</p>
+        </div>
+
+        <div className="pp-blk" hidden={sec !== 'scene'}>
+          <div className="pp-h">现实天气 <small>窗外的雨雪</small></div>
+          <label className="pp-check">
+            <input type="checkbox" checked={!!wx.on} onChange={(e) => onWxToggle(e.target.checked)} /> 窗外跟着现实天气变
+          </label>
+          <div className="pp-inrow">
+            <input className="pp-in" type="text" maxLength={20} value={wxCity} placeholder="城市，比如 上海" aria-label="城市"
+              onChange={(e) => setWxCity(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') onWxCity() }} />
+            <button type="button" className="btn" disabled={wxBusy} onClick={onWxCity}>{wxBusy ? '查询中…' : '用这个城市'}</button>
+          </div>
+          <p className="pp-hint">现在：{weatherText(wx)}<br />只在下雨、下雪的时候接管窗外，晴天多云还是你选的那个场景。<br />城市只存在这台手机上，TA 那边只会收到「窗外是雨还是雪」，看不到城市名。</p>
         </div>
 
         <div className="pp-blk" hidden={sec !== 'scene'}>
@@ -1168,10 +1183,44 @@ export default function PixelPals({ onExit }) {
   const together = usePalTogether(me && me.id, partner && partner.id, today)
   // 第十五轮 · 猫屋：同一只猫，两个人看到的应该是同一份记录
   const cat = usePalCat(me && me.id, partner && partner.id, today)
+  // 现实天气：城市只存本机 localStorage，云端只同步「窗外是雨还是雪」
+  const [wx, setWx] = useState(loadWeather)
+  const [wxCity, setWxCity] = useState(() => loadWeather().city || '')
+  const [wxBusy, setWxBusy] = useState(false)
+  useEffect(() => {
+    let alive = true
+    const tick = async () => {
+      const cur = loadWeather()
+      if (!needRefresh(cur)) return
+      try { const next = await refreshWeather(cur); if (alive) setWx(next) } catch { /* 拿不到就算了，窗外保持原样 */ }
+    }
+    tick()
+    const id = setInterval(tick, 10 * 60 * 1000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
+  const saveWxCity = async () => {
+    const name = wxCity.trim()
+    if (!name) { say('先填一个城市名'); return }
+    setWxBusy(true)
+    try {
+      const hit = await geocodeCity(name)
+      if (!hit) { say('没查到这个城市，换个写法试试'); return }
+      const base = saveWeather({ on: true, city: hit.city, lat: hit.lat, lon: hit.lon, kind: null, heavy: false, temp: null, at: 0 })
+      setWx(base)
+      const got = await refreshWeather(base).catch(() => null)
+      if (got) setWx(got)
+      say('好了，窗外就跟着' + hit.city + '的天气')
+    } catch {
+      say('网络没通，天气等会儿再试')
+    } finally {
+      setWxBusy(false)
+    }
+  }
   const actCh = usePalActChannel(me && me.id, partner && partner.id, (k) => {
     const c = live.current.tab === 'mine' ? myConsole.current : taConsole.current
     if (c && c.act) c.act(k)
-  })
+  }, wxForArt(wx))
+
   const [catVoice, setCatVoice] = useState('')
   const [sec, setSec] = useState('preset') // 设置面板当前翻到哪一页（信封角标要能直接跳到换装）
 
@@ -1509,7 +1558,7 @@ export default function PixelPals({ onExit }) {
 
       {tab === 'mine' ? (
         <>
-          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} taOnline={actCh.online} onSendAct={actCh.send} onTogether={onTogether} onLeaveNote={onLeaveNote} together={togetherMinutes} cat={catView} />
+          <Console ref={myConsole} key={`me-${mySlot}`} slot={mySlot} name={myName} settings={shownDraft} state={myPal.state} hr={hr} mine preview={dirty} onReplay={onReplay} other={partner ? { slot: taSlot, settings: taPal.settings, hr } : null} taOnline={actCh.online} onSendAct={actCh.send} onTogether={onTogether} onLeaveNote={onLeaveNote} together={togetherMinutes} cat={catView} weather={wxForArt(wx)} />
 
           {/* 猫屋：今天让它去哪（两个人各指一个，它自己挑） */}
           {/* 猫屋：任何时候都能进来看，不跟角色此刻在哪绑定 */}
@@ -1550,6 +1599,12 @@ export default function PixelPals({ onExit }) {
             sec={sec}
             setSec={setSec}
             outfits={outfits}
+            wx={wx}
+            wxCity={wxCity}
+            setWxCity={setWxCity}
+            onWxToggle={(on) => setWx(saveWeather({ on }))}
+            onWxCity={saveWxCity}
+            wxBusy={wxBusy}
             income={{ hours: est.hours, base: est.base, bonus: INCOME.moodBonus }}
           />
           <Studio mine={myScenes} ta={taScenes} taName={taName} slot={mySlot} settings={myPal.settings} say={say} onDeleted={onSceneDeleted} />
@@ -1569,6 +1624,7 @@ export default function PixelPals({ onExit }) {
             preview={false}
             onA={onPokeTa}
             other={{ slot: mySlot, settings: myPal.settings, hr }}
+            weather={actCh.taWx}
             taOnline={actCh.online}
             onSendAct={actCh.send}
             onTogether={onTogether}
