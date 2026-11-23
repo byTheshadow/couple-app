@@ -205,3 +205,6 @@
 /* 现实天气（第十八轮）：设置里的勾选项 */
 .pp-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin: 0 0 10px; }
 .pp-check input { width: 16px; height: 16px; accent-color: var(--btn); }
+/* 猫屋（第十八轮）：折叠卡里的内容排布 */
+.pp-cat-inner { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+.pp-fold summary b { flex: 0 0 auto; }

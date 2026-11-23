@@ -1391,6 +1391,7 @@ export default function PixelPals({ onExit }) {
     setTab('mine')
     setTimeout(() => {
       const el = document.getElementById('pp-catroom')
+      if (el && el.tagName === 'DETAILS' && !el.open) el.open = true // 顶栏 🐈 直接展开猫屋，别让人再点一下
       if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 60)
   }, [])
@@ -1573,6 +1574,12 @@ export default function PixelPals({ onExit }) {
             catVoice={catVoice}
             aiOn={aiOn}
             onPick={onCatPick}
+            myId={me && me.id}
+            mySlot={mySlot}
+            taSlot={taSlot}
+            myWorn={resolveWorn(myPal.settings && myPal.settings.outfit)}
+            taWorn={resolveWorn(taPal.settings && taPal.settings.outfit)}
+            say={say}
           />
           <Planner
             name={myName}
