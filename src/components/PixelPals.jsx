@@ -1337,6 +1337,15 @@ export default function PixelPals({ onExit }) {
     say('留好啦，TA 下次打开小屋就能看到')
   }, [partner, say])
   // 猫屋：给猫指一个地方（两个人各指一个，服务端算它去哪）
+  // 顶栏那只猫：一键跳到猫屋卡片（它一直在「我的小屋」里）
+  const goCat = useCallback(() => {
+    setTab('mine')
+    setTimeout(() => {
+      const el = document.getElementById('pp-catroom')
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }, [])
+
   const onCatPick = useCallback(async (scene) => {
     if (!partner) { say('还没有另一半的账号'); return }
     const { error } = await palCatPick(scene, partner.id)
@@ -1480,6 +1489,7 @@ export default function PixelPals({ onExit }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" className="glass icon-btn tap" onClick={() => { if (onExit) onExit() }} aria-label="返回小物"><Svg name="back" size={20} /></button>
           <button type="button" className="glass icon-btn tap pp-sleep-btn" onClick={() => setSleepOpen(true)} aria-label="哄睡" title="哄睡 · 陪兔兔钓鱼">💤</button>
+          <button type="button" className="glass icon-btn tap" onClick={goCat} aria-label="猫屋" title="猫屋 · 今天的猫">🐈</button>
           <button type="button" className="glass icon-btn tap" onClick={toggle} aria-label="切换明暗主题"><Svg name="moon" size={20} /></button>
         </div>
       </div>

@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Svg } from '../Icon'
-import { SCENES, SCENE_LIST } from './pixelpals/art'
-import { drawCatRoom } from './pixelpals/rooms'
-import { catWhyLine } from './pixelpals/cat'
+import { SCENES, SCENE_LIST } from './art'
+import { drawCatRoom } from './rooms'
+import { catWhyLine } from './cat'
 
 /* ===========================================================================
    猫屋（第十五轮）：一个独立的卡片，任何时候都能进来看
@@ -42,7 +42,7 @@ export default function CatRoom({ cat, hr, persona, bothPicked, todayDest, myPic
     : '等两个人都指完'
 
   return (
-    <section className="win">
+    <section className="win" id="pp-catroom">
       <header className="tb">
         <Svg name="home" size={14} />
         <b>猫屋</b>
