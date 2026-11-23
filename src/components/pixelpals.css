@@ -187,3 +187,18 @@
 /* 第十五轮 · 猫说话：AI 生成的那一句（一天一张，带缓存） */
 .pp-quote { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--chip);
   border: 1px solid var(--line); font-size: 13px; line-height: 1.65; color: var(--ink); }
+/* 第十七轮 · 投喂区：4 组各一行，一行放不下就横滑（右缘淡出 + ›）
+   高度是写死的，食物从 24 加到 40 也不会把面板撑高 */
+.pp-feedrow { position: relative; }
+.pp-feedcat { font-size: 11.5px; color: var(--ink2); margin: 8px 0 5px; }
+.pp-feedrow:first-of-type .pp-feedcat { margin-top: 0; }
+.pp-feedslide { position: relative; }
+.pp-feedslide .pp-chips { flex-wrap: nowrap; overflow-x: auto; padding: 1px 30px 3px 1px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.pp-feedslide .pp-chips::-webkit-scrollbar { display: none; }
+/* 横滑行里的 chip 不许被压扁：不收缩、不换行，溢出的交给上面那句 overflow-x */
+.pp-feedslide .pp-chip { flex: 0 0 auto; white-space: nowrap; }
+.pp-feedslide::after { content: ''; position: absolute; top: 0; right: 0; bottom: 3px; width: 30px;
+  background: linear-gradient(to right, transparent, var(--win2)); pointer-events: none; }
+.pp-feedslide::before { content: '\203A'; position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  font-size: 14px; color: var(--ink2); pointer-events: none; }

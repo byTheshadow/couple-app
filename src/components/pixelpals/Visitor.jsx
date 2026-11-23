@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Svg } from '../Icon'
 import { GIFTS } from './art'
-import { FOODS } from './voice'
+import { FOODS, FOOD_GROUPS } from './voice'
 import { palButton, palFeed, palGift, palNote } from './store'
 import AiChat from './AiChat'
 import './extra.css'
@@ -57,13 +57,20 @@ export default function Visitor({ ownerId, name, slot, st, buttons, coins, gifts
 
         <div className="pp-blk" hidden={sec !== 'act'}>
           <div className="pp-h">投喂 <small>我的钱包 ¥{coins}</small></div>
-          <div className="pp-chips">
-            {FOODS.map((f) => (
-              <button key={f.k} type="button" className="pp-chip" disabled={busy} onClick={() => onAct('feed', () => palFeed(ownerId, f.k), { food: f.k })}>
-                {f.e} {f.n}<i className="pp-price">¥{f.cost}</i>
-              </button>
-            ))}
-          </div>
+          {FOOD_GROUPS.map(([g, label]) => (
+            <div className="pp-feedrow" key={g}>
+              <div className="pp-feedcat">{label}</div>
+              <div className="pp-feedslide">
+                <div className="pp-chips">
+                  {FOODS.filter((f) => f.g === g).map((f) => (
+                    <button key={f.k} type="button" className="pp-chip" disabled={busy} onClick={() => onAct('feed', () => palFeed(ownerId, f.k), { food: f.k })}>
+                      {f.e} {f.n}<i className="pp-price">¥{f.cost}</i>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="pp-blk" hidden={sec !== 'gift'}>

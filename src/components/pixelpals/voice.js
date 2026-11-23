@@ -7,11 +7,41 @@
    =========================================================================== */
 import { GIFTS, SCENES, pick, hourText, stateOf } from './art'
 
+// 投喂区能买的东西。g = 分组（meal 正餐 / sweet 甜点 / drink 饮品 / fruit 水果），一个组一行、放不下横滑
+// cost / d 必须和服务端 pal_feed 里的那张表逐字一致：按钮上显示的价格就是它，对不上会报「bad food」
+// full 是日记里的量词（「喂了我一个饭团」），没有它日记里就成了「点心」
 export const FOODS = [
-  { k: 'bread', e: '🍞', n: '面包', full: '一片面包', cost: 5, d: 8 },
-  { k: 'coffee', e: '☕', n: '咖啡', full: '一杯咖啡', cost: 8, d: 6 },
-  { k: 'cake', e: '🍰', n: '草莓蛋糕', full: '一块草莓蛋糕', cost: 20, d: 15 },
+  { k: 'bread', e: '🍞', n: '面包', full: '一片面包', cost: 5, d: 8, g: 'meal' },
+  { k: 'onigiri', e: '🍙', n: '饭团', full: '一个饭团', cost: 6, d: 10, g: 'meal' },
+  { k: 'soup', e: '🍲', n: '热汤', full: '一碗热汤', cost: 10, d: 12, g: 'meal' },
+  { k: 'ramen', e: '🍜', n: '拉面', full: '一碗拉面', cost: 18, d: 14, g: 'meal' },
+  { k: 'curry', e: '🍛', n: '咖喱饭', full: '一份咖喱饭', cost: 22, d: 16, g: 'meal' },
+  { k: 'oden', e: '🍢', n: '关东煮', full: '一份关东煮', cost: 14, d: 13, g: 'meal' },
+
+  { k: 'cake', e: '🍰', n: '草莓蛋糕', full: '一块草莓蛋糕', cost: 20, d: 15, g: 'sweet' },
+  { k: 'pudding', e: '🍮', n: '布丁', full: '一个布丁', cost: 15, d: 12, g: 'sweet' },
+  { k: 'dorayaki', e: '🥞', n: '铜锣烧', full: '一个铜锣烧', cost: 12, d: 10, g: 'sweet' },
+  { k: 'icecream', e: '🍦', n: '冰淇淋', full: '一个冰淇淋', cost: 10, d: 9, g: 'sweet' },
+  { k: 'donut', e: '🍩', n: '甜甜圈', full: '一个甜甜圈', cost: 13, d: 11, g: 'sweet' },
+  { k: 'daifuku', e: '🍡', n: '大福', full: '一个大福', cost: 14, d: 12, g: 'sweet' },
+
+  { k: 'coffee', e: '☕', n: '咖啡', full: '一杯咖啡', cost: 8, d: 6, g: 'drink' },
+  { k: 'milktea', e: '🧋', n: '奶茶', full: '一杯奶茶', cost: 12, d: 9, g: 'drink' },
+  { k: 'cocoa', e: '🍫', n: '热可可', full: '一杯热可可', cost: 14, d: 10, g: 'drink' },
+  { k: 'soda', e: '🥤', n: '气泡水', full: '一瓶气泡水', cost: 6, d: 5, g: 'drink' },
+  { k: 'milk', e: '🥛', n: '牛奶', full: '一杯牛奶', cost: 7, d: 6, g: 'drink' },
+  { k: 'lemonade', e: '🍋', n: '柠檬水', full: '一杯柠檬水', cost: 9, d: 7, g: 'drink' },
+
+  { k: 'apple', e: '🍎', n: '苹果', full: '一个苹果', cost: 4, d: 6, g: 'fruit' },
+  { k: 'strawberry', e: '🍓', n: '草莓', full: '一颗草莓', cost: 9, d: 8, g: 'fruit' },
+  { k: 'orange', e: '🍊', n: '橘子', full: '一个橘子', cost: 5, d: 6, g: 'fruit' },
+  { k: 'watermelon', e: '🍉', n: '西瓜', full: '一块西瓜', cost: 12, d: 9, g: 'fruit' },
+  { k: 'banana', e: '🍌', n: '香蕉', full: '一根香蕉', cost: 5, d: 7, g: 'fruit' },
+  { k: 'grape', e: '🍇', n: '葡萄', full: '一串葡萄', cost: 11, d: 9, g: 'fruit' },
 ]
+
+// 投喂区的分组顺序（数组顺序就是界面从上到下的顺序）
+export const FOOD_GROUPS = [['meal', '正餐'], ['sweet', '甜点'], ['drink', '饮品'], ['fruit', '水果']]
 
 // 会让小人当场做出反应的几种记录（其余是小人自己改安排的记录，只进日记）
 export const PLAY_KINDS = ['button', 'feed', 'gift', 'note', 'poke', 'chat']
